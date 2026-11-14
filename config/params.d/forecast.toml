@@ -1,0 +1,286 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Forecasting parameters — chapter 11-forecasting; paper §11
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Read by the chapter as  P.forecast.<name>  (see config/params.toml for the
+# conventions).  The MDMx hyperparameters below (n_pc, the drift weights, the
+# drift window and the bounds on ρ) were fixed before the forecast evaluation,
+# while the model was developed, using these same cross-validation origins;
+# chapter 12's sensitivity runs show how much they matter.
+
+[forecast]
+
+# ── Origins of chapter 11's illustrations and checks ─────────────────────────
+# (The evaluation's design is [evaluation], article §12 "The design".)
+# Forecast origins (calendar years); data up to and including the origin
+# may be used, and the forecast is scored on the following `horizon` years.
+origins = [1960, 1970, 1980, 1990, 2000, 2010]
+horizon = 15
+# A population is forecast from an origin only if it has at least this many
+# observed (non-exceptional) years up to the origin, and at least this many
+# observed years in the horizon to score the forecast against.
+min_train_years = 30
+min_test_years = 3
+
+# ── MDMx: PCA of the effective cores (article §11, eq:pca_scores) ─────────────
+# Number of PCA scores forecast.  The sex/age bases and the PCA are
+# re-estimated at every origin from data up to the origin; the age rank is
+# held at the full-data rank (tucker ranks[1]).
+n_pc = 5
+
+# ── MDMx and the flow field: the anchor's jump-off residual (eq:fc-anchor) ──
+# λ of the Whittaker smoother (second differences, equal weights, ages 1 and
+# over; age 0 keeps its observed value) applied to each sex's jump-off
+# residual before the anchor carries it: the residual keeps the population's
+# own detail but not the noise of the jump-off year's single-age rates.  The
+# flow field reads the same value from [flowfield] (evaluation.context checks
+# that the two agree).  Chosen on the evaluation's origins 1900–2000 among
+# smoothers of the residual (over age or over years, of the sex difference or
+# of each sex) by a rule set before any was scored.  0 keeps the residual as
+# observed.
+anchor_smoothing = 1000.0
+
+# ── MDMx: hierarchical drift target (article §11, eq:hier2) ──────────────────
+# δ_hier = w_HMD·δ_HMD + w_country·δ_country (no cluster term).
+drift_weight_hmd = 0.8
+drift_weight_country = 0.2
+# Drift window W in calendar years: a population's drift is the average
+# annual change of its scores between its first and last observed years in
+# [origin − W, origin] ...
+drift_window = 20
+# ... and is defined only if it has at least this many observed years there.
+drift_min_years = 10
+
+# ── MDMx: Kalman filter and maximum likelihood (article §11, eq:fc_drift) ────
+# Range of the damping factor ρ (a box bound of the optimiser: a maximum can
+# lie on a bound, so ρ is not transformed).
+rho_bounds = [0.80, 0.999]
+# Range of the log of every variance parameter (q^level, q^drift, r); the
+# scores' annual changes have variances of order 0.01–1, so the floor
+# e^-20 ≈ 2e-9 is effectively zero.  The optimiser works on the standard
+# deviations, so that a maximum at the floor is reached.
+log_var_bounds = [-20.0, 5.0]
+# Initial state: the level is the mean of the first `level0_years` observed
+# scores, with variance `p0_level_var` per component; the initial drift is
+# the target, with the across-population variance of the drifts.
+level0_years = 5
+p0_level_var = 1.0
+# L-BFGS-B, per start: iteration limit; relative-reduction tolerance near
+# machine precision (1e-6 stops on the flat approach to a bound, far from
+# the maximum) and projected-gradient tolerance.  Most
+# starts end on the relative reduction at machine precision; the projected
+# gradient there decides whether the fit counts as converged:
+mle_maxiter = 2000
+mle_ftol = 1e-15
+mle_gtol = 1e-6
+# a fit whose largest projected-gradient component at the optimum exceeds
+# this is reported as not converged.
+mle_pg_flag = 1e-3
+# Starts per fit (all deterministic; the largest log-likelihood is kept,
+# because the likelihood can have a local maximum at ρ's lower bound besides
+# a higher one inside the range):
+# * the moment-based starting values with ρ in the middle of its range and at
+#   each of these values ...
+mle_rho_starts = [0.80, 0.85, 0.90, 0.94, 0.97, 0.99, 0.999]
+# * ... and the `mle_grid_top` best points of the profile log-likelihood of ρ
+#   on this grid.  For the profile, each standard deviation is first searched
+#   over its floor and `mle_grid_sd_points` log-spaced multiples
+#   10^a … 10^b (a, b = `mle_grid_sd_log10`) of the data's own scale, then
+#   fitted exactly at every grid ρ.  (Design chosen in task T5a;
+#   docs/changes/11-forecasting.md §6, item 9.)
+mle_grid_rho = [0.80, 0.83, 0.86, 0.89, 0.91, 0.93, 0.95, 0.96, 0.97, 0.98, 0.99, 0.999]
+mle_grid_sd_log10 = [-3.0, 0.5]
+mle_grid_sd_points = 7
+mle_grid_top = 3
+# Limits of the stacked fit of the standard deviations at every grid ρ
+# (12 fits in one problem, so far more iterations than one fit needs).
+mle_profile_maxiter = 40000
+mle_profile_maxfun = 80000
+# The chapter counts the fits in which some start, and those in which the
+# single moment-based start (ρ mid-range), ended more than this below the
+# maximum log-likelihood (how often one start would not have been enough).
+mle_start_gap_report = 0.1
+# Step of the central finite differences used for the gradient of the
+# log-likelihood, on the scale of the standard deviations and ρ.
+fd_step = 1e-6
+# Worker processes for the MDMx fits of one origin (0: one per CPU core; 1:
+# none).  The fits are deterministic and independent of each other, so this
+# changes only the run time, never a result, and is in no cache key.
+mdmx_workers = 0
+
+# ── Prediction intervals (article §11, eq:fc-kappa) ──────────────────────────
+pi_levels = [80, 95]
+# Monte-Carlo check of the delta method: draws of the forecast scores per job.
+mc_draws = 1000
+mc_seed = 20261025
+
+# ── Sensitivity analysis of the pre-specified hyperparameters ───────────────
+# Drift weights [w_HMD, w_country] (n_pc at its default) ...
+sens_drift_weights = [[1.0, 0.0], [0.8, 0.2], [0.5, 0.5], [0.2, 0.8]]
+# ... and number of PCA scores (drift weights at their default).
+sens_n_pc = [3, 5, 7]
+# The second of the two co-equal fitting-period policies of the benchmark:
+# every method (MDMx's own series and the comparators) fitted to only the
+# last this many calendar years before each origin, instead of the
+# population's whole observed history.  (The captions of fig-fc-benchmark
+# and the chapter text quote this value; change them with it.)
+sens_window_years = 50
+
+# ── Evaluation and figures ───────────────────────────────────────────────────
+# Age groups (first age of each; the last group runs to age 109) for the
+# l_x-weighted schedule errors, with their labels.
+age_group_starts = [0, 1, 5, 15, 50, 70]
+age_group_labels = ["Infant (0)", "Child (1-4)", "Youth (5-14)", "Working (15-49)",
+                    "Mature (50-69)", "Old (70+)"]
+# Populations ranked best/worst by MDMx's CV MAE need at least this many
+# scored points; this many are shown at each end.
+rank_min_points = 20
+rank_show = 8
+# Population, horizon and ages used for the continuity and surface figures
+# (forecast from the population's last observed year).
+showcase_pop = "SWE"
+showcase_horizon = 30
+showcase_history = 30
+trace_ages = [0, 1, 5, 15, 30, 50, 65, 80]
+
+# ── Comparators: R package `demography` (article §12 "The entries") ─────────
+[forecast.comparators]
+# Ages ≥ open_age are one open age group (the demography default for lca).
+open_age = 100
+# Lee–Carter: demography::lca with this adjustment of k_t ("dt": refit k_t to
+# the total deaths, as Lee & Carter 1992) and forecast jump-off.
+lc_adjust = "dt"
+lc_jumpchoice = "fit"
+# Hyndman–Ullah: demography::smooth.demogdata (weighted monotonic regression
+# splines, per year), then fdm (functional PCA of log rates) of this order
+# and method, coefficients forecast by this time-series method.
+fdm_order = 6
+fdm_method = "classical"
+fdm_ts_method = "arima"
+fdm_jumpchoice = "fit"
+# Coherent functional model (product–ratio, Hyndman, Booth & Yasmeen 2013):
+# demography::coherentfdm on the smoothed rates of both sexes.
+coherent_order_product = 6
+coherent_order_ratio = 6
+# a_x above age 0 used to turn the forecast m_x into q_x (HMD's single-year value); age 0 uses the
+# book's a₀ ([data] a0, mdmx.lifetable.A0), as every e₀ in the book does (decision R1).
+mx_to_qx_ax = 0.5
+
+# ── bayesLife (decision D2; R/bayeslife_forecast.R) ──────────────────────────
+# The UN's e0 model on HMD data only (use.wpp.data = FALSE), one R process per
+# origin and policy; its chains run in parallel (snowFT).  The world level is
+# estimated from non-overlapping populations; the parts of an aggregate in the
+# run are added afterwards (run.e0.mcmc.extra).
+[forecast.bayeslife]
+# Chains, iterations per chain (bayesLife's own default length), thinning of
+# the stored draws, and burn-in (raw iterations).
+nr_chains = 3
+iter = 160000
+thin = 20
+burnin = 10000
+# Convergence is judged on the forecasts (Sam, 2026-10-27): the chains are
+# extended by `iter_incr` until every world parameter except k and lambda.k
+# has R-hat ≤ rhat_max and, with each chain predicting from all its stored
+# draws with the same random numbers, the chains' female e0 at the horizon
+# differ by at most `tol_median` years (median) and `tol_bounds` (2.5 % and
+# 97.5 % points) in every population of the world fit — at most `max_loops`
+# steps.  Every prediction,
+# the final forecast included, uses all stored draws after burn-in, so that
+# its Monte-Carlo error falls as the chains grow (a fixed 5,000 trajectories
+# left the chains' 2.5 % and 97.5 % points ~0.15 y apart by sampling alone;
+# Sam, 2026-10-27).
+iter_incr = 160000
+max_loops = 5
+rhat_max = 1.05
+tol_median = 0.10
+tol_bounds = 0.20
+# bayesLife's Raftery–Lewis check (reported): thinning it uses.
+diag_thin = 100
+# Seed, offset by the origin (the final forecast adds the chain number to it).
+seed = 20261027
+# The WPP release whose location table and constants bayesLife loads (no WPP data is used).
+wpp_year = 2019
+# Origins run at the same time; with nr_chains chains each this should not exceed the cores.
+concurrent_runs = 3
+# The chains' forecasts are compared at origin + check_horizon, while the forecast runs to the
+# evaluation's horizon (chapter 12: 50 years).  Without it they are compared at the end year.
+check_horizon = 15
+# BL-16 (Sam, 2026-10-29): a year's error that would take female e0 below e0_lower is redrawn, up to
+# e0_max_tries draws in all, and e0 is set to the bound if every draw fails (bayesTFR's rule for TFR
+# below its minimum).  A run in which no trajectory reaches the bound is bit-identical to bayesLife's.
+e0_lower = 0.0
+e0_max_tries = 50
+
+# ── Overall comparison of the methods (task T5b) ─────────────────────────────
+# Pre-specified in docs/changes/11-forecasting.md §9 (Sam, 2026-10-27).  Every
+# measure is scaled by the naive random walk with drift's error for the same
+# quantity; a family's loss is the mean of its measures; the methods are
+# ranked over all family weights (Dirichlet(1, …, 1)) jointly with a bootstrap
+# of population families (SMAA).
+[forecast.overall]
+# Families: measure codes "<kind>:<quantity>"; kinds mae, absbias (scaled by
+# the naive's MAE of the quantity), rmse, wis (scaled by the naive's own).
+families.e0 = ["mae:both", "absbias:both"]
+families.sex = ["mae:female", "absbias:female", "mae:male", "absbias:male", "mae:gap", "absbias:gap"]
+families.sex_age = ["rmse:sexdiff"]
+families.age = ["rmse:schedule"]
+families.interval = ["wis:female", "wis:male", "wis:both"]
+composite_e0 = ["e0", "sex", "interval"]
+composite_full = ["e0", "sex", "sex_age", "age", "interval"]
+# Interval forecasts of Hyndman–Ullah and the coherent FDM: draws of
+# demography::simulate() per job, and the base of the per-job seeds.
+nsim = 1000
+sim_seed = 20261028
+# "Both" (average e0) for the methods that fit the sexes independently
+# (Lee–Carter, Hyndman–Ullah): "comonotone" (primary) or "independent".
+both_rule = "comonotone"
+# SMAA: joint draws of weights and bootstrap, and their seed.
+draws = 20000
+seed = 20261029
+# Lee–Carter's e0 quantiles: points of the equal-probability grid of k
+# (pre-specified, §9 amendment), and the draws of k per sex and year for the
+# independent-sexes sensitivity, with their seed.
+lc_grid = 2000
+lc_indep_draws = 20000
+lc_seed = 20261030
+# Long-run sex coherence: horizon of the illustrative MDMx forecast (years),
+# and the observed change it is compared with — over `longrun_lag` years,
+# each end the mean of the observed years in a `longrun_window`-year window.
+longrun_horizon = 100
+longrun_lag = 50
+longrun_window = 5
+# Horizon bands of the sensitivity analysis.
+horizon_bands = [[1, 5], [6, 10], [11, 15]]
+# R processes at once for the interval forecasts (run time only; in no cache key).
+concurrent_runs = 6
+
+# ── tools/run_bayeslife.py --smoke ──────────────────────────────────────────
+# Not read by the book.  Very short chains that replace the matching
+# [forecast.bayeslife] settings, to test every origin and policy end to end in
+# minutes (artefacts forecast_bl_smoke_*).  A table of its own, so that these
+# values are not part of the real runs' cache key.
+[forecast.bayeslife_smoke]
+iter = 600
+thin = 2
+burnin = 200
+iter_incr = 300
+max_loops = 1
+diag_thin = 10
+
+# ── The search-design study of task T5a (tools/mle_search_designs.py) ───────
+# Not read by the book.  The study that chose the starts of the MDMx fits
+# (mle_rho_starts, mle_grid_*; docs/changes/11-forecasting.md §6, item 9)
+# compares search designs on the main fits of both fitting policies and, held
+# out from the choice, on the full-history fits of these sensitivity runs.
+[forecast.mle_search_designs]
+# [w_HMD, w_country, n_pc] of each held-out run.
+holdout = [[1.0, 0.0, 5], [0.8, 0.2, 3], [0.8, 0.2, 7]]
+# Random starts: the moment-based starting standard deviations, each
+# multiplied by exp(N(0, random_spread²)), and ρ uniform in rho_bounds.  The
+# random designs have n_random and (the reference) n_reference starts, one of
+# which is the moment-based start.
+random_spread = 1.0
+n_random = 5
+n_reference = 40
+seed = 20261026
+reference_seed = 777

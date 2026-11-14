@@ -1,0 +1,65 @@
+id,event,type,start,end,populations,source,note
+W01,Seven Years' War (Pomeranian War),war,1757,1762,SWE,Clodfelter2017,"Sweden fought 1757-1762"
+W02,Russo-Swedish War,war,1788,1790,SWE FIN,Clodfelter2017,
+W03,French Revolutionary Wars,war,1792,1802,FRATNP NLD BEL CHE ITA AUT,Clodfelter2017,
+W04,Napoleonic Wars,war,1803,1815,FRATNP NLD BEL DNK NOR SWE CHE ITA ESP AUT,Clodfelter2017,
+W05,Finnish War,war,1808,1809,SWE FIN,Clodfelter2017,
+W06,First Schleswig War,war,1848,1851,DNK,Clodfelter2017,
+W07,Crimean War (France and Britain),war,1854,1856,FRATNP GBR_NP GBRTENW GBR_SCO,Clodfelter2017,"France and Britain declared war in March 1854"
+W08,Crimean War (Sardinia),war,1855,1856,ITA,Clodfelter2017,"Sardinia entered in 1855"
+W09,Second Italian War of Independence,war,1859,1859,FRATNP ITA,Clodfelter2017,
+W10,Second Schleswig War,war,1864,1864,DNK,Clodfelter2017,
+W11,Franco-Prussian War,war,1870,1871,FRATNP DEUTNP,Clodfelter2017,
+W12,Russo-Turkish War,war,1877,1878,RUS BGR,Clodfelter2017,
+W13,Second Boer War,war,1899,1902,GBR_NP GBRTENW GBR_SCO AUS NZL_NP NZL_MA NZL_NM CAN,Clodfelter2017,"Expeditionary war; little signal expected in home-population vital statistics"
+W14,Russo-Japanese War,war,1904,1905,RUS JPN,Clodfelter2017,
+W15,Balkan Wars,war,1912,1913,BGR GRC,Clodfelter2017,
+W16,World War I (from 1914),war,1914,1918,FRATNP BEL GBR_NP GBRTENW GBR_SCO AUS NZL_NP NZL_MA NZL_NM CAN AUT HUN CZE SVK RUS UKR EST LVA LTU POL DEUTNP,Urlanis1971,
+W17,World War I (Italy and Bulgaria from 1915),war,1915,1918,ITA BGR,Urlanis1971,"Italy entered May 1915, Bulgaria October 1915"
+W18,World War I (United States and Greece from 1917),war,1917,1918,USA GRC,Urlanis1971,"The United States and Greece entered in 1917"
+W19,Finnish Civil War,war,1918,1918,FIN,Clodfelter2017,
+W20,Russian Civil War,war,1918,1922,RUS UKR BLR EST LVA LTU,Clodfelter2017,
+W21,Irish War of Independence and Civil War,war,1919,1923,IRL,Clodfelter2017,
+W22,Greco-Turkish War,war,1919,1922,GRC,Clodfelter2017,
+W23,Spanish Civil War,war,1936,1939,ESP,Clodfelter2017,
+W24,World War II (from 1939),war,1939,1945,FRATNP BEL NLD LUX DNK NOR FIN GBR_NP GBRTENW GBR_SCO GBR_NIR AUT DEUTNP DEUTE DEUTW CZE SVK POL EST LVA LTU RUS UKR BLR AUS NZL_NP NZL_MA NZL_NM CAN,Urlanis1971,"United Kingdom (GBR_NP) with its parts"
+W25,World War II (Italy Greece Hungary Bulgaria from 1940-41),war,1940,1945,ITA GRC HUN BGR,Urlanis1971,"Italy and Greece entered 1940, Hungary and Bulgaria 1941"
+W26,World War II (United States from 1942),war,1942,1945,USA,Urlanis1971,"US entered December 1941"
+W27,World War II (Japan),war,1937,1945,JPN,Urlanis1971,"HMD data for Japan start in 1947"
+W28,Korean War,war,1950,1953,KOR USA AUS CAN,Clodfelter2017,"Expeditionary for USA/AUS/CAN; little signal expected in home-population vital statistics"
+R01,Russian influenza,respiratory,1889,1890,SWE DNK NOR ISL FIN NLD BEL FRATNP CHE GBRTENW GBR_SCO ITA ESP,Patterson1986,
+R02,Spanish influenza,respiratory,1918,1920,SWE DNK NOR ISL FIN NLD BEL FRATNP CHE GBRTENW GBR_SCO ITA ESP AUS NZL_NP NZL_MA NZL_NM CAN USA JPN,Patterson1986,
+R03,Asian influenza,respiratory,1957,1958,ALL,Patterson1986,All populations with data
+R04,Hong Kong influenza,respiratory,1968,1969,ALL,Patterson1986,All populations with data
+R05,COVID-19,respiratory,2020,2022,ALL,KarlinskyKobak2021,All populations with data
+E01,Second cholera pandemic,enteric,1834,1834,SWE,Hays2005,
+E02,Second cholera pandemic,enteric,1831,1831,FIN,Hays2005,
+E03,Second cholera pandemic,enteric,1832,1832,FRATNP GBRTENW GBR_SCO NLD,Hays2005,
+E04,Second cholera pandemic,enteric,1832,1833,BEL,Hays2005,
+E05,Second cholera pandemic,enteric,1835,1837,ITA,Hays2005,
+E06,Second cholera pandemic,enteric,1833,1835,ESP,Hays2005,
+E07,Third cholera pandemic,enteric,1850,1850,SWE,Hays2005,
+E08,Third cholera pandemic,enteric,1853,1854,SWE BEL FRATNP GBRTENW GBR_SCO,Hays2005,
+E09,Third cholera pandemic,enteric,1848,1849,NOR NLD BEL GBRTENW GBR_SCO,Hays2005,
+E10,Third cholera pandemic,enteric,1853,1853,NOR DNK FIN,Hays2005,
+E11,Third cholera pandemic,enteric,1853,1855,NLD,Hays2005,
+E12,Third cholera pandemic,enteric,1849,1849,FRATNP,Hays2005,
+E13,Third cholera pandemic,enteric,1855,1855,CHE,Hays2005,
+E14,Third cholera pandemic,enteric,1854,1855,ITA ESP,Hays2005,
+E15,Fourth cholera pandemic,enteric,1866,1866,SWE NOR BEL GBRTENW GBR_SCO,Hays2005,
+E16,Fourth cholera pandemic,enteric,1866,1867,NLD,Hays2005,
+E17,Fourth cholera pandemic,enteric,1865,1866,FRATNP,Hays2005,
+E18,Fourth cholera pandemic,enteric,1865,1867,ITA,Hays2005,
+E19,Fourth cholera pandemic,enteric,1865,1865,ESP,Hays2005,
+E20,Fifth cholera pandemic,enteric,1884,1884,FRATNP,Hays2005,
+E21,Fifth cholera pandemic,enteric,1884,1885,ITA,Hays2005,
+E22,Fifth cholera pandemic,enteric,1893,1893,ITA,Hays2005,
+E23,Fifth cholera pandemic,enteric,1885,1885,ESP,Hays2005,
+E24,Fifth cholera pandemic,enteric,1890,1890,ESP,Hays2005,
+E25,Sixth cholera pandemic,enteric,1910,1911,ITA,Hays2005,
+E26,Sixth cholera pandemic,enteric,1910,1910,RUS,Hays2005,
+E27,Sixth cholera pandemic,enteric,1921,1922,RUS,Hays2005,
+O01,Swedish famine and dysentery epidemic,other,1772,1773,SWE,DribeOlssonSvensson2015,"Lowest e0 in the HMD; excluded from the baseline but not modelled as a disruption type"
+O02,Measles epidemic,other,1846,1846,ISL,ShanksEtAl2015,"Excluded from the baseline, not modelled"
+O03,Measles epidemic,other,1882,1882,ISL,ShanksEtAl2015,"Excluded from the baseline, not modelled"
+O04,Smallpox pandemic,other,1871,1871,NLD BEL,Hays2005,"European smallpox pandemic 1870-1872"

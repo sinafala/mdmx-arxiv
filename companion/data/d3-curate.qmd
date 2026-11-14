@@ -1,0 +1,142 @@
+---
+title: "Curation"
+subtitle: "Which life tables are dropped, and why — every removal recorded"
+---
+
+::: {.callout-note appearance="simple"}
+## Paper correspondence
+Paper §2.3 ("Curation and exceptional years").  Produces `fig-s1-flat-spots` (companion only)
+and the exclusion records that feed the change ledger and `tbl-s3-missing-year-audit`
+(chapter d6).
+:::
+
+```{python}
+#| label: d3-setup
+#| code-summary: "Chapter setup"
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from mdmx import artifacts, data, latex, plotting, provenance
+from mdmx.config import params
+
+provenance.start_chapter("d3-curate")
+plotting.use_style()
+P = params()
+raw = artifacts.load("hmd_raw")
+lt_raw = raw["lt"]
+pops = artifacts.load("populations")
+names = dict(zip(pops["code"], pops["name"]))
+```
+
+## The rules
+
+A life table enters the analysis only if it passes all of the following
+checks.  Each rule removes a whole **country-year** — both sexes — because
+the tensor needs a female and a male table for every country-year it holds.
+The rules are applied in order, and each removed country-year is recorded
+with the *first* rule that removed it.
+
+1. **Excluded populations.**  The civilian-only series FRACNP and GBRCENW
+   (chapter d1).
+2. **Missing values.**  A table with any missing $m_x$, $q_x$ or $a_x$.
+3. **Flat old-age tail.**  A table whose $q_x$ is *identical* at ages
+   `{python} P.data.flat_tail_ages[0]` and `{python} P.data.flat_tail_ages[1]`.  When the
+   underlying data are too thin to estimate mortality at the oldest ages, the
+   HMD's old-age model can return the same value across the whole tail; such
+   a tail carries no age information.  The rule looks only at two high ages
+   because ties at younger ages are common and harmless: the HMD publishes
+   $q_x$ to five decimals, so two adjacent ages with $q_x \approx 0.0001$
+   often have the same value.
+4. **Sex pairing.**  Both sexes must be present.
+5. **Age range.**  Ages above `{python} P.data.age_max` (the open interval 110+, where
+   $q_x = 1$ by definition) are dropped from every table.
+
+The thresholds are parameters in `config/params.toml` (`[data]` section).
+
+```{python}
+#| label: d3-curate
+#| code-summary: "Apply the curation rules (cached)"
+def _curate():
+    curated, exclusions = data.curate(
+        lt_raw,
+        populations_excluded=P.data.populations_excluded,
+        flat_tail_ages=tuple(P.data.flat_tail_ages),
+        age_max=P.data.age_max,
+    )
+    # Keep only the columns used downstream.  e_x is kept for the published
+    # HMD e0 (age 0) used in descriptive summaries.
+    curated = curated[["pop", "sex", "year", "age", "mx", "qx", "ax", "ex"]]
+    return {"lt": curated, "exclusions": exclusions}
+
+cur = artifacts.stage("lt_curated", _curate, inputs=["hmd_raw"],
+                      params=P.section("data"), code=[_curate, data.curate],
+                      desc="Curated life tables (ages 0-109) and the exclusion record")
+lt_cur, exclusions = cur["lt"], cur["exclusions"]
+```
+
+## What was removed
+
+```{python}
+#| label: d3-summary
+#| code-summary: "Count removals by rule"
+by_rule = exclusions.groupby("rule").agg(country_years=("year", "size"),
+                                         populations=("pop", "nunique"))
+print(by_rule.to_string())
+excl_data = exclusions[exclusions["rule"] != "excluded population"]
+print("\nCountry-years removed from the 48 retained populations:")
+print(excl_data.assign(name=excl_data["pop"].map(names)).to_string(index=False))
+
+n_tables_kept = lt_cur.groupby(["pop", "sex", "year"], observed=True).ngroups
+latex.report("dataNExclMissing", int((exclusions["rule"] == "missing values").sum()),
+             desc="Country-years removed for missing values")
+latex.report("dataNExclFlat", int((exclusions["rule"] == "flat old-age tail").sum()),
+             desc="Country-years removed for a flat old-age tail")
+latex.report("dataNExclUnpaired", int((exclusions["rule"] == "unpaired sex").sum()),
+             desc="Country-years removed for an unpaired sex")
+latex.report("dataNTablesCurated", n_tables_kept, desc="Sex-specific life tables after curation")
+latex.report("dataNPops", lt_cur["pop"].nunique(), desc="Populations after curation")
+```
+
+In this release only nine country-years of the 48 retained populations fail
+a rule: Belgium 1914–1918 (no estimates during the German occupation) and
+four tables with a flat old-age tail.  No table is unpaired.
+
+### The flat tails
+
+The figure shows the four flagged tables (heavy lines) against the same
+population's tables in the five years either side (thin lines).  From
+about age 80 the flagged tables stop rising with age, while their neighbours keep
+rising.
+
+```{python}
+#| label: fig-s1-flat-spots
+#| fig-cap: "The life tables removed for a flat old-age tail (q_x identical at ages 105 and 109; heavy lines) and the same population's tables in the five years before and after (thin grey lines), ages 70–109, both sexes."
+flat = excl_data[excl_data["rule"] == "flat old-age tail"]
+fig, axes = plt.subplots(1, len(flat), figsize=(2.6 * len(flat), 3.2), sharey=True)
+axes = np.atleast_1d(axes)
+for ax, (pop, year) in zip(axes, flat[["pop", "year"]].itertuples(index=False)):
+    for sex in data.SEXES:
+        near = lt_raw[(lt_raw["pop"] == pop) & (lt_raw["sex"] == sex)
+                      & lt_raw["year"].between(year - 5, year + 5) & (lt_raw["year"] != year)
+                      & lt_raw["age"].between(70, P.data.age_max)]
+        for _, g in near.groupby("year"):
+            ax.semilogy(g["age"], g["qx"], color="#bbbbbb", lw=0.6)
+        this = lt_raw[(lt_raw["pop"] == pop) & (lt_raw["sex"] == sex) & (lt_raw["year"] == year)
+                      & lt_raw["age"].between(70, P.data.age_max)]
+        ax.semilogy(this["age"], this["qx"], color=plotting.COLORS[sex], lw=2,
+                    label=sex.title())
+    ax.set_title(f"{names[pop]} {year}", fontsize=9)
+    ax.set_xlabel("Age")
+axes[0].set_ylabel(r"$q_x$ (log scale)")
+axes[0].legend(fontsize=7)
+plotting.save_figure(fig, "fig-s1-flat-spots")
+plt.show()
+```
+
+```{python}
+#| label: d3-end
+#| code-summary: "Write this chapter's numbers and close"
+latex.write_numbers()
+provenance.end_chapter();
+```

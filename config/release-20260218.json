@@ -1,0 +1,4175 @@
+{
+ "about": "Headline numbers of the forecast evaluation on the HMD release of 18 Feb 2026, kept for the article (decision HMD-Oct). Written by tools/freeze_previous_release.py; do not edit.",
+ "release": {
+  "id": "20260218",
+  "title": "Human Mortality Database, bulk download 'all statistics' (period and cohort), release of 18 Feb 2026",
+  "zip_sha256": "1f40e622d77e44d31e00a5cda18b392bdaaf1b85156a0375c90c5580d0d19c40"
+ },
+ "source": {
+  "ref": "c9de593",
+  "file": "companion/results/numbers.json",
+  "sha256": "e4539c903aab2ee3eae7f22458a4176353ac9601719a704e2e100c0c35095af4"
+ },
+ "numbers": {
+  "evFirstFrozenHeldOutEzeroBlAll": {
+   "value": 0.13999999999999999,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, e₀ only, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutEzeroBlWin": {
+   "value": 0.215,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutEzeroCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, e₀ only, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutEzeroCfdmWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutEzeroEns": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, e₀ only, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutEzeroFf": {
+   "value": 96.755,
+   "text": "97",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, e₀ only, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutEzeroHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, e₀ only, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutEzeroHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutEzeroLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, e₀ only, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutEzeroLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutEzeroMdmxAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, e₀ only, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutEzeroMdmxWin": {
+   "value": 2.8899999999999997,
+   "text": "3",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutFullBlAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, Full output, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutFullBlWin": {
+   "value": 10.45,
+   "text": "10",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, Full output, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutFullCfdmAll": {
+   "value": 0.28500000000000003,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, Full output, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutFullCfdmWin": {
+   "value": 0.045,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, Full output, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutFullEns": {
+   "value": 0.9950000000000001,
+   "text": "1",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, Full output, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutFullFf": {
+   "value": 86.735,
+   "text": "87",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, Full output, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutFullHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, Full output, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutFullHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, Full output, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutFullLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, Full output, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutFullLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, Full output, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutFullMdmxAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, Full output, view held_out (the frozen design)"
+  },
+  "evFirstFrozenHeldOutFullMdmxWin": {
+   "value": 1.49,
+   "text": "1",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, Full output, view held_out (the frozen design)"
+  },
+  "evFirstFrozenPooledEzeroBlAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, e₀ only, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledEzeroBlWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledEzeroCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, e₀ only, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledEzeroCfdmWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledEzeroEns": {
+   "value": 0.385,
+   "text": "0",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, e₀ only, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledEzeroFf": {
+   "value": 99.61,
+   "text": "100",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, e₀ only, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledEzeroHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, e₀ only, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledEzeroHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledEzeroLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, e₀ only, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledEzeroLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledEzeroMdmxAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, e₀ only, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledEzeroMdmxWin": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledFullBlAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, Full output, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledFullBlWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, Full output, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledFullCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, Full output, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledFullCfdmWin": {
+   "value": 0.6649999999999999,
+   "text": "1",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, Full output, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledFullEns": {
+   "value": 0.58,
+   "text": "1",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, Full output, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledFullFf": {
+   "value": 98.75500000000001,
+   "text": "99",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, Full output, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledFullHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, Full output, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledFullHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, Full output, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledFullLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, Full output, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledFullLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, Full output, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledFullMdmxAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, Full output, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPooledFullMdmxWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, Full output, view pooled (the frozen design)"
+  },
+  "evFirstFrozenPrimaryEzeroBlAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, e₀ only, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryEzeroBlWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryEzeroCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, e₀ only, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryEzeroCfdmWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryEzeroEns": {
+   "value": 1.04,
+   "text": "1",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, e₀ only, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryEzeroFf": {
+   "value": 98.96000000000001,
+   "text": "99",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, e₀ only, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryEzeroHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, e₀ only, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryEzeroHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryEzeroLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, e₀ only, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryEzeroLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryEzeroMdmxAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, e₀ only, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryEzeroMdmxWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryFullBlAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, Full output, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryFullBlWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, Full output, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryFullCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, Full output, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryFullCfdmWin": {
+   "value": 1.38,
+   "text": "1",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, Full output, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryFullEns": {
+   "value": 0.715,
+   "text": "1",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, Full output, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryFullFf": {
+   "value": 97.89999999999999,
+   "text": "98",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, Full output, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryFullHuAll": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, Full output, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryFullHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, Full output, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryFullLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, Full output, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryFullLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, Full output, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryFullMdmxAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, Full output, view primary (the frozen design)"
+  },
+  "evFirstFrozenPrimaryFullMdmxWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, Full output, view primary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryEzeroBlAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, e₀ only, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryEzeroBlWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryEzeroCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, e₀ only, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryEzeroCfdmWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryEzeroEns": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, e₀ only, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryEzeroFf": {
+   "value": 92.03,
+   "text": "92",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, e₀ only, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryEzeroHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, e₀ only, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryEzeroHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryEzeroLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, e₀ only, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryEzeroLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryEzeroMdmxAll": {
+   "value": 0.065,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, e₀ only, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryEzeroMdmxWin": {
+   "value": 7.904999999999999,
+   "text": "8",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryFullBlAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, Full output, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryFullBlWin": {
+   "value": 0.095,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, Full output, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryFullCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, Full output, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryFullCfdmWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, Full output, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryFullEns": {
+   "value": 4.3549999999999995,
+   "text": "4",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, Full output, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryFullFf": {
+   "value": 88.49000000000001,
+   "text": "88",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, Full output, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryFullHuAll": {
+   "value": 0.015,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, Full output, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryFullHuWin": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, Full output, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryFullLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, Full output, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryFullLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, Full output, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryFullMdmxAll": {
+   "value": 0.06999999999999999,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, Full output, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSecondaryFullMdmxWin": {
+   "value": 6.97,
+   "text": "7",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, Full output, view secondary (the frozen design)"
+  },
+  "evFirstFrozenSensitivityEzeroBlAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityEzeroBlWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityEzeroCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityEzeroCfdmWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityEzeroEns": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityEzeroFf": {
+   "value": 100.0,
+   "text": "100",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityEzeroHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityEzeroHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityEzeroLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityEzeroLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityEzeroMdmxAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityEzeroMdmxWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityFullBlAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, Full output, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityFullBlWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, Full output, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityFullCfdmAll": {
+   "value": 0.01,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, Full output, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityFullCfdmWin": {
+   "value": 0.47000000000000003,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, Full output, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityFullEns": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, Full output, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityFullFf": {
+   "value": 99.52,
+   "text": "100",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, Full output, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityFullHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, Full output, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityFullHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, Full output, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityFullLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, Full output, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityFullLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, Full output, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityFullMdmxAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, Full output, view sensitivity (the frozen design)"
+  },
+  "evFirstFrozenSensitivityFullMdmxWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, Full output, view sensitivity (the frozen design)"
+  },
+  "evFirstHeldOutEzeroBlAll": {
+   "value": 6.43,
+   "text": "6",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, e₀ only, view held_out"
+  },
+  "evFirstHeldOutEzeroBlWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view held_out"
+  },
+  "evFirstHeldOutEzeroCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, e₀ only, view held_out"
+  },
+  "evFirstHeldOutEzeroCfdmWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view held_out"
+  },
+  "evFirstHeldOutEzeroEns": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, e₀ only, view held_out"
+  },
+  "evFirstHeldOutEzeroFf": {
+   "value": 93.565,
+   "text": "94",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, e₀ only, view held_out"
+  },
+  "evFirstHeldOutEzeroHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, e₀ only, view held_out"
+  },
+  "evFirstHeldOutEzeroHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view held_out"
+  },
+  "evFirstHeldOutEzeroLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, e₀ only, view held_out"
+  },
+  "evFirstHeldOutEzeroLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view held_out"
+  },
+  "evFirstHeldOutEzeroMdmxAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, e₀ only, view held_out"
+  },
+  "evFirstHeldOutEzeroMdmxWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view held_out"
+  },
+  "evFirstHeldOutFullBlAll": {
+   "value": 0.33999999999999997,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, Full output, view held_out"
+  },
+  "evFirstHeldOutFullBlWin": {
+   "value": 0.06999999999999999,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, Full output, view held_out"
+  },
+  "evFirstHeldOutFullCfdmAll": {
+   "value": 0.06999999999999999,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, Full output, view held_out"
+  },
+  "evFirstHeldOutFullCfdmWin": {
+   "value": 0.034999999999999996,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, Full output, view held_out"
+  },
+  "evFirstHeldOutFullEns": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, Full output, view held_out"
+  },
+  "evFirstHeldOutFullFf": {
+   "value": 98.89,
+   "text": "99",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, Full output, view held_out"
+  },
+  "evFirstHeldOutFullHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, Full output, view held_out"
+  },
+  "evFirstHeldOutFullHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, Full output, view held_out"
+  },
+  "evFirstHeldOutFullLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, Full output, view held_out"
+  },
+  "evFirstHeldOutFullLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, Full output, view held_out"
+  },
+  "evFirstHeldOutFullMdmxAll": {
+   "value": 0.01,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, Full output, view held_out"
+  },
+  "evFirstHeldOutFullMdmxWin": {
+   "value": 0.58,
+   "text": "1",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, Full output, view held_out"
+  },
+  "evFirstPooledEzeroBlAll": {
+   "value": 0.6,
+   "text": "1",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, e₀ only, view pooled"
+  },
+  "evFirstPooledEzeroBlWin": {
+   "value": 2.5,
+   "text": "2",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view pooled"
+  },
+  "evFirstPooledEzeroCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, e₀ only, view pooled"
+  },
+  "evFirstPooledEzeroCfdmWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view pooled"
+  },
+  "evFirstPooledEzeroEns": {
+   "value": 17.4,
+   "text": "17",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, e₀ only, view pooled"
+  },
+  "evFirstPooledEzeroFf": {
+   "value": 79.035,
+   "text": "79",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, e₀ only, view pooled"
+  },
+  "evFirstPooledEzeroHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, e₀ only, view pooled"
+  },
+  "evFirstPooledEzeroHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view pooled"
+  },
+  "evFirstPooledEzeroLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, e₀ only, view pooled"
+  },
+  "evFirstPooledEzeroLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view pooled"
+  },
+  "evFirstPooledEzeroMdmxAll": {
+   "value": 0.27499999999999997,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, e₀ only, view pooled"
+  },
+  "evFirstPooledEzeroMdmxWin": {
+   "value": 0.19,
+   "text": "0",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view pooled"
+  },
+  "evFirstPooledFullBlAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, Full output, view pooled"
+  },
+  "evFirstPooledFullBlWin": {
+   "value": 0.075,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, Full output, view pooled"
+  },
+  "evFirstPooledFullCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, Full output, view pooled"
+  },
+  "evFirstPooledFullCfdmWin": {
+   "value": 0.025,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, Full output, view pooled"
+  },
+  "evFirstPooledFullEns": {
+   "value": 3.1,
+   "text": "3",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, Full output, view pooled"
+  },
+  "evFirstPooledFullFf": {
+   "value": 94.015,
+   "text": "94",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, Full output, view pooled"
+  },
+  "evFirstPooledFullHuAll": {
+   "value": 0.045,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, Full output, view pooled"
+  },
+  "evFirstPooledFullHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, Full output, view pooled"
+  },
+  "evFirstPooledFullLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, Full output, view pooled"
+  },
+  "evFirstPooledFullLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, Full output, view pooled"
+  },
+  "evFirstPooledFullMdmxAll": {
+   "value": 1.5650000000000002,
+   "text": "2",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, Full output, view pooled"
+  },
+  "evFirstPooledFullMdmxWin": {
+   "value": 1.175,
+   "text": "1",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, Full output, view pooled"
+  },
+  "evFirstPrimaryEzeroBlAll": {
+   "value": 4.8500000000000005,
+   "text": "5",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, e₀ only, view primary"
+  },
+  "evFirstPrimaryEzeroBlWin": {
+   "value": 7.965,
+   "text": "8",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view primary"
+  },
+  "evFirstPrimaryEzeroCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, e₀ only, view primary"
+  },
+  "evFirstPrimaryEzeroCfdmWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view primary"
+  },
+  "evFirstPrimaryEzeroEns": {
+   "value": 33.42,
+   "text": "33",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, e₀ only, view primary"
+  },
+  "evFirstPrimaryEzeroFf": {
+   "value": 53.415,
+   "text": "53",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, e₀ only, view primary"
+  },
+  "evFirstPrimaryEzeroHuAll": {
+   "value": 0.015,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, e₀ only, view primary"
+  },
+  "evFirstPrimaryEzeroHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view primary"
+  },
+  "evFirstPrimaryEzeroLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, e₀ only, view primary"
+  },
+  "evFirstPrimaryEzeroLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view primary"
+  },
+  "evFirstPrimaryEzeroMdmxAll": {
+   "value": 0.24,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, e₀ only, view primary"
+  },
+  "evFirstPrimaryEzeroMdmxWin": {
+   "value": 0.095,
+   "text": "0",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view primary"
+  },
+  "evFirstPrimaryFullBlAll": {
+   "value": 0.08499999999999999,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, Full output, view primary"
+  },
+  "evFirstPrimaryFullBlWin": {
+   "value": 0.555,
+   "text": "1",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, Full output, view primary"
+  },
+  "evFirstPrimaryFullCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, Full output, view primary"
+  },
+  "evFirstPrimaryFullCfdmWin": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, Full output, view primary"
+  },
+  "evFirstPrimaryFullEns": {
+   "value": 7.03,
+   "text": "7",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, Full output, view primary"
+  },
+  "evFirstPrimaryFullFf": {
+   "value": 89.885,
+   "text": "90",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, Full output, view primary"
+  },
+  "evFirstPrimaryFullHuAll": {
+   "value": 0.015,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, Full output, view primary"
+  },
+  "evFirstPrimaryFullHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, Full output, view primary"
+  },
+  "evFirstPrimaryFullLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, Full output, view primary"
+  },
+  "evFirstPrimaryFullLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, Full output, view primary"
+  },
+  "evFirstPrimaryFullMdmxAll": {
+   "value": 1.49,
+   "text": "1",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, Full output, view primary"
+  },
+  "evFirstPrimaryFullMdmxWin": {
+   "value": 0.935,
+   "text": "1",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, Full output, view primary"
+  },
+  "evFirstPrimaryNoPool": {
+   "value": 68.12,
+   "text": "68",
+   "desc": "Primary view, full output, without the populations with a pooled jump-off at a late origin: the first entry's share (%) of first places"
+  },
+  "evFirstPrimaryNoPoolFf": {
+   "value": 68.12,
+   "text": "68",
+   "desc": "Primary view, full output, without those populations: the flow field's share (%) of first places"
+  },
+  "evFirstPrimaryNoPoolJobs": {
+   "value": 75.81,
+   "text": "76",
+   "desc": "Primary view, full output, without the late-era jobs whose jump-off is pooled with later years: the first entry's share (%) of first places"
+  },
+  "evFirstPrimaryNoPoolJobsFf": {
+   "value": 75.81,
+   "text": "76",
+   "desc": "Primary view, full output, without those jobs: the flow field's share (%) of first places"
+  },
+  "evFirstPrimaryNoPoolSecond": {
+   "value": 27.650000000000002,
+   "text": "28",
+   "desc": "Primary view, full output, without those populations: the next-largest share (%) of first places"
+  },
+  "evFirstRobustBandElevenFifteenBlAll": {
+   "value": 0.165,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of draws ranked first, full output, 11–15 years"
+  },
+  "evFirstRobustBandElevenFifteenBlWin": {
+   "value": 0.5349999999999999,
+   "text": "1",
+   "desc": "bayesLife, last 50 years: share (%) of draws ranked first, full output, 11–15 years"
+  },
+  "evFirstRobustBandElevenFifteenCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of draws ranked first, full output, 11–15 years"
+  },
+  "evFirstRobustBandElevenFifteenCfdmWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of draws ranked first, full output, 11–15 years"
+  },
+  "evFirstRobustBandElevenFifteenEns": {
+   "value": 2.81,
+   "text": "3",
+   "desc": "Ensemble: share (%) of draws ranked first, full output, 11–15 years"
+  },
+  "evFirstRobustBandElevenFifteenFf": {
+   "value": 95.535,
+   "text": "96",
+   "desc": "Flow field: share (%) of draws ranked first, full output, 11–15 years"
+  },
+  "evFirstRobustBandElevenFifteenHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of draws ranked first, full output, 11–15 years"
+  },
+  "evFirstRobustBandElevenFifteenHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of draws ranked first, full output, 11–15 years"
+  },
+  "evFirstRobustBandElevenFifteenLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of draws ranked first, full output, 11–15 years"
+  },
+  "evFirstRobustBandElevenFifteenLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of draws ranked first, full output, 11–15 years"
+  },
+  "evFirstRobustBandElevenFifteenMdmxAll": {
+   "value": 0.79,
+   "text": "1",
+   "desc": "MDMx + anchor, all years: share (%) of draws ranked first, full output, 11–15 years"
+  },
+  "evFirstRobustBandElevenFifteenMdmxWin": {
+   "value": 0.165,
+   "text": "0",
+   "desc": "MDMx + anchor, last 50 years: share (%) of draws ranked first, full output, 11–15 years"
+  },
+  "evFirstRobustBandOneFiveBlAll": {
+   "value": 0.03,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of draws ranked first, full output, 1–5 years"
+  },
+  "evFirstRobustBandOneFiveBlWin": {
+   "value": 4.590000000000001,
+   "text": "5",
+   "desc": "bayesLife, last 50 years: share (%) of draws ranked first, full output, 1–5 years"
+  },
+  "evFirstRobustBandOneFiveCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of draws ranked first, full output, 1–5 years"
+  },
+  "evFirstRobustBandOneFiveCfdmWin": {
+   "value": 0.015,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of draws ranked first, full output, 1–5 years"
+  },
+  "evFirstRobustBandOneFiveEns": {
+   "value": 9.01,
+   "text": "9",
+   "desc": "Ensemble: share (%) of draws ranked first, full output, 1–5 years"
+  },
+  "evFirstRobustBandOneFiveFf": {
+   "value": 78.175,
+   "text": "78",
+   "desc": "Flow field: share (%) of draws ranked first, full output, 1–5 years"
+  },
+  "evFirstRobustBandOneFiveHuAll": {
+   "value": 0.13,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of draws ranked first, full output, 1–5 years"
+  },
+  "evFirstRobustBandOneFiveHuWin": {
+   "value": 0.105,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of draws ranked first, full output, 1–5 years"
+  },
+  "evFirstRobustBandOneFiveLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of draws ranked first, full output, 1–5 years"
+  },
+  "evFirstRobustBandOneFiveLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of draws ranked first, full output, 1–5 years"
+  },
+  "evFirstRobustBandOneFiveMdmxAll": {
+   "value": 0.935,
+   "text": "1",
+   "desc": "MDMx + anchor, all years: share (%) of draws ranked first, full output, 1–5 years"
+  },
+  "evFirstRobustBandOneFiveMdmxWin": {
+   "value": 7.01,
+   "text": "7",
+   "desc": "MDMx + anchor, last 50 years: share (%) of draws ranked first, full output, 1–5 years"
+  },
+  "evFirstRobustBandSixTenBlAll": {
+   "value": 0.105,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of draws ranked first, full output, 6–10 years"
+  },
+  "evFirstRobustBandSixTenBlWin": {
+   "value": 1.78,
+   "text": "2",
+   "desc": "bayesLife, last 50 years: share (%) of draws ranked first, full output, 6–10 years"
+  },
+  "evFirstRobustBandSixTenCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of draws ranked first, full output, 6–10 years"
+  },
+  "evFirstRobustBandSixTenCfdmWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of draws ranked first, full output, 6–10 years"
+  },
+  "evFirstRobustBandSixTenEns": {
+   "value": 23.880000000000003,
+   "text": "24",
+   "desc": "Ensemble: share (%) of draws ranked first, full output, 6–10 years"
+  },
+  "evFirstRobustBandSixTenFf": {
+   "value": 64.095,
+   "text": "64",
+   "desc": "Flow field: share (%) of draws ranked first, full output, 6–10 years"
+  },
+  "evFirstRobustBandSixTenHuAll": {
+   "value": 0.025,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of draws ranked first, full output, 6–10 years"
+  },
+  "evFirstRobustBandSixTenHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of draws ranked first, full output, 6–10 years"
+  },
+  "evFirstRobustBandSixTenLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of draws ranked first, full output, 6–10 years"
+  },
+  "evFirstRobustBandSixTenLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of draws ranked first, full output, 6–10 years"
+  },
+  "evFirstRobustBandSixTenMdmxAll": {
+   "value": 6.32,
+   "text": "6",
+   "desc": "MDMx + anchor, all years: share (%) of draws ranked first, full output, 6–10 years"
+  },
+  "evFirstRobustBandSixTenMdmxWin": {
+   "value": 3.795,
+   "text": "4",
+   "desc": "MDMx + anchor, last 50 years: share (%) of draws ranked first, full output, 6–10 years"
+  },
+  "evFirstRobustLongBlAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of draws ranked first, full output, 26–50 years (descriptive)"
+  },
+  "evFirstRobustLongBlWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of draws ranked first, full output, 26–50 years (descriptive)"
+  },
+  "evFirstRobustLongCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of draws ranked first, full output, 26–50 years (descriptive)"
+  },
+  "evFirstRobustLongCfdmWin": {
+   "value": 0.155,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of draws ranked first, full output, 26–50 years (descriptive)"
+  },
+  "evFirstRobustLongEns": {
+   "value": 1.13,
+   "text": "1",
+   "desc": "Ensemble: share (%) of draws ranked first, full output, 26–50 years (descriptive)"
+  },
+  "evFirstRobustLongFf": {
+   "value": 98.71,
+   "text": "99",
+   "desc": "Flow field: share (%) of draws ranked first, full output, 26–50 years (descriptive)"
+  },
+  "evFirstRobustLongHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of draws ranked first, full output, 26–50 years (descriptive)"
+  },
+  "evFirstRobustLongHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of draws ranked first, full output, 26–50 years (descriptive)"
+  },
+  "evFirstRobustLongLcAll": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of draws ranked first, full output, 26–50 years (descriptive)"
+  },
+  "evFirstRobustLongLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of draws ranked first, full output, 26–50 years (descriptive)"
+  },
+  "evFirstRobustLongMdmxAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of draws ranked first, full output, 26–50 years (descriptive)"
+  },
+  "evFirstRobustLongMdmxWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, last 50 years: share (%) of draws ranked first, full output, 26–50 years (descriptive)"
+  },
+  "evFirstRobustNoTotalsBlAll": {
+   "value": 0.06999999999999999,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of draws ranked first, full output, without the total series"
+  },
+  "evFirstRobustNoTotalsBlWin": {
+   "value": 0.6,
+   "text": "1",
+   "desc": "bayesLife, last 50 years: share (%) of draws ranked first, full output, without the total series"
+  },
+  "evFirstRobustNoTotalsCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of draws ranked first, full output, without the total series"
+  },
+  "evFirstRobustNoTotalsCfdmWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of draws ranked first, full output, without the total series"
+  },
+  "evFirstRobustNoTotalsEns": {
+   "value": 7.305000000000001,
+   "text": "7",
+   "desc": "Ensemble: share (%) of draws ranked first, full output, without the total series"
+  },
+  "evFirstRobustNoTotalsFf": {
+   "value": 89.295,
+   "text": "89",
+   "desc": "Flow field: share (%) of draws ranked first, full output, without the total series"
+  },
+  "evFirstRobustNoTotalsHuAll": {
+   "value": 0.015,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of draws ranked first, full output, without the total series"
+  },
+  "evFirstRobustNoTotalsHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of draws ranked first, full output, without the total series"
+  },
+  "evFirstRobustNoTotalsLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of draws ranked first, full output, without the total series"
+  },
+  "evFirstRobustNoTotalsLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of draws ranked first, full output, without the total series"
+  },
+  "evFirstRobustNoTotalsMdmxAll": {
+   "value": 1.7149999999999999,
+   "text": "2",
+   "desc": "MDMx + anchor, all years: share (%) of draws ranked first, full output, without the total series"
+  },
+  "evFirstRobustNoTotalsMdmxWin": {
+   "value": 1.0,
+   "text": "1",
+   "desc": "MDMx + anchor, last 50 years: share (%) of draws ranked first, full output, without the total series"
+  },
+  "evFirstRobustOriginBootstrapBlAll": {
+   "value": 0.255,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of draws ranked first, full output, origin bootstrap"
+  },
+  "evFirstRobustOriginBootstrapBlWin": {
+   "value": 0.83,
+   "text": "1",
+   "desc": "bayesLife, last 50 years: share (%) of draws ranked first, full output, origin bootstrap"
+  },
+  "evFirstRobustOriginBootstrapCfdmAll": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of draws ranked first, full output, origin bootstrap"
+  },
+  "evFirstRobustOriginBootstrapCfdmWin": {
+   "value": 0.015,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of draws ranked first, full output, origin bootstrap"
+  },
+  "evFirstRobustOriginBootstrapEns": {
+   "value": 17.1,
+   "text": "17",
+   "desc": "Ensemble: share (%) of draws ranked first, full output, origin bootstrap"
+  },
+  "evFirstRobustOriginBootstrapFf": {
+   "value": 75.62,
+   "text": "76",
+   "desc": "Flow field: share (%) of draws ranked first, full output, origin bootstrap"
+  },
+  "evFirstRobustOriginBootstrapHuAll": {
+   "value": 0.06999999999999999,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of draws ranked first, full output, origin bootstrap"
+  },
+  "evFirstRobustOriginBootstrapHuWin": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of draws ranked first, full output, origin bootstrap"
+  },
+  "evFirstRobustOriginBootstrapLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of draws ranked first, full output, origin bootstrap"
+  },
+  "evFirstRobustOriginBootstrapLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of draws ranked first, full output, origin bootstrap"
+  },
+  "evFirstRobustOriginBootstrapMdmxAll": {
+   "value": 4.63,
+   "text": "5",
+   "desc": "MDMx + anchor, all years: share (%) of draws ranked first, full output, origin bootstrap"
+  },
+  "evFirstRobustOriginBootstrapMdmxWin": {
+   "value": 1.47,
+   "text": "1",
+   "desc": "MDMx + anchor, last 50 years: share (%) of draws ranked first, full output, origin bootstrap"
+  },
+  "evFirstRobustPopEqualBlAll": {
+   "value": 0.105,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of draws ranked first, full output, each population equal"
+  },
+  "evFirstRobustPopEqualBlWin": {
+   "value": 1.38,
+   "text": "1",
+   "desc": "bayesLife, last 50 years: share (%) of draws ranked first, full output, each population equal"
+  },
+  "evFirstRobustPopEqualCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of draws ranked first, full output, each population equal"
+  },
+  "evFirstRobustPopEqualCfdmWin": {
+   "value": 0.125,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of draws ranked first, full output, each population equal"
+  },
+  "evFirstRobustPopEqualEns": {
+   "value": 2.175,
+   "text": "2",
+   "desc": "Ensemble: share (%) of draws ranked first, full output, each population equal"
+  },
+  "evFirstRobustPopEqualFf": {
+   "value": 94.21000000000001,
+   "text": "94",
+   "desc": "Flow field: share (%) of draws ranked first, full output, each population equal"
+  },
+  "evFirstRobustPopEqualHuAll": {
+   "value": 0.015,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of draws ranked first, full output, each population equal"
+  },
+  "evFirstRobustPopEqualHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of draws ranked first, full output, each population equal"
+  },
+  "evFirstRobustPopEqualLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of draws ranked first, full output, each population equal"
+  },
+  "evFirstRobustPopEqualLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of draws ranked first, full output, each population equal"
+  },
+  "evFirstRobustPopEqualMdmxAll": {
+   "value": 1.4749999999999999,
+   "text": "1",
+   "desc": "MDMx + anchor, all years: share (%) of draws ranked first, full output, each population equal"
+  },
+  "evFirstRobustPopEqualMdmxWin": {
+   "value": 0.515,
+   "text": "1",
+   "desc": "MDMx + anchor, last 50 years: share (%) of draws ranked first, full output, each population equal"
+  },
+  "evFirstRobustPrimaryBlAll": {
+   "value": 0.08499999999999999,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of draws ranked first, full output, primary (the comparison)"
+  },
+  "evFirstRobustPrimaryBlWin": {
+   "value": 0.555,
+   "text": "1",
+   "desc": "bayesLife, last 50 years: share (%) of draws ranked first, full output, primary (the comparison)"
+  },
+  "evFirstRobustPrimaryCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of draws ranked first, full output, primary (the comparison)"
+  },
+  "evFirstRobustPrimaryCfdmWin": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of draws ranked first, full output, primary (the comparison)"
+  },
+  "evFirstRobustPrimaryEns": {
+   "value": 7.03,
+   "text": "7",
+   "desc": "Ensemble: share (%) of draws ranked first, full output, primary (the comparison)"
+  },
+  "evFirstRobustPrimaryFf": {
+   "value": 89.885,
+   "text": "90",
+   "desc": "Flow field: share (%) of draws ranked first, full output, primary (the comparison)"
+  },
+  "evFirstRobustPrimaryHuAll": {
+   "value": 0.015,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of draws ranked first, full output, primary (the comparison)"
+  },
+  "evFirstRobustPrimaryHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of draws ranked first, full output, primary (the comparison)"
+  },
+  "evFirstRobustPrimaryLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of draws ranked first, full output, primary (the comparison)"
+  },
+  "evFirstRobustPrimaryLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of draws ranked first, full output, primary (the comparison)"
+  },
+  "evFirstRobustPrimaryMdmxAll": {
+   "value": 1.49,
+   "text": "1",
+   "desc": "MDMx + anchor, all years: share (%) of draws ranked first, full output, primary (the comparison)"
+  },
+  "evFirstRobustPrimaryMdmxWin": {
+   "value": 0.935,
+   "text": "1",
+   "desc": "MDMx + anchor, last 50 years: share (%) of draws ranked first, full output, primary (the comparison)"
+  },
+  "evFirstSecondaryEzeroBlAll": {
+   "value": 0.5499999999999999,
+   "text": "1",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, e₀ only, view secondary"
+  },
+  "evFirstSecondaryEzeroBlWin": {
+   "value": 5.680000000000001,
+   "text": "6",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view secondary"
+  },
+  "evFirstSecondaryEzeroCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, e₀ only, view secondary"
+  },
+  "evFirstSecondaryEzeroCfdmWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view secondary"
+  },
+  "evFirstSecondaryEzeroEns": {
+   "value": 16.189999999999998,
+   "text": "16",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, e₀ only, view secondary"
+  },
+  "evFirstSecondaryEzeroFf": {
+   "value": 66.25,
+   "text": "66",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, e₀ only, view secondary"
+  },
+  "evFirstSecondaryEzeroHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, e₀ only, view secondary"
+  },
+  "evFirstSecondaryEzeroHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view secondary"
+  },
+  "evFirstSecondaryEzeroLcAll": {
+   "value": 0.105,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, e₀ only, view secondary"
+  },
+  "evFirstSecondaryEzeroLcWin": {
+   "value": 0.13999999999999999,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view secondary"
+  },
+  "evFirstSecondaryEzeroMdmxAll": {
+   "value": 1.695,
+   "text": "2",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, e₀ only, view secondary"
+  },
+  "evFirstSecondaryEzeroMdmxWin": {
+   "value": 9.39,
+   "text": "9",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view secondary"
+  },
+  "evFirstSecondaryFullBlAll": {
+   "value": 0.02,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, Full output, view secondary"
+  },
+  "evFirstSecondaryFullBlWin": {
+   "value": 9.345,
+   "text": "9",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, Full output, view secondary"
+  },
+  "evFirstSecondaryFullCfdmAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, Full output, view secondary"
+  },
+  "evFirstSecondaryFullCfdmWin": {
+   "value": 0.065,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, Full output, view secondary"
+  },
+  "evFirstSecondaryFullEns": {
+   "value": 29.67,
+   "text": "30",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, Full output, view secondary"
+  },
+  "evFirstSecondaryFullFf": {
+   "value": 46.125,
+   "text": "46",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, Full output, view secondary"
+  },
+  "evFirstSecondaryFullHuAll": {
+   "value": 0.33999999999999997,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, Full output, view secondary"
+  },
+  "evFirstSecondaryFullHuWin": {
+   "value": 0.05,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, Full output, view secondary"
+  },
+  "evFirstSecondaryFullLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, Full output, view secondary"
+  },
+  "evFirstSecondaryFullLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, Full output, view secondary"
+  },
+  "evFirstSecondaryFullMdmxAll": {
+   "value": 2.645,
+   "text": "3",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, Full output, view secondary"
+  },
+  "evFirstSecondaryFullMdmxWin": {
+   "value": 11.74,
+   "text": "12",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, Full output, view secondary"
+  },
+  "evFirstSensitivityEzeroBlAll": {
+   "value": 0.25,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity"
+  },
+  "evFirstSensitivityEzeroBlWin": {
+   "value": 0.01,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity"
+  },
+  "evFirstSensitivityEzeroCfdmAll": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity"
+  },
+  "evFirstSensitivityEzeroCfdmWin": {
+   "value": 0.01,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity"
+  },
+  "evFirstSensitivityEzeroEns": {
+   "value": 3.105,
+   "text": "3",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, e₀ only, view sensitivity"
+  },
+  "evFirstSensitivityEzeroFf": {
+   "value": 96.61999999999999,
+   "text": "97",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, e₀ only, view sensitivity"
+  },
+  "evFirstSensitivityEzeroHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity"
+  },
+  "evFirstSensitivityEzeroHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity"
+  },
+  "evFirstSensitivityEzeroLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity"
+  },
+  "evFirstSensitivityEzeroLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity"
+  },
+  "evFirstSensitivityEzeroMdmxAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity"
+  },
+  "evFirstSensitivityEzeroMdmxWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, e₀ only, view sensitivity"
+  },
+  "evFirstSensitivityFullBlAll": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "bayesLife, all years: share (%) of SMAA draws ranked first, Full output, view sensitivity"
+  },
+  "evFirstSensitivityFullBlWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "bayesLife, last 50 years: share (%) of SMAA draws ranked first, Full output, view sensitivity"
+  },
+  "evFirstSensitivityFullCfdmAll": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "Coherent FDM, all years: share (%) of SMAA draws ranked first, Full output, view sensitivity"
+  },
+  "evFirstSensitivityFullCfdmWin": {
+   "value": 0.015,
+   "text": "0",
+   "desc": "Coherent FDM, last 50 years: share (%) of SMAA draws ranked first, Full output, view sensitivity"
+  },
+  "evFirstSensitivityFullEns": {
+   "value": 0.27499999999999997,
+   "text": "0",
+   "desc": "Ensemble: share (%) of SMAA draws ranked first, Full output, view sensitivity"
+  },
+  "evFirstSensitivityFullFf": {
+   "value": 99.675,
+   "text": "100",
+   "desc": "Flow field: share (%) of SMAA draws ranked first, Full output, view sensitivity"
+  },
+  "evFirstSensitivityFullHuAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, all years: share (%) of SMAA draws ranked first, Full output, view sensitivity"
+  },
+  "evFirstSensitivityFullHuWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Hyndman–Ullah, last 50 years: share (%) of SMAA draws ranked first, Full output, view sensitivity"
+  },
+  "evFirstSensitivityFullLcAll": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, all years: share (%) of SMAA draws ranked first, Full output, view sensitivity"
+  },
+  "evFirstSensitivityFullLcWin": {
+   "value": 0.0,
+   "text": "0",
+   "desc": "Lee–Carter, last 50 years: share (%) of SMAA draws ranked first, Full output, view sensitivity"
+  },
+  "evFirstSensitivityFullMdmxAll": {
+   "value": 0.02,
+   "text": "0",
+   "desc": "MDMx + anchor, all years: share (%) of SMAA draws ranked first, Full output, view sensitivity"
+  },
+  "evFirstSensitivityFullMdmxWin": {
+   "value": 0.005,
+   "text": "0",
+   "desc": "MDMx + anchor, last 50 years: share (%) of SMAA draws ranked first, Full output, view sensitivity"
+  },
+  "evLooLowOneOrigin": {
+   "value": 1995,
+   "text": "1995",
+   "desc": "Primary view: the late origin whose omission lowers the first entry's share most, rank 1"
+  },
+  "evLooLowOneShare": {
+   "value": 43.915,
+   "text": "44",
+   "desc": "Primary view: the first entry's share (%) of first places without that origin, rank 1"
+  },
+  "evLooLowThreeOrigin": {
+   "value": 1980,
+   "text": "1980",
+   "desc": "Primary view: the late origin whose omission lowers the first entry's share most, rank 3"
+  },
+  "evLooLowThreeShare": {
+   "value": 84.865,
+   "text": "85",
+   "desc": "Primary view: the first entry's share (%) of first places without that origin, rank 3"
+  },
+  "evLooLowTwoOrigin": {
+   "value": 2000,
+   "text": "2000",
+   "desc": "Primary view: the late origin whose omission lowers the first entry's share most, rank 2"
+  },
+  "evLooLowTwoShare": {
+   "value": 77.295,
+   "text": "77",
+   "desc": "Primary view: the first entry's share (%) of first places without that origin, rank 2"
+  },
+  "evLooShareMax": {
+   "value": 96.115,
+   "text": "96",
+   "desc": "Primary view, one late origin left out: the first entry's highest share (%) of first places"
+  },
+  "evLooShareMin": {
+   "value": 43.915,
+   "text": "44",
+   "desc": "Primary view, one late origin left out: the first entry's lowest share (%) of first places"
+  },
+  "evLooShareMinLeader": {
+   "value": 43.915,
+   "text": "44",
+   "desc": "Primary view, that origin left out: the share (%) of first places of the entry ranked first there"
+  },
+  "evLooShareMinOrigin": {
+   "value": 1995,
+   "text": "1995",
+   "desc": "Primary view: the late origin whose omission gives the first entry its lowest share of first places"
+  },
+  "evLooShareMinSecond": {
+   "value": 42.19,
+   "text": "42",
+   "desc": "Primary view, that origin left out: the next-largest share (%) of first places"
+  },
+  "evPlaceFrozenHeldOutEzeroBlAll": {
+   "value": 5,
+   "text": "5",
+   "desc": "bayesLife, all years: position by mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutEzeroBlWin": {
+   "value": 3,
+   "text": "3",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutEzeroCfdmAll": {
+   "value": 10,
+   "text": "10",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutEzeroCfdmWin": {
+   "value": 8,
+   "text": "8",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutEzeroEns": {
+   "value": 6,
+   "text": "6",
+   "desc": "Ensemble: position by mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutEzeroFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutEzeroHuAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutEzeroHuWin": {
+   "value": 11,
+   "text": "11",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutEzeroLcAll": {
+   "value": 9,
+   "text": "9",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutEzeroLcWin": {
+   "value": 7,
+   "text": "7",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutEzeroMdmxAll": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutEzeroMdmxWin": {
+   "value": 2,
+   "text": "2",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutFullBlAll": {
+   "value": 6,
+   "text": "6",
+   "desc": "bayesLife, all years: position by mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutFullBlWin": {
+   "value": 3,
+   "text": "3",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutFullCfdmAll": {
+   "value": 8,
+   "text": "8",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutFullCfdmWin": {
+   "value": 7,
+   "text": "7",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutFullEns": {
+   "value": 5,
+   "text": "5",
+   "desc": "Ensemble: position by mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutFullFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutFullHuAll": {
+   "value": 11,
+   "text": "11",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutFullHuWin": {
+   "value": 9,
+   "text": "9",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutFullLcAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutFullLcWin": {
+   "value": 10,
+   "text": "10",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutFullMdmxAll": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenHeldOutFullMdmxWin": {
+   "value": 2,
+   "text": "2",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evPlaceFrozenPooledEzeroBlAll": {
+   "value": 7,
+   "text": "7",
+   "desc": "bayesLife, all years: position by mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledEzeroBlWin": {
+   "value": 6,
+   "text": "6",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledEzeroCfdmAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledEzeroCfdmWin": {
+   "value": 9,
+   "text": "9",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledEzeroEns": {
+   "value": 2,
+   "text": "2",
+   "desc": "Ensemble: position by mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledEzeroFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledEzeroHuAll": {
+   "value": 11,
+   "text": "11",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledEzeroHuWin": {
+   "value": 10,
+   "text": "10",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledEzeroLcAll": {
+   "value": 8,
+   "text": "8",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledEzeroLcWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledEzeroMdmxAll": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledEzeroMdmxWin": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledFullBlAll": {
+   "value": 9,
+   "text": "9",
+   "desc": "bayesLife, all years: position by mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledFullBlWin": {
+   "value": 6,
+   "text": "6",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledFullCfdmAll": {
+   "value": 11,
+   "text": "11",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledFullCfdmWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledFullEns": {
+   "value": 2,
+   "text": "2",
+   "desc": "Ensemble: position by mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledFullFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledFullHuAll": {
+   "value": 10,
+   "text": "10",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledFullHuWin": {
+   "value": 7,
+   "text": "7",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledFullLcAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledFullLcWin": {
+   "value": 8,
+   "text": "8",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledFullMdmxAll": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPooledFullMdmxWin": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryEzeroBlAll": {
+   "value": 8,
+   "text": "8",
+   "desc": "bayesLife, all years: position by mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryEzeroBlWin": {
+   "value": 6,
+   "text": "6",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryEzeroCfdmAll": {
+   "value": 11,
+   "text": "11",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryEzeroCfdmWin": {
+   "value": 9,
+   "text": "9",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryEzeroEns": {
+   "value": 2,
+   "text": "2",
+   "desc": "Ensemble: position by mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryEzeroFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryEzeroHuAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryEzeroHuWin": {
+   "value": 10,
+   "text": "10",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryEzeroLcAll": {
+   "value": 7,
+   "text": "7",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryEzeroLcWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryEzeroMdmxAll": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryEzeroMdmxWin": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryFullBlAll": {
+   "value": 11,
+   "text": "11",
+   "desc": "bayesLife, all years: position by mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryFullBlWin": {
+   "value": 6,
+   "text": "6",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryFullCfdmAll": {
+   "value": 9,
+   "text": "9",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryFullCfdmWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryFullEns": {
+   "value": 2,
+   "text": "2",
+   "desc": "Ensemble: position by mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryFullFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryFullHuAll": {
+   "value": 10,
+   "text": "10",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryFullHuWin": {
+   "value": 7,
+   "text": "7",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryFullLcAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryFullLcWin": {
+   "value": 8,
+   "text": "8",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryFullMdmxAll": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evPlaceFrozenPrimaryFullMdmxWin": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryEzeroBlAll": {
+   "value": 7,
+   "text": "7",
+   "desc": "bayesLife, all years: position by mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryEzeroBlWin": {
+   "value": 6,
+   "text": "6",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryEzeroCfdmAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryEzeroCfdmWin": {
+   "value": 10,
+   "text": "10",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryEzeroEns": {
+   "value": 3,
+   "text": "3",
+   "desc": "Ensemble: position by mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryEzeroFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryEzeroHuAll": {
+   "value": 11,
+   "text": "11",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryEzeroHuWin": {
+   "value": 9,
+   "text": "9",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryEzeroLcAll": {
+   "value": 8,
+   "text": "8",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryEzeroLcWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryEzeroMdmxAll": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryEzeroMdmxWin": {
+   "value": 2,
+   "text": "2",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryFullBlAll": {
+   "value": 8,
+   "text": "8",
+   "desc": "bayesLife, all years: position by mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryFullBlWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryFullCfdmAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryFullCfdmWin": {
+   "value": 9,
+   "text": "9",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryFullEns": {
+   "value": 3,
+   "text": "3",
+   "desc": "Ensemble: position by mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryFullFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryFullHuAll": {
+   "value": 11,
+   "text": "11",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryFullHuWin": {
+   "value": 7,
+   "text": "7",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryFullLcAll": {
+   "value": 10,
+   "text": "10",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryFullLcWin": {
+   "value": 6,
+   "text": "6",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryFullMdmxAll": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSecondaryFullMdmxWin": {
+   "value": 2,
+   "text": "2",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityEzeroBlAll": {
+   "value": 10,
+   "text": "10",
+   "desc": "bayesLife, all years: position by mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityEzeroBlWin": {
+   "value": 7,
+   "text": "7",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityEzeroCfdmAll": {
+   "value": 11,
+   "text": "11",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityEzeroCfdmWin": {
+   "value": 6,
+   "text": "6",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityEzeroEns": {
+   "value": 2,
+   "text": "2",
+   "desc": "Ensemble: position by mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityEzeroFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityEzeroHuAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityEzeroHuWin": {
+   "value": 9,
+   "text": "9",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityEzeroLcAll": {
+   "value": 8,
+   "text": "8",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityEzeroLcWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityEzeroMdmxAll": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityEzeroMdmxWin": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityFullBlAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "bayesLife, all years: position by mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityFullBlWin": {
+   "value": 11,
+   "text": "11",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityFullCfdmAll": {
+   "value": 6,
+   "text": "6",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityFullCfdmWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityFullEns": {
+   "value": 2,
+   "text": "2",
+   "desc": "Ensemble: position by mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityFullFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityFullHuAll": {
+   "value": 9,
+   "text": "9",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityFullHuWin": {
+   "value": 7,
+   "text": "7",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityFullLcAll": {
+   "value": 10,
+   "text": "10",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityFullLcWin": {
+   "value": 8,
+   "text": "8",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityFullMdmxAll": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evPlaceFrozenSensitivityFullMdmxWin": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evPlaceHeldOutEzeroBlAll": {
+   "value": 2,
+   "text": "2",
+   "desc": "bayesLife, all years: position by mean SMAA rank, e₀ only, view held_out"
+  },
+  "evPlaceHeldOutEzeroBlWin": {
+   "value": 4,
+   "text": "4",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, e₀ only, view held_out"
+  },
+  "evPlaceHeldOutEzeroCfdmAll": {
+   "value": 7,
+   "text": "7",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, e₀ only, view held_out"
+  },
+  "evPlaceHeldOutEzeroCfdmWin": {
+   "value": 8,
+   "text": "8",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, e₀ only, view held_out"
+  },
+  "evPlaceHeldOutEzeroEns": {
+   "value": 6,
+   "text": "6",
+   "desc": "Ensemble: position by mean SMAA rank, e₀ only, view held_out"
+  },
+  "evPlaceHeldOutEzeroFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, e₀ only, view held_out"
+  },
+  "evPlaceHeldOutEzeroHuAll": {
+   "value": 11,
+   "text": "11",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, e₀ only, view held_out"
+  },
+  "evPlaceHeldOutEzeroHuWin": {
+   "value": 9,
+   "text": "9",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, e₀ only, view held_out"
+  },
+  "evPlaceHeldOutEzeroLcAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, e₀ only, view held_out"
+  },
+  "evPlaceHeldOutEzeroLcWin": {
+   "value": 10,
+   "text": "10",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, e₀ only, view held_out"
+  },
+  "evPlaceHeldOutEzeroMdmxAll": {
+   "value": 5,
+   "text": "5",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, e₀ only, view held_out"
+  },
+  "evPlaceHeldOutEzeroMdmxWin": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, e₀ only, view held_out"
+  },
+  "evPlaceHeldOutFullBlAll": {
+   "value": 6,
+   "text": "6",
+   "desc": "bayesLife, all years: position by mean SMAA rank, Full output, view held_out"
+  },
+  "evPlaceHeldOutFullBlWin": {
+   "value": 4,
+   "text": "4",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, Full output, view held_out"
+  },
+  "evPlaceHeldOutFullCfdmAll": {
+   "value": 8,
+   "text": "8",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, Full output, view held_out"
+  },
+  "evPlaceHeldOutFullCfdmWin": {
+   "value": 7,
+   "text": "7",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, Full output, view held_out"
+  },
+  "evPlaceHeldOutFullEns": {
+   "value": 5,
+   "text": "5",
+   "desc": "Ensemble: position by mean SMAA rank, Full output, view held_out"
+  },
+  "evPlaceHeldOutFullFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, Full output, view held_out"
+  },
+  "evPlaceHeldOutFullHuAll": {
+   "value": 10,
+   "text": "10",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, Full output, view held_out"
+  },
+  "evPlaceHeldOutFullHuWin": {
+   "value": 9,
+   "text": "9",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, Full output, view held_out"
+  },
+  "evPlaceHeldOutFullLcAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, Full output, view held_out"
+  },
+  "evPlaceHeldOutFullLcWin": {
+   "value": 11,
+   "text": "11",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, Full output, view held_out"
+  },
+  "evPlaceHeldOutFullMdmxAll": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, Full output, view held_out"
+  },
+  "evPlaceHeldOutFullMdmxWin": {
+   "value": 2,
+   "text": "2",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, Full output, view held_out"
+  },
+  "evPlacePooledEzeroBlAll": {
+   "value": 6,
+   "text": "6",
+   "desc": "bayesLife, all years: position by mean SMAA rank, e₀ only, view pooled"
+  },
+  "evPlacePooledEzeroBlWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, e₀ only, view pooled"
+  },
+  "evPlacePooledEzeroCfdmAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, e₀ only, view pooled"
+  },
+  "evPlacePooledEzeroCfdmWin": {
+   "value": 9,
+   "text": "9",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, e₀ only, view pooled"
+  },
+  "evPlacePooledEzeroEns": {
+   "value": 2,
+   "text": "2",
+   "desc": "Ensemble: position by mean SMAA rank, e₀ only, view pooled"
+  },
+  "evPlacePooledEzeroFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, e₀ only, view pooled"
+  },
+  "evPlacePooledEzeroHuAll": {
+   "value": 10,
+   "text": "10",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, e₀ only, view pooled"
+  },
+  "evPlacePooledEzeroHuWin": {
+   "value": 11,
+   "text": "11",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, e₀ only, view pooled"
+  },
+  "evPlacePooledEzeroLcAll": {
+   "value": 8,
+   "text": "8",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, e₀ only, view pooled"
+  },
+  "evPlacePooledEzeroLcWin": {
+   "value": 7,
+   "text": "7",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, e₀ only, view pooled"
+  },
+  "evPlacePooledEzeroMdmxAll": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, e₀ only, view pooled"
+  },
+  "evPlacePooledEzeroMdmxWin": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, e₀ only, view pooled"
+  },
+  "evPlacePooledFullBlAll": {
+   "value": 6,
+   "text": "6",
+   "desc": "bayesLife, all years: position by mean SMAA rank, Full output, view pooled"
+  },
+  "evPlacePooledFullBlWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, Full output, view pooled"
+  },
+  "evPlacePooledFullCfdmAll": {
+   "value": 11,
+   "text": "11",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, Full output, view pooled"
+  },
+  "evPlacePooledFullCfdmWin": {
+   "value": 7,
+   "text": "7",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, Full output, view pooled"
+  },
+  "evPlacePooledFullEns": {
+   "value": 2,
+   "text": "2",
+   "desc": "Ensemble: position by mean SMAA rank, Full output, view pooled"
+  },
+  "evPlacePooledFullFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, Full output, view pooled"
+  },
+  "evPlacePooledFullHuAll": {
+   "value": 8,
+   "text": "8",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, Full output, view pooled"
+  },
+  "evPlacePooledFullHuWin": {
+   "value": 9,
+   "text": "9",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, Full output, view pooled"
+  },
+  "evPlacePooledFullLcAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, Full output, view pooled"
+  },
+  "evPlacePooledFullLcWin": {
+   "value": 10,
+   "text": "10",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, Full output, view pooled"
+  },
+  "evPlacePooledFullMdmxAll": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, Full output, view pooled"
+  },
+  "evPlacePooledFullMdmxWin": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, Full output, view pooled"
+  },
+  "evPlacePrimaryEzeroBlAll": {
+   "value": 4,
+   "text": "4",
+   "desc": "bayesLife, all years: position by mean SMAA rank, e₀ only, view primary"
+  },
+  "evPlacePrimaryEzeroBlWin": {
+   "value": 3,
+   "text": "3",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, e₀ only, view primary"
+  },
+  "evPlacePrimaryEzeroCfdmAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, e₀ only, view primary"
+  },
+  "evPlacePrimaryEzeroCfdmWin": {
+   "value": 8,
+   "text": "8",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, e₀ only, view primary"
+  },
+  "evPlacePrimaryEzeroEns": {
+   "value": 2,
+   "text": "2",
+   "desc": "Ensemble: position by mean SMAA rank, e₀ only, view primary"
+  },
+  "evPlacePrimaryEzeroFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, e₀ only, view primary"
+  },
+  "evPlacePrimaryEzeroHuAll": {
+   "value": 9,
+   "text": "9",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, e₀ only, view primary"
+  },
+  "evPlacePrimaryEzeroHuWin": {
+   "value": 11,
+   "text": "11",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, e₀ only, view primary"
+  },
+  "evPlacePrimaryEzeroLcAll": {
+   "value": 10,
+   "text": "10",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, e₀ only, view primary"
+  },
+  "evPlacePrimaryEzeroLcWin": {
+   "value": 7,
+   "text": "7",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, e₀ only, view primary"
+  },
+  "evPlacePrimaryEzeroMdmxAll": {
+   "value": 5,
+   "text": "5",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, e₀ only, view primary"
+  },
+  "evPlacePrimaryEzeroMdmxWin": {
+   "value": 6,
+   "text": "6",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, e₀ only, view primary"
+  },
+  "evPlacePrimaryFullBlAll": {
+   "value": 7,
+   "text": "7",
+   "desc": "bayesLife, all years: position by mean SMAA rank, Full output, view primary"
+  },
+  "evPlacePrimaryFullBlWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, Full output, view primary"
+  },
+  "evPlacePrimaryFullCfdmAll": {
+   "value": 11,
+   "text": "11",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, Full output, view primary"
+  },
+  "evPlacePrimaryFullCfdmWin": {
+   "value": 6,
+   "text": "6",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, Full output, view primary"
+  },
+  "evPlacePrimaryFullEns": {
+   "value": 2,
+   "text": "2",
+   "desc": "Ensemble: position by mean SMAA rank, Full output, view primary"
+  },
+  "evPlacePrimaryFullFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, Full output, view primary"
+  },
+  "evPlacePrimaryFullHuAll": {
+   "value": 8,
+   "text": "8",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, Full output, view primary"
+  },
+  "evPlacePrimaryFullHuWin": {
+   "value": 9,
+   "text": "9",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, Full output, view primary"
+  },
+  "evPlacePrimaryFullLcAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, Full output, view primary"
+  },
+  "evPlacePrimaryFullLcWin": {
+   "value": 10,
+   "text": "10",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, Full output, view primary"
+  },
+  "evPlacePrimaryFullMdmxAll": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, Full output, view primary"
+  },
+  "evPlacePrimaryFullMdmxWin": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, Full output, view primary"
+  },
+  "evPlaceSecondaryEzeroBlAll": {
+   "value": 7,
+   "text": "7",
+   "desc": "bayesLife, all years: position by mean SMAA rank, e₀ only, view secondary"
+  },
+  "evPlaceSecondaryEzeroBlWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, e₀ only, view secondary"
+  },
+  "evPlaceSecondaryEzeroCfdmAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, e₀ only, view secondary"
+  },
+  "evPlaceSecondaryEzeroCfdmWin": {
+   "value": 11,
+   "text": "11",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, e₀ only, view secondary"
+  },
+  "evPlaceSecondaryEzeroEns": {
+   "value": 2,
+   "text": "2",
+   "desc": "Ensemble: position by mean SMAA rank, e₀ only, view secondary"
+  },
+  "evPlaceSecondaryEzeroFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, e₀ only, view secondary"
+  },
+  "evPlaceSecondaryEzeroHuAll": {
+   "value": 10,
+   "text": "10",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, e₀ only, view secondary"
+  },
+  "evPlaceSecondaryEzeroHuWin": {
+   "value": 9,
+   "text": "9",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, e₀ only, view secondary"
+  },
+  "evPlaceSecondaryEzeroLcAll": {
+   "value": 8,
+   "text": "8",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, e₀ only, view secondary"
+  },
+  "evPlaceSecondaryEzeroLcWin": {
+   "value": 6,
+   "text": "6",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, e₀ only, view secondary"
+  },
+  "evPlaceSecondaryEzeroMdmxAll": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, e₀ only, view secondary"
+  },
+  "evPlaceSecondaryEzeroMdmxWin": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, e₀ only, view secondary"
+  },
+  "evPlaceSecondaryFullBlAll": {
+   "value": 6,
+   "text": "6",
+   "desc": "bayesLife, all years: position by mean SMAA rank, Full output, view secondary"
+  },
+  "evPlaceSecondaryFullBlWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, Full output, view secondary"
+  },
+  "evPlaceSecondaryFullCfdmAll": {
+   "value": 11,
+   "text": "11",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, Full output, view secondary"
+  },
+  "evPlaceSecondaryFullCfdmWin": {
+   "value": 10,
+   "text": "10",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, Full output, view secondary"
+  },
+  "evPlaceSecondaryFullEns": {
+   "value": 1,
+   "text": "1",
+   "desc": "Ensemble: position by mean SMAA rank, Full output, view secondary"
+  },
+  "evPlaceSecondaryFullFf": {
+   "value": 2,
+   "text": "2",
+   "desc": "Flow field: position by mean SMAA rank, Full output, view secondary"
+  },
+  "evPlaceSecondaryFullHuAll": {
+   "value": 9,
+   "text": "9",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, Full output, view secondary"
+  },
+  "evPlaceSecondaryFullHuWin": {
+   "value": 8,
+   "text": "8",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, Full output, view secondary"
+  },
+  "evPlaceSecondaryFullLcAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, Full output, view secondary"
+  },
+  "evPlaceSecondaryFullLcWin": {
+   "value": 7,
+   "text": "7",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, Full output, view secondary"
+  },
+  "evPlaceSecondaryFullMdmxAll": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, Full output, view secondary"
+  },
+  "evPlaceSecondaryFullMdmxWin": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, Full output, view secondary"
+  },
+  "evPlaceSensitivityEzeroBlAll": {
+   "value": 11,
+   "text": "11",
+   "desc": "bayesLife, all years: position by mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evPlaceSensitivityEzeroBlWin": {
+   "value": 10,
+   "text": "10",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evPlaceSensitivityEzeroCfdmAll": {
+   "value": 8,
+   "text": "8",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evPlaceSensitivityEzeroCfdmWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evPlaceSensitivityEzeroEns": {
+   "value": 2,
+   "text": "2",
+   "desc": "Ensemble: position by mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evPlaceSensitivityEzeroFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evPlaceSensitivityEzeroHuAll": {
+   "value": 9,
+   "text": "9",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evPlaceSensitivityEzeroHuWin": {
+   "value": 12,
+   "text": "12",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evPlaceSensitivityEzeroLcAll": {
+   "value": 7,
+   "text": "7",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evPlaceSensitivityEzeroLcWin": {
+   "value": 6,
+   "text": "6",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evPlaceSensitivityEzeroMdmxAll": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evPlaceSensitivityEzeroMdmxWin": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evPlaceSensitivityFullBlAll": {
+   "value": 9,
+   "text": "9",
+   "desc": "bayesLife, all years: position by mean SMAA rank, Full output, view sensitivity"
+  },
+  "evPlaceSensitivityFullBlWin": {
+   "value": 7,
+   "text": "7",
+   "desc": "bayesLife, last 50 years: position by mean SMAA rank, Full output, view sensitivity"
+  },
+  "evPlaceSensitivityFullCfdmAll": {
+   "value": 6,
+   "text": "6",
+   "desc": "Coherent FDM, all years: position by mean SMAA rank, Full output, view sensitivity"
+  },
+  "evPlaceSensitivityFullCfdmWin": {
+   "value": 5,
+   "text": "5",
+   "desc": "Coherent FDM, last 50 years: position by mean SMAA rank, Full output, view sensitivity"
+  },
+  "evPlaceSensitivityFullEns": {
+   "value": 2,
+   "text": "2",
+   "desc": "Ensemble: position by mean SMAA rank, Full output, view sensitivity"
+  },
+  "evPlaceSensitivityFullFf": {
+   "value": 1,
+   "text": "1",
+   "desc": "Flow field: position by mean SMAA rank, Full output, view sensitivity"
+  },
+  "evPlaceSensitivityFullHuAll": {
+   "value": 8,
+   "text": "8",
+   "desc": "Hyndman–Ullah, all years: position by mean SMAA rank, Full output, view sensitivity"
+  },
+  "evPlaceSensitivityFullHuWin": {
+   "value": 10,
+   "text": "10",
+   "desc": "Hyndman–Ullah, last 50 years: position by mean SMAA rank, Full output, view sensitivity"
+  },
+  "evPlaceSensitivityFullLcAll": {
+   "value": 12,
+   "text": "12",
+   "desc": "Lee–Carter, all years: position by mean SMAA rank, Full output, view sensitivity"
+  },
+  "evPlaceSensitivityFullLcWin": {
+   "value": 11,
+   "text": "11",
+   "desc": "Lee–Carter, last 50 years: position by mean SMAA rank, Full output, view sensitivity"
+  },
+  "evPlaceSensitivityFullMdmxAll": {
+   "value": 3,
+   "text": "3",
+   "desc": "MDMx + anchor, all years: position by mean SMAA rank, Full output, view sensitivity"
+  },
+  "evPlaceSensitivityFullMdmxWin": {
+   "value": 4,
+   "text": "4",
+   "desc": "MDMx + anchor, last 50 years: position by mean SMAA rank, Full output, view sensitivity"
+  },
+  "evRankFrozenHeldOutEzeroBlAll": {
+   "value": 4.59155,
+   "text": "4.59",
+   "desc": "bayesLife, all years: mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutEzeroBlWin": {
+   "value": 3.2765,
+   "text": "3.28",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutEzeroCfdmAll": {
+   "value": 9.16635,
+   "text": "9.17",
+   "desc": "Coherent FDM, all years: mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutEzeroCfdmWin": {
+   "value": 8.93005,
+   "text": "8.93",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutEzeroEns": {
+   "value": 5.73365,
+   "text": "5.73",
+   "desc": "Ensemble: mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutEzeroFf": {
+   "value": 1.0352,
+   "text": "1.04",
+   "desc": "Flow field: mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutEzeroHuAll": {
+   "value": 11.5122,
+   "text": "11.51",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutEzeroHuWin": {
+   "value": 9.60095,
+   "text": "9.60",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutEzeroLcAll": {
+   "value": 8.9332,
+   "text": "8.93",
+   "desc": "Lee–Carter, all years: mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutEzeroLcWin": {
+   "value": 8.85715,
+   "text": "8.86",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutEzeroMdmxAll": {
+   "value": 3.8977,
+   "text": "3.90",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutEzeroMdmxWin": {
+   "value": 2.4655,
+   "text": "2.47",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, e₀ only, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutFullBlAll": {
+   "value": 6.25775,
+   "text": "6.26",
+   "desc": "bayesLife, all years: mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutFullBlWin": {
+   "value": 2.9933,
+   "text": "2.99",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutFullCfdmAll": {
+   "value": 7.82035,
+   "text": "7.82",
+   "desc": "Coherent FDM, all years: mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutFullCfdmWin": {
+   "value": 7.8188,
+   "text": "7.82",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutFullEns": {
+   "value": 4.615,
+   "text": "4.62",
+   "desc": "Ensemble: mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutFullFf": {
+   "value": 1.1863,
+   "text": "1.19",
+   "desc": "Flow field: mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutFullHuAll": {
+   "value": 10.2592,
+   "text": "10.26",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutFullHuWin": {
+   "value": 8.8601,
+   "text": "8.86",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutFullLcAll": {
+   "value": 11.60225,
+   "text": "11.60",
+   "desc": "Lee–Carter, all years: mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutFullLcWin": {
+   "value": 9.96715,
+   "text": "9.97",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutFullMdmxAll": {
+   "value": 3.98305,
+   "text": "3.98",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evRankFrozenHeldOutFullMdmxWin": {
+   "value": 2.63675,
+   "text": "2.64",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, Full output, view held_out (the frozen design)"
+  },
+  "evRankFrozenPooledEzeroBlAll": {
+   "value": 7.4963,
+   "text": "7.50",
+   "desc": "bayesLife, all years: mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledEzeroBlWin": {
+   "value": 5.63515,
+   "text": "5.64",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledEzeroCfdmAll": {
+   "value": 11.5299,
+   "text": "11.53",
+   "desc": "Coherent FDM, all years: mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledEzeroCfdmWin": {
+   "value": 9.183,
+   "text": "9.18",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledEzeroEns": {
+   "value": 1.9967,
+   "text": "2.00",
+   "desc": "Ensemble: mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledEzeroFf": {
+   "value": 1.004,
+   "text": "1.00",
+   "desc": "Flow field: mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledEzeroHuAll": {
+   "value": 11.4678,
+   "text": "11.47",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledEzeroHuWin": {
+   "value": 9.72095,
+   "text": "9.72",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledEzeroLcAll": {
+   "value": 7.5058,
+   "text": "7.51",
+   "desc": "Lee–Carter, all years: mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledEzeroLcWin": {
+   "value": 5.45405,
+   "text": "5.45",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledEzeroMdmxAll": {
+   "value": 3.9397,
+   "text": "3.94",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledEzeroMdmxWin": {
+   "value": 3.06665,
+   "text": "3.07",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, e₀ only, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledFullBlAll": {
+   "value": 9.83025,
+   "text": "9.83",
+   "desc": "bayesLife, all years: mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledFullBlWin": {
+   "value": 6.6625,
+   "text": "6.66",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledFullCfdmAll": {
+   "value": 9.8656,
+   "text": "9.87",
+   "desc": "Coherent FDM, all years: mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledFullCfdmWin": {
+   "value": 6.3279,
+   "text": "6.33",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledFullEns": {
+   "value": 2.02905,
+   "text": "2.03",
+   "desc": "Ensemble: mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledFullFf": {
+   "value": 1.01895,
+   "text": "1.02",
+   "desc": "Flow field: mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledFullHuAll": {
+   "value": 9.84675,
+   "text": "9.85",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledFullHuWin": {
+   "value": 7.34625,
+   "text": "7.35",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledFullLcAll": {
+   "value": 10.4736,
+   "text": "10.47",
+   "desc": "Lee–Carter, all years: mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledFullLcWin": {
+   "value": 7.55635,
+   "text": "7.56",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledFullMdmxAll": {
+   "value": 3.8768,
+   "text": "3.88",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evRankFrozenPooledFullMdmxWin": {
+   "value": 3.166,
+   "text": "3.17",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, Full output, view pooled (the frozen design)"
+  },
+  "evRankFrozenPrimaryEzeroBlAll": {
+   "value": 7.34395,
+   "text": "7.34",
+   "desc": "bayesLife, all years: mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryEzeroBlWin": {
+   "value": 5.1331,
+   "text": "5.13",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryEzeroCfdmAll": {
+   "value": 11.19855,
+   "text": "11.20",
+   "desc": "Coherent FDM, all years: mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryEzeroCfdmWin": {
+   "value": 9.0091,
+   "text": "9.01",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryEzeroEns": {
+   "value": 1.98985,
+   "text": "1.99",
+   "desc": "Ensemble: mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryEzeroFf": {
+   "value": 1.0104,
+   "text": "1.01",
+   "desc": "Flow field: mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryEzeroHuAll": {
+   "value": 11.6774,
+   "text": "11.68",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryEzeroHuWin": {
+   "value": 10.03355,
+   "text": "10.03",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryEzeroLcAll": {
+   "value": 7.25525,
+   "text": "7.26",
+   "desc": "Lee–Carter, all years: mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryEzeroLcWin": {
+   "value": 5.045,
+   "text": "5.04",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryEzeroMdmxAll": {
+   "value": 4.1639,
+   "text": "4.16",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryEzeroMdmxWin": {
+   "value": 4.13995,
+   "text": "4.14",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, e₀ only, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryFullBlAll": {
+   "value": 10.0402,
+   "text": "10.04",
+   "desc": "bayesLife, all years: mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryFullBlWin": {
+   "value": 7.0268,
+   "text": "7.03",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryFullCfdmAll": {
+   "value": 8.59115,
+   "text": "8.59",
+   "desc": "Coherent FDM, all years: mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryFullCfdmWin": {
+   "value": 5.9863,
+   "text": "5.99",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryFullEns": {
+   "value": 2.0584,
+   "text": "2.06",
+   "desc": "Ensemble: mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryFullFf": {
+   "value": 1.03335,
+   "text": "1.03",
+   "desc": "Flow field: mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryFullHuAll": {
+   "value": 9.46325,
+   "text": "9.46",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryFullHuWin": {
+   "value": 7.80685,
+   "text": "7.81",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryFullLcAll": {
+   "value": 10.5863,
+   "text": "10.59",
+   "desc": "Lee–Carter, all years: mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryFullLcWin": {
+   "value": 8.14665,
+   "text": "8.15",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryFullMdmxAll": {
+   "value": 3.45225,
+   "text": "3.45",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evRankFrozenPrimaryFullMdmxWin": {
+   "value": 3.8085,
+   "text": "3.81",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, Full output, view primary (the frozen design)"
+  },
+  "evRankFrozenSecondaryEzeroBlAll": {
+   "value": 7.73835,
+   "text": "7.74",
+   "desc": "bayesLife, all years: mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryEzeroBlWin": {
+   "value": 5.7548,
+   "text": "5.75",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryEzeroCfdmAll": {
+   "value": 11.8867,
+   "text": "11.89",
+   "desc": "Coherent FDM, all years: mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryEzeroCfdmWin": {
+   "value": 9.2474,
+   "text": "9.25",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryEzeroEns": {
+   "value": 3.0778,
+   "text": "3.08",
+   "desc": "Ensemble: mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryEzeroFf": {
+   "value": 1.0976,
+   "text": "1.10",
+   "desc": "Flow field: mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryEzeroHuAll": {
+   "value": 11.0876,
+   "text": "11.09",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryEzeroHuWin": {
+   "value": 8.68145,
+   "text": "8.68",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryEzeroLcAll": {
+   "value": 8.32535,
+   "text": "8.33",
+   "desc": "Lee–Carter, all years: mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryEzeroLcWin": {
+   "value": 5.2783,
+   "text": "5.28",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryEzeroMdmxAll": {
+   "value": 3.64365,
+   "text": "3.64",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryEzeroMdmxWin": {
+   "value": 2.181,
+   "text": "2.18",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, e₀ only, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryFullBlAll": {
+   "value": 8.0029,
+   "text": "8.00",
+   "desc": "bayesLife, all years: mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryFullBlWin": {
+   "value": 5.42085,
+   "text": "5.42",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryFullCfdmAll": {
+   "value": 11.8558,
+   "text": "11.86",
+   "desc": "Coherent FDM, all years: mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryFullCfdmWin": {
+   "value": 8.6206,
+   "text": "8.62",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryFullEns": {
+   "value": 2.7524,
+   "text": "2.75",
+   "desc": "Ensemble: mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryFullFf": {
+   "value": 1.16255,
+   "text": "1.16",
+   "desc": "Flow field: mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryFullHuAll": {
+   "value": 10.7731,
+   "text": "10.77",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryFullHuWin": {
+   "value": 7.85895,
+   "text": "7.86",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryFullLcAll": {
+   "value": 9.57625,
+   "text": "9.58",
+   "desc": "Lee–Carter, all years: mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryFullLcWin": {
+   "value": 5.8426,
+   "text": "5.84",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryFullMdmxAll": {
+   "value": 3.77375,
+   "text": "3.77",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evRankFrozenSecondaryFullMdmxWin": {
+   "value": 2.36025,
+   "text": "2.36",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, Full output, view secondary (the frozen design)"
+  },
+  "evRankFrozenSensitivityEzeroBlAll": {
+   "value": 9.67665,
+   "text": "9.68",
+   "desc": "bayesLife, all years: mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityEzeroBlWin": {
+   "value": 7.5604,
+   "text": "7.56",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityEzeroCfdmAll": {
+   "value": 9.76685,
+   "text": "9.77",
+   "desc": "Coherent FDM, all years: mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityEzeroCfdmWin": {
+   "value": 6.967,
+   "text": "6.97",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityEzeroEns": {
+   "value": 2.0001,
+   "text": "2.00",
+   "desc": "Ensemble: mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityEzeroFf": {
+   "value": 1.0,
+   "text": "1.00",
+   "desc": "Flow field: mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityEzeroHuAll": {
+   "value": 11.52185,
+   "text": "11.52",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityEzeroHuWin": {
+   "value": 9.51485,
+   "text": "9.51",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityEzeroLcAll": {
+   "value": 7.6241,
+   "text": "7.62",
+   "desc": "Lee–Carter, all years: mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityEzeroLcWin": {
+   "value": 4.8997,
+   "text": "4.90",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityEzeroMdmxAll": {
+   "value": 3.77185,
+   "text": "3.77",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityEzeroMdmxWin": {
+   "value": 3.69665,
+   "text": "3.70",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, e₀ only, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityFullBlAll": {
+   "value": 11.513,
+   "text": "11.51",
+   "desc": "bayesLife, all years: mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityFullBlWin": {
+   "value": 10.15425,
+   "text": "10.15",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityFullCfdmAll": {
+   "value": 6.4798,
+   "text": "6.48",
+   "desc": "Coherent FDM, all years: mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityFullCfdmWin": {
+   "value": 4.9222,
+   "text": "4.92",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityFullEns": {
+   "value": 2.10125,
+   "text": "2.10",
+   "desc": "Ensemble: mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityFullFf": {
+   "value": 1.0061,
+   "text": "1.01",
+   "desc": "Flow field: mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityFullHuAll": {
+   "value": 8.7732,
+   "text": "8.77",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityFullHuWin": {
+   "value": 7.8806,
+   "text": "7.88",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityFullLcAll": {
+   "value": 9.78075,
+   "text": "9.78",
+   "desc": "Lee–Carter, all years: mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityFullLcWin": {
+   "value": 7.9278,
+   "text": "7.93",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityFullMdmxAll": {
+   "value": 3.3967,
+   "text": "3.40",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evRankFrozenSensitivityFullMdmxWin": {
+   "value": 4.06435,
+   "text": "4.06",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, Full output, view sensitivity (the frozen design)"
+  },
+  "evRankHeldOutEzeroBlAll": {
+   "value": 2.20245,
+   "text": "2.20",
+   "desc": "bayesLife, all years: mean SMAA rank, e₀ only, view held_out"
+  },
+  "evRankHeldOutEzeroBlWin": {
+   "value": 4.2976,
+   "text": "4.30",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, e₀ only, view held_out"
+  },
+  "evRankHeldOutEzeroCfdmAll": {
+   "value": 7.8259,
+   "text": "7.83",
+   "desc": "Coherent FDM, all years: mean SMAA rank, e₀ only, view held_out"
+  },
+  "evRankHeldOutEzeroCfdmWin": {
+   "value": 8.07195,
+   "text": "8.07",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, e₀ only, view held_out"
+  },
+  "evRankHeldOutEzeroEns": {
+   "value": 5.47625,
+   "text": "5.48",
+   "desc": "Ensemble: mean SMAA rank, e₀ only, view held_out"
+  },
+  "evRankHeldOutEzeroFf": {
+   "value": 1.0709,
+   "text": "1.07",
+   "desc": "Flow field: mean SMAA rank, e₀ only, view held_out"
+  },
+  "evRankHeldOutEzeroHuAll": {
+   "value": 10.09295,
+   "text": "10.09",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, e₀ only, view held_out"
+  },
+  "evRankHeldOutEzeroHuWin": {
+   "value": 9.26565,
+   "text": "9.27",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, e₀ only, view held_out"
+  },
+  "evRankHeldOutEzeroLcAll": {
+   "value": 11.6876,
+   "text": "11.69",
+   "desc": "Lee–Carter, all years: mean SMAA rank, e₀ only, view held_out"
+  },
+  "evRankHeldOutEzeroLcWin": {
+   "value": 9.95685,
+   "text": "9.96",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, e₀ only, view held_out"
+  },
+  "evRankHeldOutEzeroMdmxAll": {
+   "value": 4.31395,
+   "text": "4.31",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, e₀ only, view held_out"
+  },
+  "evRankHeldOutEzeroMdmxWin": {
+   "value": 3.73795,
+   "text": "3.74",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, e₀ only, view held_out"
+  },
+  "evRankHeldOutFullBlAll": {
+   "value": 5.2571,
+   "text": "5.26",
+   "desc": "bayesLife, all years: mean SMAA rank, Full output, view held_out"
+  },
+  "evRankHeldOutFullBlWin": {
+   "value": 4.3932,
+   "text": "4.39",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, Full output, view held_out"
+  },
+  "evRankHeldOutFullCfdmAll": {
+   "value": 8.018,
+   "text": "8.02",
+   "desc": "Coherent FDM, all years: mean SMAA rank, Full output, view held_out"
+  },
+  "evRankHeldOutFullCfdmWin": {
+   "value": 7.28575,
+   "text": "7.29",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, Full output, view held_out"
+  },
+  "evRankHeldOutFullEns": {
+   "value": 4.8763,
+   "text": "4.88",
+   "desc": "Ensemble: mean SMAA rank, Full output, view held_out"
+  },
+  "evRankHeldOutFullFf": {
+   "value": 1.0135,
+   "text": "1.01",
+   "desc": "Flow field: mean SMAA rank, Full output, view held_out"
+  },
+  "evRankHeldOutFullHuAll": {
+   "value": 10.0966,
+   "text": "10.10",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, Full output, view held_out"
+  },
+  "evRankHeldOutFullHuWin": {
+   "value": 8.86815,
+   "text": "8.87",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, Full output, view held_out"
+  },
+  "evRankHeldOutFullLcAll": {
+   "value": 11.96765,
+   "text": "11.97",
+   "desc": "Lee–Carter, all years: mean SMAA rank, Full output, view held_out"
+  },
+  "evRankHeldOutFullLcWin": {
+   "value": 10.3732,
+   "text": "10.37",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, Full output, view held_out"
+  },
+  "evRankHeldOutFullMdmxAll": {
+   "value": 3.31885,
+   "text": "3.32",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, Full output, view held_out"
+  },
+  "evRankHeldOutFullMdmxWin": {
+   "value": 2.5317,
+   "text": "2.53",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, Full output, view held_out"
+  },
+  "evRankPooledEzeroBlAll": {
+   "value": 5.69015,
+   "text": "5.69",
+   "desc": "bayesLife, all years: mean SMAA rank, e₀ only, view pooled"
+  },
+  "evRankPooledEzeroBlWin": {
+   "value": 4.2973,
+   "text": "4.30",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, e₀ only, view pooled"
+  },
+  "evRankPooledEzeroCfdmAll": {
+   "value": 11.31955,
+   "text": "11.32",
+   "desc": "Coherent FDM, all years: mean SMAA rank, e₀ only, view pooled"
+  },
+  "evRankPooledEzeroCfdmWin": {
+   "value": 9.3639,
+   "text": "9.36",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, e₀ only, view pooled"
+  },
+  "evRankPooledEzeroEns": {
+   "value": 1.9165,
+   "text": "1.92",
+   "desc": "Ensemble: mean SMAA rank, e₀ only, view pooled"
+  },
+  "evRankPooledEzeroFf": {
+   "value": 1.3045,
+   "text": "1.30",
+   "desc": "Flow field: mean SMAA rank, e₀ only, view pooled"
+  },
+  "evRankPooledEzeroHuAll": {
+   "value": 9.4963,
+   "text": "9.50",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, e₀ only, view pooled"
+  },
+  "evRankPooledEzeroHuWin": {
+   "value": 10.18015,
+   "text": "10.18",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, e₀ only, view pooled"
+  },
+  "evRankPooledEzeroLcAll": {
+   "value": 9.08725,
+   "text": "9.09",
+   "desc": "Lee–Carter, all years: mean SMAA rank, e₀ only, view pooled"
+  },
+  "evRankPooledEzeroLcWin": {
+   "value": 7.36205,
+   "text": "7.36",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, e₀ only, view pooled"
+  },
+  "evRankPooledEzeroMdmxAll": {
+   "value": 4.2365,
+   "text": "4.24",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, e₀ only, view pooled"
+  },
+  "evRankPooledEzeroMdmxWin": {
+   "value": 3.74585,
+   "text": "3.75",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, e₀ only, view pooled"
+  },
+  "evRankPooledFullBlAll": {
+   "value": 7.24785,
+   "text": "7.25",
+   "desc": "bayesLife, all years: mean SMAA rank, Full output, view pooled"
+  },
+  "evRankPooledFullBlWin": {
+   "value": 5.16495,
+   "text": "5.16",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, Full output, view pooled"
+  },
+  "evRankPooledFullCfdmAll": {
+   "value": 10.1588,
+   "text": "10.16",
+   "desc": "Coherent FDM, all years: mean SMAA rank, Full output, view pooled"
+  },
+  "evRankPooledFullCfdmWin": {
+   "value": 7.3386,
+   "text": "7.34",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, Full output, view pooled"
+  },
+  "evRankPooledFullEns": {
+   "value": 2.78835,
+   "text": "2.79",
+   "desc": "Ensemble: mean SMAA rank, Full output, view pooled"
+  },
+  "evRankPooledFullFf": {
+   "value": 1.0932,
+   "text": "1.09",
+   "desc": "Flow field: mean SMAA rank, Full output, view pooled"
+  },
+  "evRankPooledFullHuAll": {
+   "value": 8.345,
+   "text": "8.35",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, Full output, view pooled"
+  },
+  "evRankPooledFullHuWin": {
+   "value": 8.40185,
+   "text": "8.40",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, Full output, view pooled"
+  },
+  "evRankPooledFullLcAll": {
+   "value": 11.49155,
+   "text": "11.49",
+   "desc": "Lee–Carter, all years: mean SMAA rank, Full output, view pooled"
+  },
+  "evRankPooledFullLcWin": {
+   "value": 9.68385,
+   "text": "9.68",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, Full output, view pooled"
+  },
+  "evRankPooledFullMdmxAll": {
+   "value": 3.3602,
+   "text": "3.36",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, Full output, view pooled"
+  },
+  "evRankPooledFullMdmxWin": {
+   "value": 2.9258,
+   "text": "2.93",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, Full output, view pooled"
+  },
+  "evRankPrimaryEzeroBlAll": {
+   "value": 4.47145,
+   "text": "4.47",
+   "desc": "bayesLife, all years: mean SMAA rank, e₀ only, view primary"
+  },
+  "evRankPrimaryEzeroBlWin": {
+   "value": 3.3285,
+   "text": "3.33",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, e₀ only, view primary"
+  },
+  "evRankPrimaryEzeroCfdmAll": {
+   "value": 11.0663,
+   "text": "11.07",
+   "desc": "Coherent FDM, all years: mean SMAA rank, e₀ only, view primary"
+  },
+  "evRankPrimaryEzeroCfdmWin": {
+   "value": 8.9458,
+   "text": "8.95",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, e₀ only, view primary"
+  },
+  "evRankPrimaryEzeroEns": {
+   "value": 1.8788,
+   "text": "1.88",
+   "desc": "Ensemble: mean SMAA rank, e₀ only, view primary"
+  },
+  "evRankPrimaryEzeroFf": {
+   "value": 1.8041,
+   "text": "1.80",
+   "desc": "Flow field: mean SMAA rank, e₀ only, view primary"
+  },
+  "evRankPrimaryEzeroHuAll": {
+   "value": 9.08805,
+   "text": "9.09",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, e₀ only, view primary"
+  },
+  "evRankPrimaryEzeroHuWin": {
+   "value": 10.26255,
+   "text": "10.26",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, e₀ only, view primary"
+  },
+  "evRankPrimaryEzeroLcAll": {
+   "value": 9.4949,
+   "text": "9.49",
+   "desc": "Lee–Carter, all years: mean SMAA rank, e₀ only, view primary"
+  },
+  "evRankPrimaryEzeroLcWin": {
+   "value": 7.8729,
+   "text": "7.87",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, e₀ only, view primary"
+  },
+  "evRankPrimaryEzeroMdmxAll": {
+   "value": 4.7753,
+   "text": "4.78",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, e₀ only, view primary"
+  },
+  "evRankPrimaryEzeroMdmxWin": {
+   "value": 5.01135,
+   "text": "5.01",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, e₀ only, view primary"
+  },
+  "evRankPrimaryFullBlAll": {
+   "value": 7.30895,
+   "text": "7.31",
+   "desc": "bayesLife, all years: mean SMAA rank, Full output, view primary"
+  },
+  "evRankPrimaryFullBlWin": {
+   "value": 5.1872,
+   "text": "5.19",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, Full output, view primary"
+  },
+  "evRankPrimaryFullCfdmAll": {
+   "value": 9.95125,
+   "text": "9.95",
+   "desc": "Coherent FDM, all years: mean SMAA rank, Full output, view primary"
+  },
+  "evRankPrimaryFullCfdmWin": {
+   "value": 7.025,
+   "text": "7.03",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, Full output, view primary"
+  },
+  "evRankPrimaryFullEns": {
+   "value": 2.72725,
+   "text": "2.73",
+   "desc": "Ensemble: mean SMAA rank, Full output, view primary"
+  },
+  "evRankPrimaryFullFf": {
+   "value": 1.14905,
+   "text": "1.15",
+   "desc": "Flow field: mean SMAA rank, Full output, view primary"
+  },
+  "evRankPrimaryFullHuAll": {
+   "value": 8.14505,
+   "text": "8.15",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, Full output, view primary"
+  },
+  "evRankPrimaryFullHuWin": {
+   "value": 8.49475,
+   "text": "8.49",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, Full output, view primary"
+  },
+  "evRankPrimaryFullLcAll": {
+   "value": 11.5162,
+   "text": "11.52",
+   "desc": "Lee–Carter, all years: mean SMAA rank, Full output, view primary"
+  },
+  "evRankPrimaryFullLcWin": {
+   "value": 9.92705,
+   "text": "9.93",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, Full output, view primary"
+  },
+  "evRankPrimaryFullMdmxAll": {
+   "value": 3.25095,
+   "text": "3.25",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, Full output, view primary"
+  },
+  "evRankPrimaryFullMdmxWin": {
+   "value": 3.3173,
+   "text": "3.32",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, Full output, view primary"
+  },
+  "evRankSecondaryEzeroBlAll": {
+   "value": 6.7212,
+   "text": "6.72",
+   "desc": "bayesLife, all years: mean SMAA rank, e₀ only, view secondary"
+  },
+  "evRankSecondaryEzeroBlWin": {
+   "value": 4.8428,
+   "text": "4.84",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, e₀ only, view secondary"
+  },
+  "evRankSecondaryEzeroCfdmAll": {
+   "value": 11.2186,
+   "text": "11.22",
+   "desc": "Coherent FDM, all years: mean SMAA rank, e₀ only, view secondary"
+  },
+  "evRankSecondaryEzeroCfdmWin": {
+   "value": 10.37515,
+   "text": "10.38",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, e₀ only, view secondary"
+  },
+  "evRankSecondaryEzeroEns": {
+   "value": 2.5861,
+   "text": "2.59",
+   "desc": "Ensemble: mean SMAA rank, e₀ only, view secondary"
+  },
+  "evRankSecondaryEzeroFf": {
+   "value": 1.8496,
+   "text": "1.85",
+   "desc": "Flow field: mean SMAA rank, e₀ only, view secondary"
+  },
+  "evRankSecondaryEzeroHuAll": {
+   "value": 10.2394,
+   "text": "10.24",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, e₀ only, view secondary"
+  },
+  "evRankSecondaryEzeroHuWin": {
+   "value": 9.9702,
+   "text": "9.97",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, e₀ only, view secondary"
+  },
+  "evRankSecondaryEzeroLcAll": {
+   "value": 7.70225,
+   "text": "7.70",
+   "desc": "Lee–Carter, all years: mean SMAA rank, e₀ only, view secondary"
+  },
+  "evRankSecondaryEzeroLcWin": {
+   "value": 6.11895,
+   "text": "6.12",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, e₀ only, view secondary"
+  },
+  "evRankSecondaryEzeroMdmxAll": {
+   "value": 3.75045,
+   "text": "3.75",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, e₀ only, view secondary"
+  },
+  "evRankSecondaryEzeroMdmxWin": {
+   "value": 2.6253,
+   "text": "2.63",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, e₀ only, view secondary"
+  },
+  "evRankSecondaryFullBlAll": {
+   "value": 6.94845,
+   "text": "6.95",
+   "desc": "bayesLife, all years: mean SMAA rank, Full output, view secondary"
+  },
+  "evRankSecondaryFullBlWin": {
+   "value": 4.39315,
+   "text": "4.39",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, Full output, view secondary"
+  },
+  "evRankSecondaryFullCfdmAll": {
+   "value": 10.4565,
+   "text": "10.46",
+   "desc": "Coherent FDM, all years: mean SMAA rank, Full output, view secondary"
+  },
+  "evRankSecondaryFullCfdmWin": {
+   "value": 9.1359,
+   "text": "9.14",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, Full output, view secondary"
+  },
+  "evRankSecondaryFullEns": {
+   "value": 2.34205,
+   "text": "2.34",
+   "desc": "Ensemble: mean SMAA rank, Full output, view secondary"
+  },
+  "evRankSecondaryFullFf": {
+   "value": 2.39995,
+   "text": "2.40",
+   "desc": "Flow field: mean SMAA rank, Full output, view secondary"
+  },
+  "evRankSecondaryFullHuAll": {
+   "value": 8.7662,
+   "text": "8.77",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, Full output, view secondary"
+  },
+  "evRankSecondaryFullHuWin": {
+   "value": 8.64085,
+   "text": "8.64",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, Full output, view secondary"
+  },
+  "evRankSecondaryFullLcAll": {
+   "value": 10.47655,
+   "text": "10.48",
+   "desc": "Lee–Carter, all years: mean SMAA rank, Full output, view secondary"
+  },
+  "evRankSecondaryFullLcWin": {
+   "value": 8.2919,
+   "text": "8.29",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, Full output, view secondary"
+  },
+  "evRankSecondaryFullMdmxAll": {
+   "value": 3.50235,
+   "text": "3.50",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, Full output, view secondary"
+  },
+  "evRankSecondaryFullMdmxWin": {
+   "value": 2.64615,
+   "text": "2.65",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, Full output, view secondary"
+  },
+  "evRankSensitivityEzeroBlAll": {
+   "value": 9.28345,
+   "text": "9.28",
+   "desc": "bayesLife, all years: mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evRankSensitivityEzeroBlWin": {
+   "value": 8.9277,
+   "text": "8.93",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evRankSensitivityEzeroCfdmAll": {
+   "value": 7.87635,
+   "text": "7.88",
+   "desc": "Coherent FDM, all years: mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evRankSensitivityEzeroCfdmWin": {
+   "value": 6.7084,
+   "text": "6.71",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evRankSensitivityEzeroEns": {
+   "value": 2.04245,
+   "text": "2.04",
+   "desc": "Ensemble: mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evRankSensitivityEzeroFf": {
+   "value": 1.04085,
+   "text": "1.04",
+   "desc": "Flow field: mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evRankSensitivityEzeroHuAll": {
+   "value": 8.9098,
+   "text": "8.91",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evRankSensitivityEzeroHuWin": {
+   "value": 10.5096,
+   "text": "10.51",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evRankSensitivityEzeroLcAll": {
+   "value": 7.3895,
+   "text": "7.39",
+   "desc": "Lee–Carter, all years: mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evRankSensitivityEzeroLcWin": {
+   "value": 7.13995,
+   "text": "7.14",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evRankSensitivityEzeroMdmxAll": {
+   "value": 3.8247,
+   "text": "3.82",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evRankSensitivityEzeroMdmxWin": {
+   "value": 4.34725,
+   "text": "4.35",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, e₀ only, view sensitivity"
+  },
+  "evRankSensitivityFullBlAll": {
+   "value": 8.92025,
+   "text": "8.92",
+   "desc": "bayesLife, all years: mean SMAA rank, Full output, view sensitivity"
+  },
+  "evRankSensitivityFullBlWin": {
+   "value": 7.7245,
+   "text": "7.72",
+   "desc": "bayesLife, last 50 years: mean SMAA rank, Full output, view sensitivity"
+  },
+  "evRankSensitivityFullCfdmAll": {
+   "value": 7.5079,
+   "text": "7.51",
+   "desc": "Coherent FDM, all years: mean SMAA rank, Full output, view sensitivity"
+  },
+  "evRankSensitivityFullCfdmWin": {
+   "value": 5.48695,
+   "text": "5.49",
+   "desc": "Coherent FDM, last 50 years: mean SMAA rank, Full output, view sensitivity"
+  },
+  "evRankSensitivityFullEns": {
+   "value": 2.6051,
+   "text": "2.61",
+   "desc": "Ensemble: mean SMAA rank, Full output, view sensitivity"
+  },
+  "evRankSensitivityFullFf": {
+   "value": 1.004,
+   "text": "1.00",
+   "desc": "Flow field: mean SMAA rank, Full output, view sensitivity"
+  },
+  "evRankSensitivityFullHuAll": {
+   "value": 8.23145,
+   "text": "8.23",
+   "desc": "Hyndman–Ullah, all years: mean SMAA rank, Full output, view sensitivity"
+  },
+  "evRankSensitivityFullHuWin": {
+   "value": 9.18365,
+   "text": "9.18",
+   "desc": "Hyndman–Ullah, last 50 years: mean SMAA rank, Full output, view sensitivity"
+  },
+  "evRankSensitivityFullLcAll": {
+   "value": 10.52485,
+   "text": "10.52",
+   "desc": "Lee–Carter, all years: mean SMAA rank, Full output, view sensitivity"
+  },
+  "evRankSensitivityFullLcWin": {
+   "value": 9.91895,
+   "text": "9.92",
+   "desc": "Lee–Carter, last 50 years: mean SMAA rank, Full output, view sensitivity"
+  },
+  "evRankSensitivityFullMdmxAll": {
+   "value": 3.14965,
+   "text": "3.15",
+   "desc": "MDMx + anchor, all years: mean SMAA rank, Full output, view sensitivity"
+  },
+  "evRankSensitivityFullMdmxWin": {
+   "value": 3.74275,
+   "text": "3.74",
+   "desc": "MDMx + anchor, last 50 years: mean SMAA rank, Full output, view sensitivity"
+  }
+ }
+}

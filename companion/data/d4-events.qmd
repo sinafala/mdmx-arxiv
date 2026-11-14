@@ -1,0 +1,231 @@
+---
+title: "Exceptional years"
+subtitle: "The event dictionary: wars, pandemics and other mortality crises"
+---
+
+::: {.callout-note appearance="simple"}
+## Paper correspondence
+Paper §2.3 ("Curation and exceptional years"), which also defines the disruption labels that
+§6.3 ("The disruption model") uses.  Produces `fig-s2-events` and `fig-s2-events-e0` and the
+four tables of the event dictionary, `tbl-app-war`, `tbl-app-respiratory`, `tbl-app-enteric`
+and `tbl-app-other`, all in the companion only.
+:::
+
+```{python}
+#| label: d4-setup
+#| code-summary: "Chapter setup"
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from mdmx import artifacts, data, latex, plotting, provenance
+from mdmx.config import params
+
+provenance.start_chapter("d4-events")
+plotting.use_style()
+P = params()
+cur = artifacts.load("lt_curated")
+lt_cur = cur["lt"]
+pops = artifacts.load("populations")
+names = dict(zip(pops["code"], pops["name"]))
+```
+
+## Why exceptional years are set aside
+
+Wars and pandemics produce short, sharp mortality shocks with their own
+age–sex signatures.  The Tucker decomposition is meant to describe the
+*baseline* mortality surface — the slow secular transition — so the years
+in which a population was hit by such an event are removed from the data
+the decomposition sees, and kept aside for the disruption model of paper §6
+(chapter 08).  A country-year is exceptional if, and only if, it appears in
+the event dictionary.
+
+## The event dictionary
+
+The dictionary is a plain table, `config/events.csv`, with one row per event
+and group of populations: the event, its type, first and last calendar
+year, the HMD population codes affected, and a source.  `ALL` means every
+population with data during the event (used for the influenza pandemics of
+1957–58 and 1968–69 and for COVID-19).  Keeping the dictionary as data,
+rather than as code, means the same file drives both the masks used in the
+analysis and the dictionary's tables at the end of this chapter, so the two can never
+disagree.
+
+```{python}
+#| label: d4-dictionary
+#| code-summary: "Load and display the dictionary"
+events = data.load_events()
+artifacts.save("events", events, desc="Event dictionary (config/events.csv)")
+with pd.option_context("display.max_colwidth", 60, "display.max_rows", 80):
+    display(events[["id", "event", "type", "start", "end", "populations", "note"]])
+```
+
+### How the dictionary is compiled
+
+Four choices shape the dictionary; where an entry needs a reason, the
+`note` column above gives it.
+
+* **The United Kingdom (GBR_NP) is listed with its parts.**  It is a
+  population in its own right (chapter d1), so every war entry that lists
+  England & Wales, Scotland or Northern Ireland lists it too.  Otherwise its
+  war years, 1939–45 for example, would count as normal years while those
+  of its parts are masked.
+* **Entry dates.**  Each belligerent is flagged from the year it entered
+  the war, so that its years before entry stay in the baseline: Italy and
+  Bulgaria in World War I from 1915, the United States and Greece from
+  1917; Italy and Greece in World War II from 1940 (the same entry lists
+  Hungary and Bulgaria, which entered in 1941; their HMD series begin after
+  the war), the United States from 1942; France and Britain in the Crimean
+  War from 1854 and Sardinia (Italy) from 1855.  Two entries start earlier
+  for some of the populations they list: World War II from 1939 for every
+  population of its main entry, Belgium, the Netherlands, Luxembourg,
+  Denmark and Norway (invaded in 1940) included, and the Napoleonic Wars
+  from 1803 for Sweden, at war from 1805.  The populations that sent forces
+  to the Second Boer War and the Korean War are flagged for those wars too,
+  though little excess mortality is expected at home.
+* **Sweden in the Seven Years' War** is flagged for 1757–1762, the years of
+  its own (Pomeranian) war within the war of 1756–1763.
+* **A fourth type, "other"**, records four mortality crises that are
+  neither wars nor the three pandemic types: the Swedish famine and
+  dysentery epidemic of 1772–73 (the lowest life expectancy in the HMD),
+  the Icelandic measles epidemics of 1846 and 1882, and the 1871 smallpox
+  epidemic in the Netherlands and Belgium.  These years are excluded from
+  the baseline like other exceptional years, but they are too few and too
+  heterogeneous to estimate a disruption profile, so the disruption model
+  does not use them.
+
+## Labelling every country-year
+
+Each curated country-year receives a label $d_{c,t}$: 0 = none, 1 = war,
+2 = respiratory pandemic, 3 = enteric pandemic, 4 = other.  When a
+country-year is in more than one entry the label is chosen by priority
+war > respiratory > enteric > other (paper §2.3): in 1918, for example, a
+belligerent is labelled *war*.  All matching entries are kept in the
+`all_events` column for transparency.
+
+```{python}
+#| label: d4-label
+#| code-summary: "Expand the dictionary and label every curated country-year (cached)"
+def _label():
+    coverage = (lt_cur.groupby("pop")["year"].agg(["min", "max"])
+                .rename(columns={"min": "first", "max": "last"}).reset_index())
+    expanded = data.expand_events(events, coverage)
+    country_years = lt_cur[["pop", "year"]].drop_duplicates().sort_values(["pop", "year"])
+    return data.label_country_years(country_years, expanded)
+
+labels = artifacts.stage("event_labels", _label, inputs=["lt_curated", "events"],
+                         code=[_label, data.expand_events, data.label_country_years],
+                         desc="Disruption label d(c,t) for every curated country-year")
+counts = labels["type"].value_counts().reindex(list(data.LABELS.values()))
+print(counts.to_string())
+for lab, word in data.LABELS.items():
+    key = "dataNLabel" + word.title()
+    latex.report(key, int((labels["label"] == lab).sum()), desc=f"Country-years labelled {word}")
+latex.report("dataNExceptional", int((labels["label"] > 0).sum()), desc="Exceptional country-years (all types)")
+```
+
+```{python}
+#| label: fig-s2-events
+#| fig-cap: "Exceptional country-years in the HMD, by type. Each coloured cell is a country-year flagged by the event dictionary; light grey marks the other years with data."
+#| fig-height: 7
+TYPES = ["war", "respiratory", "enteric", "other"]
+order = labels.groupby("pop")["year"].min().sort_values().index
+years = np.arange(labels["year"].min(), labels["year"].max() + 1)
+grid = np.full((len(order), len(years)), np.nan)
+row = {p: i for i, p in enumerate(order)}
+grid[labels["pop"].map(row), labels["year"] - years[0]] = labels["label"]
+cmap = plt.matplotlib.colors.ListedColormap(["#e6e6e6"] + [plotting.COLORS[t] for t in TYPES])
+fig, ax = plt.subplots(figsize=(10, 7))
+ax.imshow(np.ma.masked_invalid(grid), aspect="auto", interpolation="nearest", cmap=cmap,
+          vmin=-0.5, vmax=4.5, extent=(years[0] - 0.5, years[-1] + 0.5, len(order) - 0.5, -0.5))
+ax.set_yticks(range(len(order)), [names[p] for p in order], fontsize=7)
+ax.set_xlabel("Year"); ax.grid(False)
+handles = [plt.matplotlib.patches.Patch(color=plotting.COLORS[t], label=t.title()) for t in TYPES]
+ax.legend(handles=handles, loc="lower left", fontsize=8, frameon=True)
+plotting.save_figure(fig, "fig-s2-events")
+plt.show()
+```
+
+```{python}
+#| label: fig-s2-events-e0
+#| fig-cap: "Life expectancy at birth for six populations, female (red) and male (blue) lines, with exceptional years marked by type. The flagged years coincide with the visible dips."
+SHOW = ["FRATNP", "GBRTENW", "SWE", "ITA", "USA", "JPN"]
+e0 = lt_cur[lt_cur["age"] == 0].merge(labels[["pop", "year", "label"]], on=["pop", "year"])
+fig, axes = plt.subplots(2, 3, figsize=(11, 6), sharey=True)
+for ax, pop in zip(axes.flat, SHOW):
+    for sex in data.SEXES:
+        s = e0[(e0["pop"] == pop) & (e0["sex"] == sex)].sort_values("year")
+        ax.plot(s["year"], s["ex"], color=plotting.COLORS[sex], lw=0.8)
+        for lab, t in enumerate(TYPES, start=1):
+            hit = s[s["label"] == lab]
+            ax.scatter(hit["year"], hit["ex"], s=8, color=plotting.COLORS[t], zorder=3,
+                       label=t.title() if (pop == SHOW[0] and sex == "female") else None)
+    ax.set_title(names[pop], fontsize=10)
+axes[0, 0].legend(fontsize=7)
+for ax in axes[:, 0]:
+    ax.set_ylabel(r"$e_0$")
+plotting.save_figure(fig, "fig-s2-events-e0")
+plt.show()
+```
+
+## A screen for crises the dictionary might miss
+
+The dictionary is compiled from historical sources, so it can miss events.
+As a check, the code below lists every *unlabelled* country-year whose
+life expectancy (average of the sexes) falls more than
+`{python} P.data.crisis_screen_drop` years below the median of the same population's
+surrounding ±`{python} P.data.crisis_screen_halfwidth` years.  This is a **diagnostic
+only** — nothing is changed automatically.  The four "other" crises were
+identified this way and confirmed against historical sources.  The
+country-years still listed below remain in the baseline: most are in the
+very small Icelandic population, where single-year life expectancy is
+volatile, and the rest are isolated dips without an established cause in
+the sources used for the dictionary.
+They are listed so that any reader can judge them.
+
+```{python}
+#| label: d4-screen
+#| code-summary: "List unlabelled years with unusually low e0"
+e0avg = (lt_cur[lt_cur["age"] == 0].groupby(["pop", "year"], as_index=False)["ex"].mean()
+         .rename(columns={"ex": "e0"}))
+screen = data.crisis_screen(e0avg, labels, drop=P.data.crisis_screen_drop,
+                            halfwidth=P.data.crisis_screen_halfwidth)
+artifacts.save("crisis_screen", screen, inputs=["lt_curated", "event_labels"],
+               params=P.section("data"), desc="Unlabelled country-years with unusually low e0")
+screen.assign(name=screen["pop"].map(names)).round(1)
+```
+
+## Appendix tables for the paper
+
+Four tables list the dictionary, one per type; the article does not show them.  They are
+generated from the same CSV file used above.
+
+```{python}
+#| label: d4-appendix
+#| code-summary: "Write the appendix tables (one per type)"
+TITLES = {"war": "War event dictionary", "respiratory": "Respiratory pandemic dictionary",
+          "enteric": "Enteric pandemic dictionary", "other": "Other mortality crises"}
+def _pop_list(cell):
+    # A wrapped list breaks only between populations: the spaces inside a name are non-breaking.
+    if cell.strip() == "ALL":
+        return "All populations with data in these years"
+    return ", ".join(n.replace(" ", "\u00a0") for n in dict.fromkeys(names.get(c, c) for c in cell.split()))
+for t in TYPES:
+    sub = events[events["type"] == t]
+    tab = pd.DataFrame({
+        "Event": sub["event"],
+        "Years": [f"{a}" if a == b else f"{a}--{b}" for a, b in zip(sub["start"], sub["end"])],
+        "HMD populations": [_pop_list(c) for c in sub["populations"]],
+    })
+    latex.save_table(tab, f"tbl-app-{t}", f"{TITLES[t]}.  Generated from \\texttt{{config/events.csv}}.",
+                     column_format=(r">{\raggedright\arraybackslash}p{4.2cm}>{\raggedright\arraybackslash}p{1.6cm}"
+                                    r">{\raggedright\arraybackslash}p{\dimexpr\textwidth-6.2cm-4\tabcolsep\relax}"),
+                     long=True)
+```
+
+```{python}
+#| label: d4-end
+#| code-summary: "Write this chapter's numbers and close"
+latex.write_numbers()
+provenance.end_chapter();
+```

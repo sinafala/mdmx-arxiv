@@ -1,0 +1,7 @@
+# Normalise line endings so the repository behaves the same on macOS and Windows.
+* text=auto eol=lf
+*.pdf binary
+*.png binary
+*.npz binary
+*.parquet binary
+*.zip binary

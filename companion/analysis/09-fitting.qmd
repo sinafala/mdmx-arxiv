@@ -1,0 +1,791 @@
+---
+title: "Life-table fitting"
+subtitle: "Regime, e₀ and disruption from a single schedule, tested on schedules the model has not seen"
+---
+
+::: {.callout-note appearance="simple"}
+## Paper correspondence
+Paper §7 ("Life Table Fitting"): the fit (§7.1), the detection score and how far a
+disruption can be told from a change of level (§7.2), and the evaluation on schedules the
+model has not seen, with its results, the speed and the limitations (§7.3).  Produces the
+tables `tbl-s8-identifiability` and `tbl-s8-results` and the figures `fig-s8-roc`,
+`fig-s8-examples`, `fig-s8-tradeoff` and `fig-s8-confusion`, all in the companion only.
+Also produces the in-text numbers
+with prefix `fit`, and the artefact `fitting` (the fitter's settings,
+hypotheses and decision threshold) for the app.  Parameters:
+`config/params.d/fitting.toml`.  Code: `mdmx.fitting`.
+:::
+
+```{python}
+#| label: c09-setup
+#| code-summary: "Chapter setup"
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from mdmx import artifacts, data, latex, lifetable, plotting, provenance
+from mdmx import clustering as clus
+from mdmx import disruption as ds
+from mdmx import fitting as ft
+from mdmx import svdcomp as sc
+from mdmx import trajectories as tr
+from mdmx.config import params
+
+provenance.start_chapter("09-fitting")
+plotting.use_style()
+P = params()
+PF = P.section("fitting")                       # config/params.d/fitting.toml
+PT = P.section("trajectories")
+PE = P.section("exceptional")
+# One threshold for cells with too few expected deaths: chapter 08's.  The
+# fitter applies the same rule with the only baseline a single schedule
+# allows, its own first fit without disruption.
+PF["min_expected_deaths"] = PE["min_expected_deaths"]
+PC = P.clustering.section("features")
+Q_MIN = P.data.q_min
+BRACKET = PT["calibration_bracket"]
+
+T = artifacts.load("tensor")
+tucker = artifacts.load("tucker")
+clusters_art = artifacts.load("clustering")
+traj = artifacts.load("trajectories")
+dis = artifacts.load("disruption")
+populations = artifacts.load("populations")
+de = artifacts.load("hmd_raw")["de"]
+dictionary = artifacts.load("events")
+
+M = T["M"]
+pops, years, ages = np.asarray(T["pops"]), np.asarray(T["years"]), np.asarray(T["ages"])
+names = {str(p): str(n) for p, n in zip(T["pops"], T["pop_names"], strict=True)}
+S, A = M.shape[:2]
+U_sex, U_age = tucker["U_sex"], tucker["U_age"]
+fam_pop = sc.population_families(pops, populations)
+
+# Observed (normal) country-years, as in chapters 06–07.
+c_obs, t_obs = clusters_art["c_idx"], clusters_art["t_idx"]
+e0_obs, labels = clusters_art["e0_mean"], clusters_art["labels"]
+G_obs = clus.observed_cores(tucker["G_ct"], c_obs, t_obs)
+Y_obs = np.moveaxis(M[:, :, c_obs, t_obs], -1, 0)
+fam_obs = fam_pop[c_obs]
+REGIMES = [int(k) for k in traj["clusters"]]
+NOISE = [int(k) for k in clusters_art["noise_clusters"]]
+
+# Exceptional country-years and chapter 08's residuals, profiles and intensities.
+c_exc, t_exc = dis["c_idx"], dis["t_idx"]
+Y_exc, R_exc = dis["y"], dis["residual"]
+types, groups = dis["type"], dis["group"]
+fam_exc = fam_pop[c_exc]
+TYPES = {int(k): v for k, v in data.LABELS.items() if k > 0}          # chapter d4's disruption labels
+PTYPES = [int(d) for d in dis["profile_types"]]                         # the types with a profile
+RESP = next(k for k, v in TYPES.items() if v == "respiratory")
+band_hi = {d: float(dis["null_band"][i, 1]) for i, d in enumerate(PTYPES)}
+# A disruption is detectable if chapter 08's intensity lies above its type's null band.
+detectable = np.array([t in band_hi and dis["intensity"][i] > band_hi[t] for i, t in enumerate(types)])
+e0_base_exc = ft.schedule_e0(dis["baseline"])                    # chapter 08's counterfactual e0
+
+# Folds over population families (whole families per fold), shared by normal and exceptional schedules.
+folds_obs = sc.assign_folds(fam_obs, PF["n_folds"], PF["fold_seed"])
+fold_of = dict(zip(fam_obs, folds_obs, strict=False))
+missing = sorted(set(fam_exc) - set(fold_of))
+if missing:
+    raise ValueError(f"families with exceptional but no observed years: {missing}")
+folds_exc = np.array([fold_of[f] for f in fam_exc])
+# Normal country-years whose rates chapter d5 pooled with neighbouring years (small populations).
+pooled_obs = (ds.pooling_groups(artifacts.load("lt_pooled")["blocks"], pops, years) > 0)[c_obs, t_obs]
+
+SPEC = ft.spec_from_model(traj)
+TYPICAL = {"frac": PC["conditional_frac"], "iterations": PC["conditional_iterations"],
+           "delta_share": PC["conditional_delta"]}
+PROFILES = {"profile_types": PTYPES, "min_event_n": PE["heterogeneity"]["min_event_n"],
+            "sg_window": PE["profiles"]["sg_window"], "sg_poly": PE["profiles"]["sg_poly"]}
+SETS = {"type": ["type"], "event": ["type", "event"]}
+if list(PF["hypothesis_sets"]) != list(SETS):
+    raise ValueError(f"hypothesis_sets must be {list(SETS)}")
+
+
+def num(key):
+    """A reported number as the book prints it."""
+    return latex.reported()[key]["text"].replace("$-$", "−")
+
+
+def pct(x):
+    """A share as a percentage; a share with no denominator is an error, not a silent 'nan'."""
+    if np.isnan(x):
+        raise ValueError("a reported share has an empty denominator")
+    return 100 * float(x)
+
+
+EVENT_NAME = {r.id: f"{r.event} {r.start}" if r.start == r.end else f"{r.event} {r.start}–{r.end}"
+              for r in dictionary.itertuples()}
+
+
+def group_name(g):
+    """Display name of an event group (chapter 08): its name in the parameters, or the dictionary entry's."""
+    return g if g in PE["event_groups"] else EVENT_NAME[g]
+
+
+def cy(pop, year):
+    return f"{names[str(pop)]} {int(year)}"
+```
+
+## What this chapter does
+
+The previous chapters build a model that *generates* a schedule: a regime
+$k$, a life expectancy $e_0^*$ (chapter 07) and, optionally, a disruption
+of profile $\delta_h$ and intensity $\lambda$ (chapter 08):
+
+$$
+\mathbf y = \mathbf z_k(e_0^*) + \lambda\,\boldsymbol\delta_h + \boldsymbol\varepsilon,
+\qquad \lambda \ge 0 .
+$$
+
+Paper §7 runs the model backwards: given one schedule and nothing else —
+no country, no year — which regime and $e_0^*$ describe it, and does it
+carry a disruption?  The chapter fits every observed schedule this way,
+with a generator and profiles built without the schedule's own population
+family, and measures how often the fitter is right.
+
+## Step 1 — the fit
+
+For a schedule $\mathbf y$, regime $k$ and hypothesis $h$ (none, or one of
+the profiles), the fitter minimises the residual sum of squares over the
+cells it uses,
+
+$$
+\mathrm{RSS}_{k,h}(e_0) = \sum_{\text{cells}} \bigl(y - z_k(e_0) - \hat\lambda\,\delta_h\bigr)^2,
+\qquad \hat\lambda = \max\!\Bigl(0, \frac{\boldsymbol\delta_h^\top(\mathbf y - \mathbf z_k)}{\boldsymbol\delta_h^\top\boldsymbol\delta_h}\Bigr),
+$$
+
+over a grid of e₀ `{python} f"{PF['grid_step']:g}"` years apart (each
+regime's schedules on the grid are computed once), refined between grid
+points by a parabola (`mdmx.fitting.fit_many`).  Each fit is turned into a
+Laplace approximation of its log evidence with a half-normal prior on
+$\lambda$ (`mdmx.fitting.laplace_log_bf`):
+
+$$
+\log \mathrm{BF}_{k,h} = \tfrac p2 \log\frac{\mathrm{RSS}_{k,0}}{\mathrm{RSS}_{k,h}}
++ \log\frac{2}{\sigma_h\sqrt{2\pi}} - \frac{\hat\lambda^2}{2\sigma_h^2}
++ \tfrac12\log 2\pi - \tfrac12 \log I_h,
+\qquad I_h = \frac{\boldsymbol\delta_h^\top\boldsymbol\delta_h}{\mathrm{RSS}_{k,h}/p},
+$$
+
+where $p$ is the number of cells used, $\sigma_h$ is the prior scale of
+hypothesis $h$ (the root mean square of the positive intensities, measured
+as in chapter 08, of its training country-years), $\mathrm{RSS}_{k,0}$ is
+the null model's own minimum over e₀, and $\log 2$ is subtracted when
+$\hat\lambda = 0$ (the maximum on the boundary).  The second term, the
+prior's normalising constant, makes a wider prior cost evidence.  The best
+pair over all regimes and hypotheses is the fit; the **score** of a
+schedule is the log Bayes factor of its best disrupted fit against its
+best undisrupted one.  Floored cells are always
+left out; when the exposures are known (as here) the schedule is fitted
+again without the cells whose deaths expected under its first undisrupted
+fit are fewer than `{python} f"{PF['min_expected_deaths']:g}"`.  This is
+chapter 08's rule, with its threshold.  Only the baseline differs: chapter
+08 interpolates the population's neighbouring years, whereas a single
+schedule handed to the fitter has none, so its own first fit without
+disruption serves.  The rule never reads a cell's deaths, although that
+baseline depends on the schedule as a whole.
+
+The likelihood treats the `{python} f"{S * A}"` cells as independent,
+which they are not; the score is therefore not a calibrated probability.
+That is why the decision threshold is set on normal schedules (Step 4)
+rather than at log BF = 0.
+
+## Step 2 — how far a disruption can be told from a change of e₀
+
+A disruption raises mortality at some ages, and so does a lower e₀.  The
+more a profile resembles the direction in which a regime's schedule moves
+as e₀ falls — the *trajectory tangent* $\mathbf z'_k$, a central difference in the level $\xi$
+— the harder it is to tell the two apart from one schedule (the article's §7.2).
+The table gives, over every regime and e₀ in its support, the cosine $\cos\vartheta$ of the angle
+between each profile and the tangent, the share of the profile orthogonal
+to it, $\lvert\sin\vartheta\rvert$, and the variance inflation $1/\sin^2\vartheta$.
+
+```{python}
+#| label: c09-identifiability
+#| code-summary: "Identifiability of the profiles against the trajectory tangent (cached)"
+def _identifiability():
+    hyp, deltas = ft.fold_profiles(R_exc, types, groups, np.ones(len(types), bool), **PROFILES)
+    tab = ft.identifiability(traj, deltas, bracket=BRACKET, step=PF["identifiability_step"],
+                             h=PF["tangent_halfwidth"])
+    return {"table": tab, "hypotheses": hyp}
+
+
+ident = artifacts.stage("fitting_identifiability", _identifiability, inputs=["trajectories", "disruption"],
+                        params={"fitting": {k: PF[k] for k in ("identifiability_step", "tangent_halfwidth")},
+                                "profiles": PROFILES},
+                        code=[_identifiability, ft, ds, tr],
+                        desc="Cosine of each disruption profile with the trajectory tangent, by regime and e0")
+hyp_all = ident["hypotheses"]
+idt = ident["table"].assign(abs_cos=lambda d: d["cos"].abs())
+idt["name"] = hyp_all["name"].to_numpy()[idt["profile"]]
+by_hyp = idt.groupby("name").agg(abs_cos=("abs_cos", "median"), orthogonal=("orthogonal", "median"),
+                                 vif=("vif", "median"))
+print(by_hyp.round(3).to_string())
+WORD = {1: "War", 2: "Resp", 3: "Enteric"}
+for d in PTYPES:
+    r = by_hyp.loc[f"type {d}"]
+    latex.report(f"fitCos{WORD[d]}", float(r["abs_cos"]), digits=2, desc=f"Median |cosine| of the {TYPES[d]} profile with the tangent")
+    latex.report(f"fitOrth{WORD[d]}", 100 * float(r["orthogonal"]), digits=0, desc=f"Median orthogonal share (%) of the {TYPES[d]} profile")
+    latex.report(f"fitVif{WORD[d]}", float(r["vif"]), digits=1, desc=f"Median variance inflation of the {TYPES[d]} profile")
+# The event profiles quoted in the text (chapter 08's quoted events: COVID-19 and the 1918 influenza).
+for word_, event_ in PE["figures"]["quoted_events"].items():
+    latex.report(f"fitCos{word_}", float(by_hyp.loc[event_, "abs_cos"]), digits=2,
+                 desc=f"Median |cosine| of the {EVENT_NAME[event_]} profile with the tangent")
+latex.report("fitTangentHalfwidth", PF["tangent_halfwidth"], digits=1,
+             desc="Half-width (years of e0) of the central difference that gives the trajectory tangent")
+id_tab = pd.DataFrame({"Disruption type": [TYPES[d].title() for d in PTYPES],
+                       r"Median $\lvert\cos\vartheta\rvert$": [by_hyp.loc[f"type {d}", "abs_cos"] for d in PTYPES],
+                       "Median VIF": [by_hyp.loc[f"type {d}", "vif"] for d in PTYPES],
+                       "Orthogonal share": [by_hyp.loc[f"type {d}", "orthogonal"] for d in PTYPES]})
+latex.save_table(id_tab, "tbl-s8-identifiability",
+                 "Identifiability of the disruption profiles: the cosine $\\cos\\vartheta$ of the angle between each type's "
+                 "profile and the trajectory tangent $\\bm{z}'_k$ (a central difference in the level $\\xi$), medians "
+                 f"over the {len(REGIMES)} regimes and the $e_0$ values of their supports; variance inflation "
+                 "$1/\\sin^2\\vartheta$; share of the profile orthogonal to the tangent, $\\lvert\\sin\\vartheta\\rvert$.",
+                 formats={r"Median $\lvert\cos\vartheta\rvert$": "{:.2f}", "Median VIF": "{:.1f}", "Orthogonal share": "{:.2f}"},
+                 escape_cells=False)
+id_tab.round(2)
+```
+
+```{python}
+#| echo: false
+_rank = sorted(PTYPES, key=lambda d: by_hyp.loc[f"type {d}", "abs_cos"])
+```
+
+All three profiles lean towards the tangent — any vector that raises
+mortality at many ages does — but not equally:
+`{python} " < ".join(f"{TYPES[d]} ({by_hyp.loc[f'type {d}', 'abs_cos']:.2f})" for d in _rank)` in
+median |ρ|.  The `{python} TYPES[_rank[0]]` profile keeps the largest part
+orthogonal to a change of e₀ (`{python} num(f"fitOrth{WORD[_rank[0]]}")` %),
+the `{python} TYPES[_rank[-1]]` profile the smallest
+(`{python} num(f"fitOrth{WORD[_rank[-1]]}")` %): from one schedule, the
+`{python} TYPES[_rank[-1]]` profile is the hardest to tell from lower
+mortality overall.
+
+## Step 3 — every schedule, fitted out of sample
+
+Whole population families are dealt into `{python} f"{PF['n_folds']}"`
+folds.  For each fold the generator (chapter 07's chosen deviation,
+`mdmx.fitting.fold_model`) is estimated from the other folds' observed
+country-years, the profiles and prior scales (`fold_profiles`) from their
+exceptional ones, and then every schedule of the fold is fitted
+(`mdmx.fitting.evaluate_folds`): `{python} f"{len(Y_obs):,}"` observed
+normal schedules and `{python} f"{len(Y_exc)}"` exceptional ones, each
+under both hypothesis sets — one profile per type, or one per historical
+event with at least `{python} f"{PROFILES['min_event_n']}"` training
+country-years plus the type profiles (always allowed, since the fitter
+does not know the event).  An event whose training country-years are on
+average a deficit rather than an excess is not a hypothesis.  Each
+schedule is fitted twice (`fit_two_pass`): without its exposures (only
+floored cells left out) and with them (cells with few expected deaths
+left out too); both procedures are calibrated, so that the app can use
+either.
+
+Three things are *not* held out, and are stated here: the sex and age
+bases of the decomposition (chapter 04) and chapter 06's regime labels
+come from all data, and the label "detectable" (Step 4) uses chapter 08's
+intensities, whose profiles include the country-year itself.  The label
+is never used to fit anything — it only says which disruptions count as
+visible.
+
+```{python}
+#| label: c09-eval
+#| code-summary: "Out-of-fold fits of every schedule (cached; about two minutes)"
+E_obs = ds.exposures(de, pops, years, A, c_obs, t_obs)
+E_exc = ds.exposures(de, pops, years, A, c_exc, t_exc)
+
+
+def _eval():
+    return ft.evaluate_folds(
+        Y_obs, E_obs, folds_obs, Y_exc, E_exc, folds_exc, R_exc, types, groups,
+        G_obs=G_obs, e0=e0_obs, labels=labels, families_obs=fam_obs, clusters=REGIMES,
+        grid=clusters_art["conditional_mean"]["e0_grid"], spec=SPEC, typical=TYPICAL,
+        feature_index=clusters_art["features"]["index"], U_sex=U_sex, U_age=U_age,
+        support_quantiles=PT["support_quantiles"], profiles=PROFILES, sets=SETS, grid_step=PF["grid_step"],
+        bracket=BRACKET, q_min=Q_MIN, min_expected_deaths=PF["min_expected_deaths"])
+
+
+EVAL_PARAMS = {k: PF[k] for k in ("grid_step", "n_folds", "fold_seed", "min_expected_deaths")}
+ev = artifacts.stage(
+    "fitting_eval", _eval, inputs=["tensor", "tucker", "clustering", "trajectories", "disruption", "populations",
+                                   "hmd_raw"],
+    params={"fitting": EVAL_PARAMS, "spec": SPEC, "typical": TYPICAL, "profiles": PROFILES, "sets": SETS,
+            "support": PT["support_quantiles"], "bracket": BRACKET, "q_min": Q_MIN},
+    code=[_eval, ft, ds, tr, clus, lifetable, sc.assign_folds, sc.population_families],
+    desc="Out-of-fold fits of every normal and exceptional schedule, with and without exposures")
+fits = ev["fits"]
+skipped = {f: v["skipped"] for f, v in ev["folds"].items() if v["skipped"]}
+print(fits.groupby(["passes", "set", "kind"]).size().to_string())
+print("Events skipped as deficits:", skipped or "none")
+other_types = [d for d in TYPES if d not in PTYPES]
+latex.report("fitNFolds", PF["n_folds"], desc="Folds of the out-of-sample evaluation")
+latex.report("fitGridStep", PF["grid_step"], digits=1, desc="Spacing (years) of the e0 grid of calibrated schedules")
+latex.report("fitNNormal", len(Y_obs), desc="Normal (observed) schedules fitted")
+latex.report("fitNExceptional", len(Y_exc), desc="Exceptional schedules fitted")
+latex.report("fitNScored", int(np.isin(types, PTYPES).sum()), desc="Exceptional schedules of the types with a profile")
+latex.report("fitNDetectable", int(detectable.sum()), desc="Exceptional schedules with a detectable disruption")
+for d in PTYPES:
+    latex.report(f"fitNDetectable{WORD[d]}", int((detectable & (types == d)).sum()),
+                 desc=f"Detectable {TYPES[d]} disruptions")
+```
+
+## Step 4 — the decision, and which hypotheses to test
+
+A schedule is called **disrupted** when its score exceeds a threshold.  For
+the schedules of each fold, the threshold is the score exceeded by only
+`{python} f"{100 * PF['fp_budget']:g}"` % of the *other* folds' normal
+schedules (`mdmx.fitting.cross_fitted_thresholds`).  A disruption counts as
+**detectable** when chapter 08 measured its intensity above its type's
+null band (`{python} num("fitNDetectable")` of the
+`{python} num("fitNScored")` exceptional country-years of the three types
+with a profile; the `{python} f"{int(np.isin(types, other_types).sum())}"`
+country-years of type "other" are fitted but not scored).  The hypothesis
+set with the higher detection of detectable disruptions at this budget is
+used — the rule fixed before the run; a tie goes to the type profiles.
+
+```{python}
+#| label: c09-metrics
+#| code-summary: "Detection, false positives and accuracy at each operating point, for both hypothesis sets and both procedures"
+def evaluate(set_name, budget, passes="two"):
+    """Metrics and flags of one hypothesis set and procedure at one false-positive budget."""
+    f = fits[(fits["set"] == set_name) & (fits["passes"] == passes)]
+    nr = f[f["kind"] == "normal"].sort_values("row").reset_index(drop=True)
+    ex = f[f["kind"] == "exceptional"].sort_values("row").reset_index(drop=True)
+    m, n_flag, e_flag = ft.operating_point(nr, ex, budget, truth=types, detectable=detectable,
+                                           profile_types=PTYPES, labels=labels, regimes=REGIMES,
+                                           e0_data=e0_obs, e0_base=e0_base_exc)
+    return m, n_flag, e_flag, nr, ex
+
+
+OPS = PF["operating_points"]
+BUDGET = PF["fp_budget"]
+if BUDGET not in OPS:
+    raise ValueError("fp_budget must be one of the operating points")
+res = {(s_, b): evaluate(s_, b)[0] for s_ in SETS for b in OPS}
+CHOSEN = max(SETS, key=lambda s_: (res[(s_, BUDGET)]["detect"], s_ == "type"))
+OTHER = next(s_ for s_ in SETS if s_ != CHOSEN)
+print(pd.DataFrame(res).T.round(3).to_string())
+print(f"\nChosen hypothesis set: {CHOSEN}")
+
+auc = {}
+for s_ in SETS:
+    _, _, _, nr_, ex_ = evaluate(s_, BUDGET)
+    auc[s_] = ft.roc(ex_["score"][detectable[ex_["row"].to_numpy()]].to_numpy(), nr_["score"].to_numpy())
+
+r5, r1, r10 = res[(CHOSEN, BUDGET)], res[(CHOSEN, min(OPS))], res[(CHOSEN, max(OPS))]
+ro = res[(OTHER, BUDGET)]
+latex.report("fitSetChosen", CHOSEN, desc="Hypothesis set used (type or event profiles)")
+latex.report("fitBudget", pct(BUDGET), digits=0, desc="False-positive budget (%)")
+for s_, w in (("type", "Type"), ("event", "Event")):
+    r_ = res[(s_, BUDGET)]
+    latex.report(f"fitAuc{w}", auc[s_][2], digits=2, desc=f"AUC, detectable disruptions vs normal schedules, {s_} profiles")
+    latex.report(f"fitAuc{w}Three", auc[s_][2], digits=3,
+                 desc=f"AUC, detectable disruptions vs normal schedules, {s_} profiles (three decimals, beside the "
+                      "alternative generators')")
+    latex.report(f"fitDetect{w}", pct(r_["detect"]), digits=0, desc=f"Detection (%) of detectable disruptions, {s_} profiles")
+    latex.report(f"fitNDetect{w}", r_["n_detect"], desc=f"Detectable disruptions detected (count), {s_} profiles")
+    latex.report(f"fitTypeAcc{w}", pct(r_["type_acc"]), digits=0,
+                 desc=f"Correct type (%) among detected detectable disruptions, {s_} profiles")
+    for d in PTYPES:
+        latex.report(f"fitDetect{WORD[d]}{w}", pct(r_[f"detect_{d}"]), digits=0,
+                     desc=f"Detection (%) of detectable {TYPES[d]} disruptions, {s_} profiles")
+        latex.report(f"fitTypeAcc{WORD[d]}{w}", pct(r_[f"type_acc_{d}"]), digits=0,
+                     desc=f"Correct type (%) among detected detectable {TYPES[d]} disruptions, {s_} profiles")
+        latex.report(f"fitNTypeRight{WORD[d]}{w}", r_[f"n_type_right_{d}"],
+                     desc=f"Detected detectable {TYPES[d]} disruptions with the right type (count), {s_} profiles")
+        latex.report(f"fitNTypeDen{WORD[d]}{w}", r_[f"n_type_den_{d}"],
+                     desc=f"Detected detectable {TYPES[d]} disruptions (count), {s_} profiles")
+latex.report("fitFp", pct(r5["fp"]), digits=1, desc="Normal schedules flagged (%) at the budget, chosen set")
+latex.report("fitDetect", pct(r5["detect"]), digits=0, desc="Detection (%) of detectable disruptions, chosen set")
+latex.report("fitNDetect", r5["n_detect"], desc="Detectable disruptions detected (count), chosen set")
+latex.report("fitDetectAll", pct(r5["detect_all"]), digits=0, desc="Detection (%) of all scored exceptional years")
+latex.report("fitTypeAcc", pct(r5["type_acc"]), digits=0, desc="Correct type (%) among detected detectable disruptions")
+for d in PTYPES:
+    latex.report(f"fitDetect{WORD[d]}", pct(r5[f"detect_{d}"]), digits=0, desc=f"Detection (%) of detectable {TYPES[d]} disruptions")
+    latex.report(f"fitNDetect{WORD[d]}", r5[f"n_detect_{d}"], desc=f"Detectable {TYPES[d]} disruptions detected (count)")
+    latex.report(f"fitTypeAcc{WORD[d]}", pct(r5[f"type_acc_{d}"]), digits=0, desc=f"Correct type (%) among detected detectable {TYPES[d]} disruptions")
+latex.report("fitDetectLow", pct(r1["detect"]), digits=0, desc="Detection (%) at the lowest operating point")
+latex.report("fitDetectHigh", pct(r10["detect"]), digits=0, desc="Detection (%) at the highest operating point")
+latex.report("fitRegimeAgree", pct(r5["regime_agree"]), digits=0, desc="Normal schedules fitted to their chapter-06 regime (%)")
+latex.report("fitEzeroMaeNormal", r5["e0_mae_normal"], digits=2, desc="Mean absolute error of the fitted e0 of normal schedules (years)")
+latex.report("fitEzeroMaeExc", r5["e0_mae_exc"], digits=2, desc="Mean absolute difference between the fitted and chapter 08's baseline e0 (years)")
+latex.report("fitEzeroMaeExcNull", r5["e0_mae_exc_null"], digits=2, desc="The same for the undisrupted fit (years)")
+_nr_c = fits[(fits["set"] == CHOSEN) & (fits["kind"] == "normal") & (fits["passes"] == "two")]
+latex.report("fitThreshold", float(np.quantile(_nr_c["score"], 1 - BUDGET)), digits=0,
+             desc="Score (log Bayes factor) exceeded by the budget's share of normal schedules, all folds pooled")
+```
+
+What the regimes add to the fitter.  The same out-of-fold evaluation with the
+chosen profiles, once with the typical schedule alone (one generator, no
+regime) and once with the typology at `{python} P.section("checks")["k_alt"]`
+clusters (`config/params.d/checks.toml`); the folds, the budget and the
+operating point are those above.
+```{python}
+#| label: c09-k-alt
+#| code-summary: "The fitter with the typical schedule alone and with the typology at K = 2 (cached)"
+CK = P.section("checks")
+K_ALT = int(CK["k_alt"])
+gmm_fits = artifacts.load("clustering_gmm")["fits"]
+labels_alt = np.where(np.isin(labels, NOISE), -1, gmm_fits[str(K_ALT)]["labels"])
+REGIMES_ALT = sorted(int(k) for k in np.unique(labels_alt) if k >= 0)
+# The typical schedule alone: one regime, the generator without a deviation.
+labels_typ = np.where(np.isin(labels, REGIMES), REGIMES[0], labels)
+VARIANTS = {"typical": (labels_typ, [REGIMES[0]], {"kind": "typical"}),
+            f"k{K_ALT}": (labels_alt, REGIMES_ALT, SPEC)}
+
+
+def _eval_alt(lab_, regimes_, spec_):
+    return ft.evaluate_folds(
+        Y_obs, E_obs, folds_obs, Y_exc, E_exc, folds_exc, R_exc, types, groups,
+        G_obs=G_obs, e0=e0_obs, labels=lab_, families_obs=fam_obs, clusters=regimes_,
+        grid=clusters_art["conditional_mean"]["e0_grid"], spec=spec_, typical=TYPICAL,
+        feature_index=clusters_art["features"]["index"], U_sex=U_sex, U_age=U_age,
+        support_quantiles=PT["support_quantiles"], profiles=PROFILES, sets={CHOSEN: SETS[CHOSEN]},
+        grid_step=PF["grid_step"], bracket=BRACKET, q_min=Q_MIN, min_expected_deaths=PF["min_expected_deaths"])
+
+
+ALT = {}
+for name, (lab_, regimes_, spec_) in VARIANTS.items():
+    run = artifacts.stage(
+        f"fitting_eval_{name}", lambda lab_=lab_, regimes_=regimes_, spec_=spec_: _eval_alt(lab_, regimes_, spec_),
+        inputs=["tensor", "tucker", "clustering", "clustering_gmm", "trajectories", "disruption", "populations",
+                "hmd_raw"],
+        params={"fitting": EVAL_PARAMS, "variant": name, "regimes": regimes_, "spec": spec_, "typical": TYPICAL,
+                "profiles": PROFILES, "set": CHOSEN, "support": PT["support_quantiles"], "bracket": BRACKET,
+                "q_min": Q_MIN, "labels": artifacts.content_hash(lab_)},
+        code=[_eval_alt, ft, ds, tr, clus, lifetable, sc.assign_folds, sc.population_families],
+        desc=f"Out-of-fold fits with the {'typical schedule alone' if name == 'typical' else f'typology at K = {K_ALT}'}")
+    f_ = run["fits"]
+    f_ = f_[(f_["set"] == CHOSEN) & (f_["passes"] == "two")]
+    nr_ = f_[f_["kind"] == "normal"].sort_values("row").reset_index(drop=True)
+    ex_ = f_[f_["kind"] == "exceptional"].sort_values("row").reset_index(drop=True)
+    m_, _, _ = ft.operating_point(nr_, ex_, BUDGET, truth=types, detectable=detectable, profile_types=PTYPES,
+                                  labels=lab_, regimes=regimes_, e0_data=e0_obs, e0_base=e0_base_exc)
+    m_["auc"] = ft.roc(ex_["score"][detectable[ex_["row"].to_numpy()]].to_numpy(), nr_["score"].to_numpy())[2]
+    ALT[name] = m_
+tag_k = latex.number_word(K_ALT)
+for name, word in (("typical", "Typical"), (f"k{K_ALT}", f"K{tag_k}")):
+    m_ = ALT[name]
+    latex.report(f"fitDetect{word}", pct(m_["detect"]), digits=0,
+                 desc=f"Detection (%) of detectable disruptions at the budget, {name} generator")
+    latex.report(f"fitFp{word}", pct(m_["fp"]), digits=1, desc=f"Normal schedules flagged (%), {name} generator")
+    latex.report(f"fitTypeAcc{word}", pct(m_["type_acc"]), digits=0,
+                 desc=f"Correct type (%) among detected detectable disruptions, {name} generator")
+    latex.report(f"fitEzeroMaeNormal{word}", m_["e0_mae_normal"], digits=2,
+                 desc=f"MAE of the fitted e0 of normal schedules (years), {name} generator")
+    latex.report(f"fitAuc{word}", m_["auc"], digits=3, desc=f"Area under the ROC curve, {name} generator")
+latex.report(f"fitRegimeAgreeK{tag_k}", pct(ALT[f"k{K_ALT}"]["regime_agree"]), digits=0,
+             desc=f"Normal schedules fitted to their regime (%), typology at K = {K_ALT}")
+_shares = pd.Series(labels_alt[labels_alt >= 0]).value_counts(normalize=True)
+latex.report(f"fitRegimeChanceK{tag_k}", 100 * float(_shares.max()), digits=0,
+             desc=f"Share (%) of the largest regime at K = {K_ALT}: the agreement of always choosing it")
+print(pd.DataFrame({k: {m: v[m] for m in ("detect", "fp", "type_acc", "e0_mae_normal", "auc", "regime_agree")}
+                    for k, v in {**{"chosen": {**res[(CHOSEN, BUDGET)], "auc": auc[CHOSEN][2]}}, **ALT}.items()}).round(3))
+```
+
+```{python}
+#| label: c09-detail
+#| code-summary: "Where the misses are: detection by event, the flagged normal schedules, pooled and raw years, and fits without exposures"
+_, n5, e5, nr5, ex5 = evaluate(CHOSEN, BUDGET)
+_, n5o, e5o, nro, exo = evaluate(OTHER, BUDGET)
+er = ex5["row"].to_numpy()
+by_event = (pd.DataFrame({"type": types[er], "event": groups[er], "detectable": detectable[er],
+                          f"detected ({CHOSEN})": e5 & detectable[er], f"detected ({OTHER})": e5o & detectable[er]})
+            .query("detectable").groupby(["type", "event"]).sum(numeric_only=True).astype(int))
+print(by_event.drop(columns="detectable").assign(detectable=by_event["detectable"]).to_string())
+resp_ev = by_event.loc[RESP]
+top_resp = resp_ev["detectable"].sort_values(ascending=False).head(2)
+latex.report("fitNDetectableRespTop", int(top_resp.sum()), desc="Detectable respiratory years in the two largest events")
+
+flag_types = pd.Series(nr5.loc[n5, "htype"].map(TYPES)).value_counts()
+print(f"\nNormal schedules flagged: {n5.sum()} — called {flag_types.to_dict()}")
+latex.report("fitNFlaggedNormal", int(n5.sum()), desc="Normal schedules flagged at the budget")
+latex.report("fitFlaggedAsTop", pct(flag_types.iloc[0] / n5.sum()), digits=0,
+             desc="Share (%) of flagged normal schedules given the most common type")
+
+pooled_rows = pooled_obs[nr5["row"].to_numpy()]
+latex.report("fitFpPooled", pct(n5[pooled_rows].mean()), digits=1, desc="Normal schedules flagged (%), pooled country-years")
+latex.report("fitFpUnpooled", pct(n5[~pooled_rows].mean()), digits=1, desc="Normal schedules flagged (%), country-years not pooled")
+latex.report("fitNPooled", int(pooled_rows.sum()), desc="Normal country-years with pooled rates")
+noise_rows = np.isin(labels[nr5["row"].to_numpy()], NOISE)
+latex.report("fitFpNoise", pct(n5[noise_rows].mean()), digits=0, desc="Normal schedules of the noise cluster flagged (%)")
+
+m1, _, _, _, _ = evaluate(CHOSEN, BUDGET, passes="one")
+th_one = float(np.quantile(fits[(fits["set"] == CHOSEN) & (fits["kind"] == "normal") & (fits["passes"] == "one")]["score"],
+                           1 - BUDGET))
+print(f"Without exposures: {100 * m1['fp']:.1f}% of normals flagged, {100 * m1['detect']:.0f}% of detectable detected")
+latex.report("fitDetectNoExposure", pct(m1["detect"]), digits=0, desc="Detection (%) of detectable disruptions without exposures")
+latex.report("fitFpNoExposure", pct(m1["fp"]), digits=1, desc="Normal schedules flagged (%) without exposures")
+```
+
+```{python}
+#| label: tbl-s8-results
+#| code-summary: "Table: the operating points"
+# Row groups as the table standard sets them: (group, label, key).  The labels are LaTeX (escape_cells=False).
+rows_ = [("Normal schedules", "Flagged (\\%)", "fp"),
+         ("Normal schedules", "Regime as in the typology (\\%)", "regime_agree"),
+         ("Normal schedules", "$|e_0^* - e_0|$ (years)", "e0_mae_normal"),
+         ("Detectable disruptions detected (\\%)", "All types", "detect"),
+         *[("Detectable disruptions detected (\\%)", str(TYPES[d]).capitalize(), f"detect_{d}") for d in PTYPES],
+         ("Exceptional schedules", "All scored exceptional years detected (\\%)", "detect_all"),
+         ("Exceptional schedules", "Correct type among detected detectable (\\%)", "type_acc"),
+         ("Exceptional schedules", "$|e_0^* - e_0^{\\text{base}}|$ (years)", "e0_mae_exc")]
+cols = {f"{CHOSEN.capitalize()} profiles: {100 * b:g}\\%": [res[(CHOSEN, b)][k] for _, _, k in rows_] for b in OPS}
+cols[f"{OTHER.capitalize()} profiles: {100 * BUDGET:g}\\%"] = [res[(OTHER, BUDGET)][k] for _, _, k in rows_]
+tab = pd.DataFrame({"group": [g for g, _, _ in rows_], "": [r for _, r, _ in rows_], **cols})
+for c in list(cols):
+    tab[c] = [v if k.startswith("e0") else 100 * v for v, (_, _, k) in zip(tab[c], rows_, strict=True)]
+latex.save_table(
+    tab, "tbl-s8-results",
+    f"The fitter on schedules it has not seen ({PF['n_folds']} folds over population families): {len(Y_obs):,} "
+    f"observed normal and {int(np.isin(types, PTYPES).sum())} exceptional country-years of the three types with a "
+    "profile.  Columns: the profiles of the hypotheses (one per type, or one per event) and the budget of false "
+    "positives; the decision threshold is set from other families' normal schedules.  A disruption is detectable "
+    "when its intensity in the model of exceptional mortality lies above the null band.  "
+    "$e_0^{\\text{base}}$ is the $e_0$ (the average of the sexes) of the year's baseline schedule "
+    "(\\cref{sec:exceptional:baselines}).",
+    formats={c: (lambda v: f"{v:.1f}") for c in tab.columns[2:]}, escape_cells=False, groups="group", spanners=": ")
+tab.round(1)
+```
+
+```{python}
+#| label: fig-s8-roc
+#| fig-cap: "Detection of detectable disruptions against the share of normal schedules flagged, for one profile per type and one per event (out-of-fold scores); dots mark the operating points with cross-fitted thresholds."
+fig, ax = plt.subplots(figsize=(6, 5))
+for s_, col in (("type", plotting.COLORS["MDMx"]), ("event", plotting.COLORS["LC"])):
+    fpr, tpr, a = auc[s_]
+    ax.plot(fpr, tpr, color=col, lw=1.5, label=f"{s_} profiles (AUC {a:.2f})")
+    ax.plot([res[(s_, b)]["fp"] for b in OPS], [res[(s_, b)]["detect"] for b in OPS], "o", color=col, ms=5)
+ax.plot([0, 1], [0, 1], color=plotting.COLORS["grey"], lw=0.8, ls=":")
+ax.axvline(BUDGET, color=plotting.COLORS["grey"], lw=0.8, ls="--")
+ax.set_xlabel("normal schedules flagged")
+ax.set_ylabel("detectable disruptions detected")
+ax.legend(fontsize=8, loc="lower right")
+plotting.save_figure(fig, "fig-s8-roc")
+plt.show()
+```
+
+```{python}
+#| label: fig-s8-tradeoff
+#| fig-cap: "The trade-off for the chosen hypothesis set: detection of detectable disruptions by type (left) and the share of detected ones given the right type (right), against the share of normal schedules flagged (cross-fitted thresholds)."
+lo_b, hi_b, n_b = PF["tradeoff_budgets"]
+curve = pd.DataFrame([{"budget": b, **evaluate(CHOSEN, b)[0]} for b in np.linspace(lo_b, hi_b, int(n_b))])
+fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 4))
+for d in PTYPES:
+    a1.plot(curve["fp"], curve[f"detect_{d}"], color=plotting.COLORS[TYPES[d]], label=TYPES[d])
+    a2.plot(curve["fp"], curve[f"type_acc_{d}"], color=plotting.COLORS[TYPES[d]], label=TYPES[d])
+a1.plot(curve["fp"], curve["detect"], color="k", lw=1.6, label="all")
+a2.plot(curve["fp"], curve["type_acc"], color="k", lw=1.6, label="all")
+for ax_ in (a1, a2):
+    ax_.axvline(BUDGET, color=plotting.COLORS["grey"], lw=0.8, ls="--")
+    ax_.set_xlabel("normal schedules flagged")
+    ax_.legend(fontsize=8)
+a1.set_ylabel("detected")
+a2.set_ylabel("correct type among detected")
+plotting.save_figure(fig, "fig-s8-tradeoff")
+plt.show()
+```
+
+```{python}
+#| label: fig-s8-confusion
+#| fig-cap: "What the fitter decides at the false-positive budget (chosen hypothesis set): rows are the truth (normal schedules and the three disruption types), columns the decision; shares of each row, counts in brackets. Left: all schedules, normal ones included; right: detectable disruptions only."
+classes = ["none"] + [TYPES[d] for d in PTYPES]
+truth = np.r_[np.zeros(len(nr5), int), types[ex5["row"].to_numpy()]]
+pred = np.r_[np.where(n5, nr5["htype"], 0), np.where(e5, ex5["htype"], 0)]
+keep_all = np.isin(truth, [0] + PTYPES)
+keep_det = np.r_[np.zeros(len(nr5), bool), detectable[ex5["row"].to_numpy()]]
+fig, axes = plt.subplots(1, 2, figsize=(11, 4.4))
+for ax, keep, rows_t, title in ((axes[0], keep_all, [0] + PTYPES, "All schedules"),
+                                (axes[1], keep_det, PTYPES, "Detectable disruptions")):
+    cm = np.array([[((truth == t) & (pred == p_) & keep).sum() for p_ in [0] + PTYPES] for t in rows_t])
+    share = cm / cm.sum(axis=1, keepdims=True)
+    ax.imshow(share, cmap="Blues", vmin=0, vmax=1)
+    ax.grid(False)
+    for (i, j), v in np.ndenumerate(cm):
+        ax.text(j, i, f"{100 * share[i, j]:.0f}%\n({v})", ha="center", va="center", fontsize=8,
+                color="white" if share[i, j] > 0.6 else "black")
+    ax.set_xticks(range(len(classes)), classes)
+    ax.set_yticks(range(len(rows_t)), [classes[0] if t == 0 else TYPES[t] for t in rows_t])
+    ax.set_xlabel("decided")
+    ax.set_ylabel("true")
+    ax.set_title(title, fontsize=10)
+plotting.save_figure(fig, "fig-s8-confusion")
+plt.show()
+```
+
+```{python}
+#| echo: false
+_tied = abs(r5["n_detect"] - ro["n_detect"])
+_flag_text = flag_types.index[0] + (" — the profile least distinguishable from a change of e₀ (Step 2)"
+                                    if flag_types.index[0] == TYPES[_rank[-1]] else "")
+_resp_top = ", ".join(f"{group_name(g)} {int(resp_ev.loc[g, 'detectable'])}" for g in top_resp.index)
+_resp_det = ", ".join(f"{int(resp_ev.loc[g, f'detected ({CHOSEN})'])} of {int(resp_ev.loc[g, 'detectable'])}"
+                      for g in top_resp.index)
+```
+
+At a budget of `{python} num("fitBudget")` % of normal schedules (actually
+flagged out of fold: `{python} num("fitFp")` %), the fitter with
+**`{python} CHOSEN` profiles** detects `{python} num("fitDetect")` % of the
+detectable disruptions (`{python} num("fitNDetect")` of
+`{python} num("fitNDetectable")`): `{python} num("fitDetectWar")` % of
+wars (`{python} num("fitNDetectWar")` of `{python} num("fitNDetectableWar")`),
+`{python} num("fitDetectResp")` % of respiratory
+(`{python} num("fitNDetectResp")` of `{python} num("fitNDetectableResp")`)
+and `{python} num("fitDetectEnteric")` % of enteric pandemics
+(`{python} num("fitNDetectEnteric")` of `{python} num("fitNDetectableEnteric")`).
+Of all war and pandemic years — many of which left no measurable mark —
+`{python} num("fitDetectAll")` % are detected.  Of the detected detectable
+ones, `{python} num("fitTypeAcc")` % get the right type.
+
+The two hypothesis sets are nearly tied: `{python} CHOSEN` profiles detect
+`{python} f"{r5['n_detect']}"` detectable disruptions and
+`{python} OTHER` profiles `{python} f"{ro['n_detect']}"`
+(`{python} f"{_tied}"` apart), and their ROC curves cross near the budget
+(figure), with AUCs of `{python} f"{auc[CHOSEN][2]:.2f}"` and
+`{python} f"{auc[OTHER][2]:.2f}"`.  The rule, which looks at detection only,
+chose `{python} CHOSEN` profiles.  Where the two differ is the *type*:
+with type profiles `{python} num(f"fitNTypeRight{WORD[RESP]}Type")` of the
+`{python} num(f"fitNTypeDen{WORD[RESP]}Type")` detected respiratory
+disruptions get the right type, with event profiles
+`{python} num(f"fitNTypeRight{WORD[RESP]}Event")` of
+`{python} num(f"fitNTypeDen{WORD[RESP]}Event")` — COVID-19 and 1918 have
+profiles of their own.
+
+Respiratory pandemics are the weak point.  Almost all of their detectable
+years belong to two events (`{python} _resp_top`), of which the fitter
+detects `{python} _resp_det`: the type profile averages the young-adult
+excess of 1918 and the old-age excess of COVID-19 (chapter 08), so neither
+fits it well.  Over the whole range of thresholds the trade-off is smooth
+(figures): from `{python} num("fitDetectLow")` % detected at
+`{python} f"{100 * min(OPS):g}"` % false positives to
+`{python} num("fitDetectHigh")` % at `{python} f"{100 * max(OPS):g}"` %.
+Of the `{python} num("fitNFlaggedNormal")` normal schedules flagged,
+`{python} num("fitFlaggedAsTop")` % are called
+`{python} _flag_text`.  The threshold itself is a log Bayes factor of about
+`{python} num("fitThreshold")`, not 0: the likelihood treats the cells of a
+schedule as independent and the generator does not fit normal schedules
+perfectly, so the raw score overstates the evidence.
+
+The normal schedules that set the threshold are the observed ones, whose
+small populations chapter d5 pooled across neighbouring years at the ages
+where deaths are rare (`{python} num("fitNPooled")` country-years); raw
+single-year schedules — exceptional years, or a user's schedule — are
+noisier.  Pooled normal schedules are flagged at
+`{python} num("fitFpPooled")` %, the others at `{python} num("fitFpUnpooled")` %;
+the false-positive rate of raw schedules from small populations may be
+higher than the budget.  Without exposures (floored cells left out, no
+expected-deaths rule) and with its own threshold, the fitter flags
+`{python} num("fitFpNoExposure")` % of normal schedules and detects
+`{python} num("fitDetectNoExposure")` % of detectable disruptions.
+
+The fit also recovers the schedule's level and, less reliably, its
+regime: for normal schedules the fitted e₀* is
+`{python} num("fitEzeroMaeNormal")` years from the schedule's own e₀ on
+average, and the regime is chapter 06's for `{python} num("fitRegimeAgree")` %
+of them.  The regimes are a typology of a continuum (chapter 06), and
+chapter 06 assigns them by the level-free features of a year's core
+while the fitter compares whole schedules, so the two need not agree on
+schedules near the boundaries.  For exceptional years, the fitted
+baseline e₀* is `{python} num("fitEzeroMaeExc")` years from chapter 08's
+baseline on average, against `{python} num("fitEzeroMaeExcNull")` years
+for a fit without disruption: allowing a disruption brings the estimate of
+the counterfactual e₀ closer.
+
+## Example fits
+
+```{python}
+#| label: fig-s8-examples
+#| fig-cap: "Out-of-fold fits of selected country-years: observed logit(q_x) (grey), the fitted schedule without disruption, $z_k(e_0^*)$ (blue), and, where the fitter finds a disruption, the full fit with it (gold, dashed). Panels with a disruption show the sex where it is larger, the others males; titles give the decision, the truth and $e_0^*$."
+th5 = ft.cross_fitted_thresholds(nr5["score"].to_numpy(), nr5["fold"].to_numpy(), BUDGET)
+chosen_fits = fits[(fits["set"] == CHOSEN) & (fits["passes"] == "two")]
+panels = []
+for pop, year in PF["examples"]:
+    c = int(np.flatnonzero(pops == pop)[0]) if pop in pops else -1
+    hit_o = np.flatnonzero((c_obs == c) & (years[t_obs] == year))
+    hit_e = np.flatnonzero((c_exc == c) & (years[t_exc] == year))
+    if hit_o.size + hit_e.size != 1:
+        raise ValueError(f"{pop} {year} is not a country-year with data")
+    kind, row = ("normal", int(hit_o[0])) if hit_o.size else ("exceptional", int(hit_e[0]))
+    panels.append((pop, year, kind, row))
+fig, axes = plt.subplots(2, 3, figsize=(11, 6.4), sharex=True)
+for ax, (pop, year, kind, row) in zip(axes.flat, panels, strict=True):
+    f_ = chosen_fits[(chosen_fits["kind"] == kind) & (chosen_fits["row"] == row)].iloc[0]
+    fold = int(f_["fold"])
+    fm = ev["folds"][fold]
+    flag = f_["score"] > th5[fold]
+    y = (Y_obs if kind == "normal" else Y_exc)[row]
+    if flag:
+        base = tr.generate(fm["model"], int(f_["regime"]), f_["e0"], bracket=BRACKET)[0]
+        full = base + f_["lam"] * fm["deltas"][int(f_["h"])]
+    else:
+        base = tr.generate(fm["model"], int(f_["regime_null"]), f_["e0_null"], bracket=BRACKET)[0]
+        full = base
+    s = int(np.argmax(np.abs(full - base).sum(axis=1))) if flag else 1
+    ax.plot(ages, y[s], color=plotting.COLORS["grey"], lw=1.2, label="observed")
+    ax.plot(ages, base[s], color=plotting.COLORS["male"], lw=1.2, label="fitted, no disruption")
+    if flag:
+        ax.plot(ages, full[s], color=plotting.COLORS["highlight"], lw=1.2, ls="--", label="fitted with disruption")
+    truth_ = "normal" if kind == "normal" else TYPES[int(types[row])]
+    decided = TYPES[int(f_["htype"])] if flag else "none"
+    e0s = f_["e0"] if flag else f_["e0_null"]
+    ax.set_title(f"{cy(pop, year)}, {plotting.SEX_LABELS[s].lower()}: {decided} (true {truth_}); "
+                 f"e₀* {e0s:.1f}", fontsize=8)
+for ax in axes[1]:
+    ax.set_xlabel("Age")
+for ax in axes[:, 0]:
+    ax.set_ylabel("logit$(q_x)$")
+axes[0, 0].legend(fontsize=7)
+plotting.save_figure(fig, "fig-s8-examples")
+plt.show()
+```
+
+## Speed
+
+```{python}
+#| label: c09-timing
+#| code-summary: "Time per fit and per model"
+sec = chosen_fits["seconds"].to_numpy()
+prep_sec = np.array([v["prepare_seconds"] for v in ev["folds"].values()])
+print(f"Median {1000 * np.median(sec):.2f} ms per schedule for both passes (95th percentile "
+      f"{1000 * np.quantile(sec, 0.95):.2f} ms); preparing a model's grid {np.median(prep_sec):.1f} s (median over folds)")
+latex.report("fitMsPerFit", 1000 * float(np.median(sec)), digits=1,
+             desc="Median milliseconds per fit, both passes, on the machine that rendered the book")
+latex.report("fitPrepareSeconds", float(np.median(prep_sec)), digits=0,
+             desc="Seconds to prepare a model's grid of schedules, on the machine that rendered the book")
+```
+
+A fit of both passes takes about `{python} num("fitMsPerFit")` ms once each
+regime's grid of schedules is computed, which takes about
+`{python} num("fitPrepareSeconds")` s once per model (on the machine that
+rendered this book) — fast enough for interactive use.
+
+## The fitter for the app
+
+```{python}
+#| label: c09-artefact
+#| code-summary: "Save the artefact `fitting`: the hypotheses and the thresholds the app uses with the trajectories model"
+hyp_fin, deltas_fin = ft.fold_profiles(R_exc, types, groups, np.ones(len(types), bool), **PROFILES)
+keep = hyp_fin["kind"].isin(SETS[CHOSEN]).to_numpy()
+thresholds = {p_: float(np.quantile(fits[(fits["set"] == CHOSEN) & (fits["kind"] == "normal")
+                                         & (fits["passes"] == p_)]["score"], 1 - BUDGET)) for p_ in ("two", "one")}
+fitting_art = {
+    "hypothesis_set": CHOSEN, "hypotheses": hyp_fin[keep].reset_index(drop=True), "deltas": deltas_fin[keep],
+    # fitting.fit_schedule: "with_exposures" when the schedule's exposures are given, else "without_exposures".
+    "threshold_with_exposures": thresholds["two"], "threshold_without_exposures": thresholds["one"],
+    "fp_budget": BUDGET, "grid_step": PF["grid_step"], "min_expected_deaths": PF["min_expected_deaths"],
+    "q_min": Q_MIN, "bracket": BRACKET,
+}
+artifacts.save("fitting", fitting_art, inputs=["fitting_eval", "trajectories", "disruption"], params=PF,
+               desc="The life-table fitter: hypotheses, prior scales and decision thresholds (with the trajectories model)")
+print(fitting_art["hypotheses"].to_string())
+print(f"Thresholds on the score: with exposures {thresholds['two']:.2f}, without {thresholds['one']:.2f}")
+```
+
+```{python}
+#| label: c09-end
+#| code-summary: "Write this chapter's numbers and close"
+latex.write_numbers()
+provenance.end_chapter();
+```

@@ -1,0 +1,94 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Parameters of chapter 10-svdcomp — predicting schedules from summary
+# indicators (paper §10).  Read with P = params(); P.svdcomp.<name>.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ──────────────────────────────────────────────────────────────────────────────
+[svdcomp]
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── The MDMx predictor (paper §10.1–10.2) ────────────────────────────────────
+# Fixed settings (c_age, alpha), kept as the sensitivity row of the results; the
+# headline results choose c_age and alpha by nested cross-validation from
+# nested_c_age_grid × nested_alpha_grid below.
+# Number of leading age components whose core weights the network predicts
+# (c_age, paper §10.1).  With the two sex components the network has
+# 2 · c_age outputs.
+c_age = 6
+# Up-weighting of the single-year ages 0 … young_ages−1 in the reconstruction
+# loss (alpha in paper Eq. svdcomp:loss).
+alpha = 10.0
+young_ages = 5
+# Network: widths of the hidden layers (ReLU), paper §10.2.
+hidden = [64, 64]
+# Training (mdmx.nn.fit_mlp): Adam learning rate, mini-batch size, weight
+# decay on the weight matrices, share of rows (whole population families)
+# held out for early stopping, and epochs without improvement before
+# stopping.  max_epochs is only a safety cap: training is ended by early
+# stopping (the chapter reports how many runs, if any, reached the cap).
+lr = 1e-3
+batch_size = 256
+l2 = 1e-5
+val_frac = 0.1
+patience = 30
+max_epochs = 1000
+# Seed of the final networks; fold k of the cross-validation uses seed + k.
+seed = 20260218
+
+# ── Reproducing the inputs exactly (book §10.4) ──────────────────────────────
+# After the network has predicted the core weights, they are changed —
+# in the directions that move each input indicator most per unit change of
+# schedule — so that every predicted schedule reproduces its input
+# indicators exactly (mdmx.svdcomp.enforce_indicators).  Newton iterations
+# stop when |logit(implied) − logit(input)| < enforce_tol for every
+# indicator; a schedule that has not converged after enforce_max_iter
+# iterations is counted and reported.
+enforce_tol = 1e-10
+enforce_max_iter = 50
+
+# ── Cross-validation blocked by population family (book §10.4) ───────────────
+# Number of folds and the seed that orders population families of equal
+# size when they are dealt to folds.
+n_folds = 10
+fold_seed = 20260218
+# Age groups (inclusive single-year ages) in which accuracy is reported.
+age_groups = [[0, 0], [1, 4], [5, 14], [15, 59], [60, 109]]
+
+# ── Sensitivity of the out-of-fold accuracy to c_age and alpha (book §10.7) ──
+# Plain 10-fold cross-validation at each grid point (a description of the
+# trade-offs, not used to choose the settings).  Four values of c_age keep
+# the cost down on a shared machine; together they cover the range.
+c_age_grid = [2, 6, 20, 50]
+alpha_grid = [0.0, 10.0]
+
+# ── Nested cross-validation (book §10.8) ─────────────────────────────────────
+# Within each outer training set, the families are dealt into
+# nested_inner_folds inner folds and every (c_age, alpha) pair below is
+# cross-validated; the pair with the smallest inner e0 MAE is used for that
+# outer fold.  The grid is small (four pairs, three inner folds) to keep the
+# cost to about 260 networks.  The final models use the pair that the same
+# rule picks from the plain 10-fold cross-validation on all data.
+nested_inner_folds = 3
+nested_inner_seed = 20260219
+nested_c_age_grid = [6, 20]
+nested_alpha_grid = [0.0, 10.0]
+
+# ── Uncertainty of the comparison (book §10.9) ───────────────────────────────
+# The difference in out-of-fold e0 MAE between MDMx and each benchmark is
+# given a 95% interval by resampling population families with replacement
+# (a family bootstrap, which respects the dependence between the years of a
+# population).
+bootstrap_reps = 2000
+bootstrap_seed = 20260220
+
+# ── Benchmarks, re-estimated on the training folds (book §10.9) ──────────────
+# Log-Quad (Wilmoth et al. 2012): v_x is estimated for abridged groups that
+# start at ages first ≤ x < stop and is zero elsewhere.
+logquad_v_ages = [5, 90]
+# Classic SVD-Comp (Clark 2019): number of SVD components and the constant
+# subtracted from logit(q_x) before the SVD (both as in the R package).
+svdcomp_components = 4
+svdcomp_offset = 10.0
+# Errors by population (chapter 10, after the 45q15 figure): the number of
+# populations with the largest mean error of e0 that the text names.
+worst_populations = 6

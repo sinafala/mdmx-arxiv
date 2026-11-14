@@ -1,0 +1,1171 @@
+---
+title: "Two forecasters"
+subtitle: "MDMx with its jump-off anchor, and the flow field"
+---
+
+::: {.callout-note appearance="simple"}
+## Paper correspondence
+Paper §9 ("Two Forecasters") and the discussion's reading of the flow field in §11.4 ("What
+the flow field says about mortality change").  Produces the figures `fig-fc-flowfield` (§9.3:
+the flow field's speed, shape law and paths) and `fig-fc-theory` (§11.4: the implied gain in
+e₀ and the gap between the sexes along the level of mortality).  The figures
+`fig-fc-continuity-swe` and `fig-fc-method-surface-swe` (Sweden) and the tables `tbl-fc-flow`
+(the flow by origin), `tbl-fc-comparison` (the established methods) and
+`tbl-fc-comparison-forecasters` (the two forecasters) are in the companion only, as are the
+sex differences in the long run.  Also produces every `\fc…` macro.
+How well the two forecasters and the established methods forecast is chapter 12.
+:::
+
+```{python}
+#| label: c11-setup
+#| code-summary: "Chapter setup"
+import dataclasses
+import functools
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.stats import norm
+
+from mdmx import artifacts, latex, lifetable, plotting, provenance, rbridge
+from mdmx import bayeslife as bl
+from mdmx import compare as cp
+from mdmx import evaluation as ev
+from mdmx import flowfield as ff
+from mdmx import forecast as fc
+from mdmx import theory
+from mdmx.config import params
+
+provenance.start_chapter("11-forecasting")
+plotting.use_style()
+P = params()
+F = P.section("forecast")                       # config/params.d/forecast.toml
+E = P.section("evaluation")                     # config/params.d/evaluation.toml
+CMP = F["comparators"]
+T = artifacts.load("tensor")
+tucker = artifacts.load("tucker")
+M, observed = T["M"], T["observed"]
+pops, years, ages = T["pops"], T["years"], T["ages"]
+NAME = dict(zip(pops, T["pop_names"]))
+PIDX = {p: i for i, p in enumerate(pops)}
+A = M.shape[1]
+r1, r2 = int(tucker["ranks"][0]), int(tucker["ranks"][1])
+ORIGINS = [int(o) for o in F["origins"]]        # origins at which the space is illustrated
+SET = fc.MDMxSettings.from_params(F, P.section("tucker"), age_rank=r2)
+FFS = ff.FlowFieldSettings.from_params(P.section("flowfield"))
+DESIGN = ev.Design.from_params(E)
+WIN = DESIGN.window                             # the second fitting-period policy (chapter 12)
+WORKERS = int(F["mdmx_workers"])                # processes for the MDMx fits (run time only)
+METHODS = ["MDMx", "FF", "LC", "HU", "CFDM"]
+LABEL = {"MDMx": "Anchored MDMx", "FF": "Flow field", "LC": "Lee–Carter", "HU": "Hyndman–Ullah",
+         "CFDM": "Coherent FDM", "BL": "bayesLife"}
+LABEL_TEX = {"MDMx": "MDMx", "FF": "Flow field", "LC": "Lee--Carter", "HU": "Hyndman--Ullah",
+             "CFDM": "Coherent FDM", "BL": "bayesLife"}
+COLOR = {"MDMx": plotting.COLORS["MDMx"], "FF": "#1f78b4", "LC": plotting.COLORS["LC"], "HU": plotting.COLORS["HU"],
+         "CFDM": plotting.COLORS["CFDM"]}
+Z = {lev: norm.ppf(0.5 + lev / 200) for lev in F["pi_levels"]}
+MDMX_CODE = list(fc.MDMX_CODE)                  # the code whose source keys a cached MDMx forecast
+truth = fc.observed_e0(M, observed, pops, years)
+starts = list(F["age_group_starts"]) + [A]
+GROUPS = {lab: list(range(starts[i], starts[i + 1])) for i, lab in enumerate(F["age_group_labels"])}
+
+
+def num(key):
+    """A registered number as plain text for the prose of this book."""
+    return latex.reported()[key]["text"].replace("{,}", ",").replace("$-$", "−")
+```
+
+## What is forecast
+
+Both forecasters forecast a population's *complete* mortality schedule:
+single-year logit(q_x) for ages 0–109, female and male, every year ahead.
+Both work in the same space, the first principal components of the
+effective cores (Step 1 below), and both start from the population's last
+observed schedule.  They differ in how they move through that space: MDMx
+extrapolates each population's own recent trend, damped and pulled towards
+the HMD-wide drift; the flow field moves every population along the paths
+that populations at the same level of mortality followed in the past.
+
+::: {.callout-tip}
+## What "e₀" means in this chapter and the next
+Wherever an unqualified e₀ is quoted (an error, a bias, a coverage), it is
+the **average of the female and the male e₀**, $\tfrac12(e_0^F + e_0^M)$, not
+the e₀ of a combined-sex life table.
+:::
+
+## The MDMx forecaster, step by step
+
+### Step 1 — the space, re-estimated at every origin
+
+Every observed schedule is represented by its effective core
+$\G_{c,t} = \bS^\top \M_{c,t}\, \bA$ (chapter 04), an $r_1 \times r_2$
+matrix with `{python} r1` × `{python} r2` = `{python} r1 * r2` entries.
+Forecasting `{python} r1 * r2` numbers jointly is wasteful, because they
+move together: a principal-component analysis (PCA) of the vectorised
+cores of all observed country-years (paper §9.1, Eq. 24),
+
+$$
+\mathbf{s}_{c,t} = \mathbf{V}^\top\big(\operatorname{vec}(\G_{c,t}) - \bar{\mathbf{g}}\big)
+\in \R^{N_{PC}},
+$$
+
+with $N_{PC}$ = `{python} SET.n_pc` components, reduces each core to a
+handful of *scores*, and the map back to a
+schedule is linear (paper Eq. 25):
+$\mathbf{z} = \mathbf{z}_{\text{mean}} + \mathbf{L}\,\mathbf{s}$, where
+column $j$ of $\mathbf{L}$ is the female and male $\logit(q_x)$ schedule
+$\bS\,\mathbf{V}_j\,\bA^\top$ of the $j$-th loading.
+
+A forecast made at origin $o$ must not use any data after $o$.  The bases
+$\bS$ and $\bA$, the smoothing of $\bA$, the effective cores and the PCA
+are therefore all **re-estimated at each origin from the observed
+country-years up to that origin** (`mdmx.forecast.origin_space`), exactly
+as chapter 04 estimates them from all the data.  The age rank is held at
+the full-data value, $r_2$ = `{python} r2`, at every origin, so that the
+forecasts from different origins have the same structure.  For the
+latest year in the tensor this reproduces the decomposition of chapter 04
+exactly, which the next cell checks.
+
+```{python}
+#| label: c11-spaces
+#| code-summary: "Re-estimate the bases and the PCA at every origin (cached)"
+SPACE_ORIGINS = ORIGINS + [int(years[-1])]
+N_PC_MAX = max(F["sens_n_pc"])
+
+
+def _spaces():
+    out = {}
+    for o in SPACE_ORIGINS:
+        sp = fc.origin_space(M, observed, years, o, tau=SET.tau, age_rank=r2, smooth=SET.smooth,
+                             n_pc=N_PC_MAX)
+        out[str(o)] = {"U_sex": sp["U_sex"], "U_age": sp["U_age"], "var_share": sp["var_share"],
+                       "n_used": int(sp["keep"].sum())}
+    return out
+
+
+spaces = artifacts.stage(
+    "forecast_spaces", _spaces, inputs=["tensor"],
+    params={**SET.as_dict(), "origins": SPACE_ORIGINS, "n_pc": N_PC_MAX},
+    code=[_spaces, *fc.SPACE_CODE],
+    desc="Sex/age bases and PCA of the effective cores re-estimated at each forecast origin")
+
+full = spaces[str(years[-1])]
+check = max(np.abs(full["U_age"] - tucker["U_age"]).max(), np.abs(full["U_sex"] - tucker["U_sex"]).max())
+print(f"Bases from all data vs the decomposition artefact: max |difference| = {check:.1e}")
+assert check < 1e-10, "the full-data space must reproduce chapter 04"
+
+n = SET.n_pc
+pca_tab = pd.DataFrame([{"origin": int(o), "country-years": sp["n_used"],
+                         "PC1 (%)": 100 * sp["var_share"][0],
+                         f"PC1–{n} (%)": 100 * sp["var_share"][:n].sum(),
+                         f"PC1–{N_PC_MAX} (%)": 100 * sp["var_share"][:N_PC_MAX].sum()}
+                        for o, sp in spaces.items()])
+print(pca_tab.round(2).to_string(index=False))
+
+cv_shares = pca_tab[pca_tab["origin"].isin(ORIGINS)][f"PC1–{n} (%)"]
+latex.report("fcCoreDim", r1 * r2, desc="Elements of an effective core (r1 x r2)")
+latex.report("fcCoreStateDim", 2 * r1 * r2, desc="State dimension of a Kalman filter on the full core")
+latex.report("fcNPc", n, desc="PCA scores forecast (N_PC)")
+latex.report("fcStateDim", 2 * n, desc="State dimension of the MDMx Kalman filter")
+latex.report("fcNParams", 3 * n + 1, desc="Kalman hyperparameters per population (3 N_PC + 1)")
+latex.report("fcPcaVarFirst", 100 * full["var_share"][0], digits=1,
+             desc="Percent of core variance on PC1 (all observed country-years)")
+latex.report("fcPcaVarCum", 100 * full["var_share"][:n].sum(), digits=1,
+             desc="Percent of core variance on the first N_PC PCs (all observed country-years)")
+latex.report("fcPcaVarCumMin", cv_shares.min(), digits=1, desc="Min over CV origins of that percent")
+latex.report("fcPcaVarCumMax", cv_shares.max(), digits=1, desc="Max over CV origins of that percent")
+```
+
+The first component carries most of the variation — it is essentially the
+overall level of mortality — and the first `{python} n` together carry
+`{python} num("fcPcaVarCum")`% of the variance of the cores of all observed
+country-years (`{python} num("fcPcaVarCumMin")`–`{python} num("fcPcaVarCumMax")`%
+in the space estimated on the data up to each of the origins illustrated here,
+every `{python} ORIGINS[1] - ORIGINS[0]` years from `{python} ORIGINS[0]` to
+`{python} ORIGINS[-1]`).  The remainder is not lost for the history — it is in
+the observed data — but a forecast can only move in the space of the
+first `{python} n` components.  We return to what that costs at the
+forecast's jump-off below.
+
+### Step 2 — the drift target
+
+Each population's own recent trend is informative, but noisy; the average
+trend of all HMD populations is stable, but ignores what is particular to
+the population.  MDMx blends the two (paper §9.2.1):
+
+$$
+\boldsymbol\delta_{\text{hier}} = w_{\text{HMD}}\,\boldsymbol\delta_{\text{HMD}}
+ + w_{\text{country}}\,\boldsymbol\delta_{c},
+$$
+
+with weights $w_{\text{HMD}}$ = `{python} SET.weight_hmd` and
+$w_{\text{country}}$ = `{python} SET.weight_country`.
+A population's drift $\boldsymbol\delta_c$ is the average change of its
+scores per **calendar year** over the window $[o-W, o]$, with
+$W$ = `{python} SET.drift_window` years, measured between its first and last
+observed years in the window (`mdmx.forecast.country_drifts`); missing and
+exceptional years inside the window are simply not used, and the elapsed
+time is counted in calendar years.  A population needs at least
+`{python} SET.drift_min_years` observed years in the window for its drift
+to count.  $\boldsymbol\delta_{\text{HMD}}$ is the average of the drifts of
+all populations with a defined drift at that origin.  The target has no regime
+level (paper §9.2.1), so this chapter does not depend on the clustering of
+chapter 06.
+
+### Step 3 — the drift-constrained Kalman filter
+
+For each PCA score the model is a damped local linear trend whose drift
+reverts not to zero but to the target (paper §9.2.2, Eqs. 26–27):
+
+$$
+\begin{aligned}
+\ell_t &= \ell_{t-1} + \delta_{t-1} + \eta^{\ell}_t, &\operatorname{var}\eta^\ell &= q^\ell,\\
+\delta_t &= \rho\,\delta_{t-1} + (1-\rho)\,\delta_{\text{hier}} + \eta^{\delta}_t,
+  &\operatorname{var}\eta^\delta &= q^\delta,\\
+y_t &= \ell_t + \varepsilon_t, &\operatorname{var}\varepsilon &= r,
+\end{aligned}
+$$
+
+where $y_t$ is the observed score in calendar year $t$.  With $\rho<1$ the
+forecast drift converges geometrically to the target, so a long-range
+forecast follows the blended trend whatever the population did in its
+last few years.  The covariances are diagonal, so the
+`{python} n` components are independent two-state filters that share
+$\rho$; `mdmx.forecast.llt_filter` writes this out and is checked against
+the textbook matrix filter in `tests/test_forecast.py`.
+
+The filter runs over **every calendar year** from the population's first
+observed year to the origin.  In a year without an observed schedule —
+a war or epidemic year set aside as exceptional, or a year missing from
+the HMD series — the update step is skipped: the state is carried forward by
+the model and its uncertainty grows, exactly as in a forecast.  The
+$3N_{PC}+1$ = `{python} 3 * n + 1` parameters ($q^\ell$, $q^\delta$, $r$ for
+each component, and the common $\rho$, kept between
+`{python} SET.rho_bounds[0]` and `{python} SET.rho_bounds[1]`) maximise the Gaussian likelihood of the
+observed years (prediction-error decomposition) by L-BFGS-B.  Many of
+these maxima lie on a bound — a variance at its floor, which is effectively
+zero, or $\rho$ at its lower bound — so the optimiser works on the standard
+deviations and on $\rho$ itself, where such a maximum can be reached.  It
+runs until $-\log L$ stops decreasing at machine precision, and a fit
+counts as converged if the projected gradient there is below
+`{python} f"{SET.mle_pg_flag:g}"`.
+The likelihood can have more than one local maximum — typically one with
+$\rho$ at its lower bound and a higher one inside the range — so the
+optimiser is started from several points and the best fit is kept:
+moment-based starting values ($q^\ell = \operatorname{var}\Delta y$,
+$q^\delta = \operatorname{var}\Delta^2 y/4$, $r = \operatorname{var}\Delta y/10$,
+within their bounds) with $\rho$ in the middle of its range and at
+`{python} len(SET.mle_rho_starts)` fixed levels across
+it, and the `{python} SET.mle_grid_top` best points of the *profile*
+likelihood of $\rho$ on a grid of `{python} len(SET.mle_grid_rho)` values.
+Given $\rho$, the components are independent, so the profile is cheap: the
+standard deviations are found component by component by a grid search and
+then fitted exactly at every grid value of $\rho$ at once.  Several starts
+make a missed maximum unlikely, not impossible; the design was chosen by comparing
+search strategies.  Chapter 12 reports convergence and the fitted $\rho$ by
+origin for every fit of the evaluation, under both fitting periods.  How
+often a single start would have missed the maximum is counted
+[below](#sec-c11-starts) for the fits of the long-run forecasts, one per
+population at the latest data year.
+
+The cell below shows one fit: France at the 1960 origin, whose training
+series has gaps at both world wars.
+
+```{python}
+#| label: fig-c11-filter-example
+#| fig-cap: "The filter on a series with gaps: the first two PCA scores of France (total population) up to 1960 (points; shaded years have no observed schedule — war years are exceptional) and the forecast from 1960 (line: mean; band: 95% prediction interval of the observed score, before any calibration)."
+EX_POP, EX_ORIGIN = "FRATNP", 1960
+ex_space = fc.origin_space(M, observed, years, EX_ORIGIN, tau=SET.tau, age_rank=r2,
+                           smooth=SET.smooth, n_pc=n)
+ex_drifts = fc.country_drifts(ex_space["scores"], years, EX_ORIGIN, SET.drift_window,
+                              SET.drift_min_years)
+c = PIDX[EX_POP]
+t_first = int(np.flatnonzero(ex_space["keep"][c])[0])
+t_o = int(np.flatnonzero(years == EX_ORIGIN)[0])
+y_ex = ex_space["scores"][c, t_first:t_o + 1]
+target, _ = fc.drift_target(ex_drifts, c, SET.weight_hmd, SET.weight_country)
+ex_fit = fc.fit_llt(y_ex, target, np.maximum(np.nanvar(ex_drifts, axis=0), 1e-8), SET)
+mean, var = fc.llt_forecast(ex_fit["state"], ex_fit["rho"], ex_fit["q_level"], ex_fit["q_drift"],
+                            ex_fit["r"], target, SET.horizon)
+yrs_ex = years[t_first:t_o + 1]
+fc_yrs = EX_ORIGIN + np.arange(1, SET.horizon + 1)
+fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
+for j, ax in enumerate(axes):
+    for yr in yrs_ex[~np.isfinite(y_ex[:, 0])]:
+        ax.axvspan(yr - 0.5, yr + 0.5, color=plotting.COLORS["grey"], alpha=0.25, lw=0)
+    ax.plot(yrs_ex, y_ex[:, j], ".", ms=3, color=plotting.COLORS["observed"])
+    ax.plot(fc_yrs, mean[:, j], color=COLOR["MDMx"])
+    half = Z[95] * np.sqrt(var[:, j])
+    ax.fill_between(fc_yrs, mean[:, j] - half, mean[:, j] + half, color=COLOR["MDMx"], alpha=0.25)
+    ax.set_title(f"PC{j + 1} score", fontsize=10)
+    ax.set_xlabel("Year")
+plt.show()
+print(f"{NAME[EX_POP]}, origin {EX_ORIGIN}: {np.isfinite(y_ex[:, 0]).sum()} observed of "
+      f"{len(y_ex)} calendar years; ρ = {ex_fit['rho']:.3f}; "
+      f"{ex_fit['n_iter']} iterations, converged: {ex_fit['converged']}")
+```
+
+```{python}
+#| label: c11-mdmx-settings
+#| code-summary: "The MDMx settings of Steps 2 and 3, for the paper"
+latex.report("fcDriftWeightHmd", SET.weight_hmd, digits=1, desc="Weight of the HMD-wide drift in the drift target")
+latex.report("fcDriftWeightCountry", SET.weight_country, digits=1,
+             desc="Weight of the population's own drift in the drift target")
+latex.report("fcDriftWindow", SET.drift_window, desc="Drift window W (calendar years up to the origin)")
+latex.report("fcDriftMinYears", SET.drift_min_years,
+             desc="Observed years a population needs in the drift window for its own drift")
+latex.report("fcLevelZeroYears", SET.level0_years, desc="Observed years whose mean scores start the filter's level")
+latex.report("fcPZeroLevelVar", SET.p0_level_var, text=f"{SET.p0_level_var:g}",
+             desc="Initial variance of each level component of the filter (score units)")
+latex.report("fcRhoMin", SET.rho_bounds[0], text=f"{SET.rho_bounds[0]:g}", desc="Lower bound of the damping factor rho")
+latex.report("fcRhoMax", SET.rho_bounds[1], text=f"{SET.rho_bounds[1]:g}", desc="Upper bound of the damping factor rho")
+```
+
+### Step 4 — from scores to schedules and e₀
+
+A forecast of the scores is a forecast of the complete female and male
+schedules, $\hat{\mathbf z}_{o+h} = \mathbf z_{\text{mean}} + \mathbf L\,
+\hat{\mathbf s}_{o+h}$, and from those of e₀ for each sex.  The forecast
+uncertainty of the scores at horizon $h$ is that of a future *observed*
+score: the filter's state variance plus the observation noise $r$ (both
+diagonal).  Because e₀ is a nonlinear function of the schedule, its
+standard deviation follows from the delta method (paper §9.2):
+$\sigma^2_{e_0}(h) = \sum_j J_j^2 \operatorname{var}(s_j)$ with
+$J = \partial e_0/\partial \mathbf s = (\partial e_0/\partial\mathbf z)\,\mathbf L$.
+The gradient $\partial e_0/\partial\mathbf z$ is computed exactly from the
+life table (`mdmx.forecast.e0_and_gradient`): with
+$e_0 = \sum_k w_k l_k$, $\partial e_0/\partial z_x = -q_x\sum_{k>x} w_k l_k$.
+A Monte-Carlo check of the delta method is reported with the intervals.
+
+### Step 5 — the jump-off anchor {#sec-fc-anchor}
+
+The Kalman filter starts the forecast from the *filtered* level of the
+scores, and the `{python} SET.n_pc` scores represent a schedule only up to
+the PCA truncation.  The schedule the forecast starts from therefore differs
+from the observed one, by a small amount at most ages but enough to move the
+female − male gap of e₀ at the jump-off.  MDMx keeps the part of the observed schedule that
+its scores do not represent (paper §9.2.4, Eq. 28): the residual of the observed schedule at the
+job's last training year from its projection on the scores,
+$\varepsilon_{c} = \mathrm{logit}\,q_{c,t_0} - (\bar z + L\,s_{c,t_0})$, is
+added to every forecast schedule (`forecast.mdmx_origin(anchor="persistent")`,
+the persistent anchor, ρ = 1).  The flow field uses
+the same anchor.  A decaying anchor, with a half-life of
+`{python} f"{float(E['decaying_anchor_half_life']):g}"` years, is a sensitivity in chapter 12.
+
+The residual holds two things: the population's own detail, which the anchor
+is there to keep, and the noise of that one year's single-age rates, which it
+is not.  Carried as observed, the noise would stay in every forecast schedule
+at every horizon.  The residual is therefore smoothed over age before it is
+added, each sex's by a Whittaker smoother with second differences,
+$\tilde\varepsilon = \arg\min_{u} \sum_x (u_x - \varepsilon_x)^2 + \nu \sum_x (\Delta^2 u_x)^2$
+over ages 1 and over, with ν = `{python} f"{SET.anchor_smoothing:,.0f}"`; age 0 keeps
+its observed value, because the step from infancy to childhood is real
+(`forecast.smooth_residual`).  Both forecasters carry $\tilde\varepsilon_c$.
+The smoothing was chosen on the evaluation's origins up to 2000, among
+smoothers over age and over years, of the sex difference and of each sex;
+chapter 12 shows what it does to the comparison's measures.
+
+At every origin of the evaluation, the cell measures what the anchor keeps:
+the e₀ and the gap of the projection plus the smoothed residual minus those of
+the projection, and the share of the residual that the smoothing removes.
+
+## The flow field
+
+The flow field (paper §9.3) forecasts in MDMx's space (Step 1), from data up to the
+origin only (`mdmx.flowfield`).  Its state is the vector of PCA scores of a
+population-year, $s = (s_1, \dots, s_5)$; the first score is the level of
+mortality, oriented so that a higher $s_1$ is lower mortality.
+
+1. **The speed** (`flowfield.speed_function`).  Each population's $s_1$ is
+   smoothed over its observed years, and its annual change is computed.  The
+   speed $g(s_1)$ is a LOWESS of these changes against $s_1$, pooled over the
+   populations: how fast populations at each level of mortality improved.
+   It is never allowed to reverse the improvement.
+2. **The frontier point** (`flowfield.orientation`).  $s_1^*$ is the median
+   $s_1$ of the population-years whose e₀ is in the top
+   `{python} f"{1 - FFS.frontier_quantile:.0%}"`.  Below it a
+   forecast moves at the pace that populations at its level moved in the
+   past.  Beyond it there is no past to learn from.
+3. **The pace beyond the frontier** (`flowfield.frontier_level`,
+   `frontier_speed`, `frontier_rule`).  In each year the `{python} FFS.frontier_k`
+   populations with the highest e₀ lead; their mean $s_1$, chain-linked so that
+   populations entering the data do not move it, gives the frontier's pace
+   $V_s$ over the `{python} FFS.frontier_window` years before the origin.  Beyond
+   $s_1^*$ the speed is $v_1 = \max\{0,\, w V_s + (1 - w)\, g(s_1^*)\}$, with
+   $w = n/(n + n_0)$, $n_0$ = `{python} f"{FFS.frontier_n0:g}"`, for the $n$
+   populations that led in those years.
+4. **The shape law** (`flowfield.shape_law`).  The other scores follow
+   $s_1$ along $f_k(s_1)$, a LOWESS of $s_k$ on $s_1$ over the last
+   `{python} FFS.shape_window` years
+   (along its tangent beyond the frontier point of those years), and a
+   population's own deviation from $f_k$ decays at the pooled rate $\alpha_k$
+   a year.
+5. **The path** (`flowfield.integrate`, `forecast_origin`).  From the last
+   observed scores, $s_1$ moves one year at a time at the speed of its level,
+   the other scores follow the shape law, and the schedules carry the
+   jump-off anchor with its smoothed residual (Step 5).
+
+The form (the speed on every year, the shape law on the last 50, the
+leaders' pace beyond the frontier) was chosen in development studies on the
+development origins; chapter 12 describes how (the article's §10.9 says on which origins the form was selected).  The figure shows the flow fitted to every year up to the latest data.
+
+```{python}
+#| label: c11-flow
+#| code-summary: "The flow at the latest data year; the flow and the anchor's residual at every origin of the evaluation (cached)"
+last = int(years[-1])
+E0 = ff.e0_matrix(M, observed)
+space_last = fc.origin_space(M, observed, years, last, tau=SET.tau, age_rank=r2, smooth=SET.smooth, n_pc=SET.n_pc)
+speed_last = ff.speed_function(space_last["scores"], space_last["keep"], years, E0, FFS)
+shape_last = ff.shape_law(space_last["scores"], ff._window(space_last["keep"], years, last, FFS.shape_window),
+                          years, E0, FFS)
+flow_last = ff.build_flow(space_last["scores"], space_last["keep"], years, E0, last, FFS)
+eval_jobs = fc.cv_jobs(observed, pops, years, list(DESIGN.origins), DESIGN.horizon, DESIGN.min_train_years,
+                       DESIGN.min_test_years)
+
+
+def _by_origin():
+    rows, resid = [], []
+    for o, jo in eval_jobs.groupby("origin"):
+        sp = fc.origin_space(M, observed, years, int(o), tau=SET.tau, age_rank=r2, smooth=SET.smooth, n_pc=SET.n_pc)
+        rows.append({"origin": int(o), **ff.flow_summary(ff.build_flow(sp["scores"], sp["keep"], years, E0, int(o),
+                                                                       FFS))})
+        for job in jo.itertuples():
+            c, t0 = PIDX[job.pop], int(np.flatnonzero(years == job.last_train_year)[0])
+            z_proj = fc.scores_to_logit(sp["scores"][c, t0], sp["z_mean"], sp["L"])
+            r_obs = M[:, :, c, t0] - z_proj
+            r_kept = fc.smooth_residual(r_obs, SET.anchor_smoothing)
+            e_kept, e_proj = lifetable.e0_from_logit(z_proj + r_kept), lifetable.e0_from_logit(z_proj)
+            resid.append({"origin": int(o), "pop": job.pop, "de0": float(e_kept.mean() - e_proj.mean()),
+                          "dgap": float((e_kept[0] - e_kept[1]) - (e_proj[0] - e_proj[1])),
+                          "medabs": float(np.median(np.abs(r_obs))),
+                          "removed": float(1 - np.sum(r_kept ** 2) / np.sum(r_obs ** 2))})
+    return {"flows": pd.DataFrame(rows), "residuals": pd.DataFrame(resid)}
+
+
+by_origin = artifacts.stage("forecast_flow_origins", _by_origin, inputs=["tensor"],
+                            params={"mdmx": SET.as_dict(), "flowfield": FFS.as_dict(), "design": DESIGN.as_dict()},
+                            code=[_by_origin, *ff.FLOW_CODE],
+                            desc="The flow field's parameters and the anchor's residual at every origin")
+FLOWS, RESID = by_origin["flows"], by_origin["residuals"]
+latex.report("fcAnchorGapMedAbs", float(RESID["dgap"].abs().median()), digits=2,
+             desc="Median |change of the female-male e0 gap| the anchor keeps at the jump-off (years)")
+latex.report("fcAnchorEzeroMedAbs", float(RESID["de0"].abs().median()), digits=3,
+             desc="Median |change of e0 (average)| the anchor keeps at the jump-off (years)")
+latex.report("fcAnchorLogitMedAbs", float(RESID["medabs"].median()), digits=3,
+             desc="Median over jobs of the median |residual| in logit(qx) at the jump-off, as observed")
+latex.report("fcAnchorSmoothing", SET.anchor_smoothing, text=f"{SET.anchor_smoothing:,.0f}",
+             desc="Penalty nu of the Whittaker smoother of the anchor's jump-off residual")
+latex.report("fcAnchorRemovedPct", 100 * float(RESID["removed"].median()), digits=0,
+             desc="Median over jobs of the share (%) of the jump-off residual's sum of squares that the smoothing "
+                  "removes")
+fl = ff.flow_summary(flow_last)
+latex.report("fcFlowStarLast", fl["s1_star"], digits=2, desc=f"Frontier point s1* (oriented) at {last}")
+latex.report("fcFlowVOneLast", fl["v1"], digits=3, desc=f"Speed beyond s1* (oriented s1 per year) at {last}")
+latex.report("fcFlowWLast", fl["w"], digits=2, desc=f"Shrinkage weight w = n/(n + n0) at {last}")
+latex.report("fcAnchorHalfLife", E["decaying_anchor_half_life"], text=f"{float(E['decaying_anchor_half_life']):g}",
+             desc="Half-life (years) of the decaying anchor of the sensitivity analysis")
+# The flow field's settings (config/params.d/flowfield.toml), as the paper quotes them.
+latex.report("fcFlowFrontierTopPct", 100 * (1 - FFS.frontier_quantile), digits=0,
+             desc="Top percent of country-years by e0 whose median level is the frontier point")
+latex.report("fcFlowSmoothYears", FFS.smooth_years, desc="Fewest observed years each local fit of a population's level spans")
+latex.report("fcFlowSmoothFracMin", 100 * FFS.smooth_frac_min, digits=0,
+             desc="Smallest span (%) of the LOWESS of a population's level, as a share of its observed years")
+latex.report("fcFlowSmoothLongYears", int(round(FFS.smooth_years / FFS.smooth_frac_min)),
+             desc="Observed years beyond which the smallest span, not the fewest years, sets the LOWESS span")
+latex.report("fcFlowMinYears", FFS.min_years,
+             desc="Observed years a population needs for the speed, the shape law and the relaxation")
+latex.report("fcFlowSpan", FFS.speed_frac, digits=1, desc="LOWESS span of the speed and of the shape law")
+latex.report("fcFlowFrontierK", FFS.frontier_k, desc="Leading populations in each year (m)")
+latex.report("fcFlowFrontierWindow", FFS.frontier_window, desc="Years up to the origin of the leaders' pace")
+latex.report("fcFlowFrontierNzero", FFS.frontier_n0, text=f"{FFS.frontier_n0:g}",
+             desc="Shrinkage constant n0 of the leaders' pace")
+latex.report("fcFlowFrontierMinYears", FFS.frontier_min_years,
+             desc="Years with a frontier level the window needs for rule FR1 (otherwise FR0)")
+latex.report("fcFlowShapeWindow", FFS.shape_window, desc="Years up to the origin of the shape law")
+latex.report("fcFlowTangentPct", 100 * FFS.tangent_share, digits=0,
+             desc="Percent of the range of s1 before the frontier point over which the shape law's tangent is fitted")
+latex.report("fcFlowRelaxMaxLag", FFS.relax_max_lag, desc="Largest calendar lag of the relaxation's autocorrelations")
+latex.report("fcFlowRelaxMinBeta", FFS.relax_min_beta, digits=2,
+             desc="Autocorrelation above which a lag enters the relaxation's fit")
+latex.report("fcFlowIntervalMinPoints", FFS.interval_min_points,
+             desc="Errors a cell needs for an empirical interval of the flow field")
+print(f"At the jump-off the anchor keeps a median |Δ gap| of {RESID['dgap'].abs().median():.2f} y "
+      f"and |Δ e0| of {RESID['de0'].abs().median():.3f} y ({len(RESID)} jobs); the smoothing removes a median "
+      f"{100 * RESID['removed'].median():.0f} % of the residual's sum of squares")
+```
+
+The anchor keeps a median `{python} num("fcAnchorGapMedAbs")` years of the
+female − male gap at the jump-off, and `{python} num("fcAnchorEzeroMedAbs")`
+years of e₀, over the jobs of every origin of chapter 12; the smoothing removes
+a median `{python} num("fcAnchorRemovedPct")` % of the residual's sum of
+squares.
+
+```{python}
+#| label: fig-fc-flowfield
+#| fig-cap: "The flow field fitted to every year up to the latest data. Left: the speed of s₁ (oriented: higher is lower mortality) against s₁, the populations' smoothed annual changes (grey) and the pooled speed g (line), held beyond the frontier point s₁* (dashed vertical) at the leaders' pace. Centre: the shape law for the second score (last 50 years), with its tangent beyond the shape law's own frontier point. Right: observed paths of four populations in the plane of the first two scores (solid) and their 50-year flow-field paths (dashed)."
+sign = flow_last["sign"]
+x_pts, v_pts = speed_last["points"]
+xs = np.linspace(np.min(sign * x_pts), np.max(sign * x_pts) + 0.6 * np.ptp(sign * x_pts), 400)
+fig, axes = plt.subplots(1, 3, figsize=(14, 4.2))
+ax = axes[0]
+ax.scatter(sign * x_pts, sign * v_pts, s=2, color="0.75", rasterized=True)
+ax.plot(xs, sign * flow_last["g"](sign * xs), color=COLOR["FF"], lw=2)
+ax.axvline(sign * flow_last["s1_star"], color="0.3", ls="--", lw=1)
+ax.set_xlabel("s₁ (oriented)")
+ax.set_ylabel("Speed of s₁ (per year)")
+ax.set_ylim(np.percentile(sign * v_pts, 1) - 0.1, np.percentile(sign * v_pts, 99.5) + 0.1)
+ax.set_title("The speed g(s₁)")
+ax = axes[1]
+keep50 = ff._window(space_last["keep"], years, last, FFS.shape_window)
+sc = space_last["scores"][keep50]
+ax.scatter(sign * sc[:, 0], sc[:, 1], s=2, color="0.75", rasterized=True)
+ax.plot(xs, shape_last["fk"][0](sign * xs), color=COLOR["FF"], lw=2)
+ax.axvline(sign * shape_last["s1_star"], color="0.3", ls="--", lw=1)
+ax.set_xlabel("s₁ (oriented)")
+ax.set_ylabel("s₂")
+ax.set_title("The shape law f₂(s₁), last 50 years")
+ax = axes[2]
+for p_, col in zip(["SWE", "JPN", "USA", "RUS"], ["#1b9e77", "#d95f02", "#7570b3", "#e7298a"], strict=True):
+    if p_ not in PIDX:
+        continue
+    c = PIDX[p_]
+    k = space_last["keep"][c]
+    ax.plot(sign * space_last["scores"][c, k, 0], space_last["scores"][c, k, 1], color=col, lw=1.2, label=NAME[p_])
+    t0 = np.flatnonzero(k)[-1]
+    path = ff.integrate(space_last["scores"][c, t0], flow_last, DESIGN.horizon)
+    ax.plot(sign * path[:, 0], path[:, 1], color=col, lw=1.2, ls="--")
+ax.axvline(sign * flow_last["s1_star"], color="0.3", ls="--", lw=1)
+ax.set_xlabel("s₁ (oriented)")
+ax.set_ylabel("s₂")
+ax.legend(frameon=False, fontsize=7)
+ax.set_title("Observed and forecast paths")
+plotting.save_figure(fig, "fig-fc-flowfield");
+```
+
+The flow by origin: where the frontier point lies, the speed there, the
+leaders' pace beyond it, the shrinkage weight, and the relaxation rates (the
+generality table of chapter 12 asks whether these structures are stable).
+
+```{python}
+#| label: tbl-fc-flow
+#| tbl-cap: "The flow field fitted at every origin of the evaluation: the frontier point s₁* (oriented), the speed g(s₁*), the leaders' pace V_s and the flow field's pace v₁ beyond s₁* (oriented s₁ per year), the shrinkage weight w, and the relaxation rates α₂–α₅."
+cols = ["origin", "s1_star", "g_star", "V_s", "v1", "w", "alpha2", "alpha3", "alpha4", "alpha5"]
+# Column names as the paper writes the symbols.
+FLOW_LABEL = {"origin": "Origin", "s1_star": "$s_1^*$", "g_star": "$g(s_1^*)$", "V_s": "$V_s$", "v1": "$v_1$",
+              "w": "$w$", **{f"alpha{k}": f"$\\alpha_{k}$" for k in range(2, 10)}}
+flow_tab = FLOWS[[c for c in cols if c in FLOWS.columns]].round(3).rename(columns=FLOW_LABEL)
+latex.save_table(flow_tab, "tbl-fc-flow",
+                 "The flow field at every origin of the evaluation (data up to the origin): the frontier point "
+                 "$s_1^*$ (oriented), the speed there, the leaders' pace $V_s$ and the pace $v_1$ beyond $s_1^*$ "
+                 "(oriented $s_1$ per year), the shrinkage weight $w = n/(n+3)$, and the relaxation rates.",
+                 short_caption="The flow field by origin", formats={"Origin": latex.fmt_year}, colsep=4)
+flow_tab
+```
+
+### What the fitted flow says about mortality change
+
+The flow field's fitted objects can be read as statements about how mortality
+changes.  Read together, the speed and the shape law trace one path through
+the space of schedules, the *typical path*: the level $s_1$ moves at the speed
+$g(s_1)$ and the other scores sit on the shape law.  One year along it the
+level moves to $s_1 + g(s_1)$, so the gain in e₀ that the flow implies at the
+level $s_1$ is $e(s_1 + g(s_1)) - e(s_1)$, where $e(s_1)$ is the e₀ of the
+typical schedule at that level (paper §11.4, Eq. 37).  Plotted against e₀,
+this implied gain is the flow field's phase portrait of life expectancy: the
+counterpart of bayesLife's gain function, estimated over the whole schedule
+and without a parametric form.  The typical path also gives each sex's e₀, so
+the gap between the sexes along the level of mortality.
+
+The section describes the whole transition, so it uses the flow at the latest
+data year with the shape law estimated on every year (`config/params.d/theory.toml`).
+The forecaster's shape law uses the last 50 years only, when few populations
+were at the lower levels.  Observed gains are centred over 10 years.
+
+```{python}
+#| label: c11-theory
+#| code-summary: "The typical path of the flow fitted to every year, and the observed gains and gaps"
+TH = P.section("theory")
+FFS_ALL = ff.FlowFieldSettings.from_params(
+    P.section("flowfield"), shape_window=None if TH["shape_window"] == "all" else int(TH["shape_window"]))
+flow_all = ff.build_flow(space_last["scores"], space_last["keep"], years, E0, last, FFS_ALL)
+s1_raw = space_last["scores"][..., 0][space_last["keep"]]
+grid = np.linspace(s1_raw.min(), s1_raw.max(), int(TH["grid_points"]))
+PATH = theory.typical_path(flow_all, space_last["z_mean"], space_last["L"], grid)
+OBS = theory.observed_levels(M, observed, years, pops, int(TH["gain_half_window"]))
+BANDS = theory.binned_medians(OBS, "e0", ["gain", "gap", "year"], TH["bands"])
+LEV = theory.at_levels(PATH, TH["levels"], ["gain", "gap"])
+by_s1 = PATH.sort_values("s1")
+front_e0 = float(np.interp(flow_all["sign"] * flow_all["s1_star"], by_s1["s1"], by_s1["e0"]))
+w = int(TH["gain_half_window"])
+latex.report("fcTheoryGainYears", 2 * w, desc="Years over which an observed gain in e0 is centred")
+latex.report("fcTheoryEzeroMin", PATH["e0"].min(), digits=0, desc="Lowest e0 on the typical path (years)")
+latex.report("fcTheoryEzeroMax", PATH["e0"].max(), digits=0, desc="Highest e0 on the typical path (years)")
+i_gain, i_gap = PATH["gain"].idxmax(), PATH["gap"].idxmax()
+latex.report("fcTheoryGainPeak", PATH.loc[i_gain, "gain"], digits=2,
+             desc="Largest implied annual gain in e0 on the typical path (years per year)")
+latex.report("fcTheoryGainPeakEzero", PATH.loc[i_gain, "e0"], digits=0, desc="e0 at the largest implied gain (years)")
+latex.report("fcTheoryGapPeak", PATH.loc[i_gap, "gap"], digits=1,
+             desc="Largest female minus male e0 gap on the typical path (years)")
+latex.report("fcTheoryGapPeakEzero", PATH.loc[i_gap, "e0"], digits=0, desc="e0 at the largest gap (years)")
+latex.report("fcTheoryFrontierEzero", front_e0, digits=0,
+             desc="e0 of the typical schedule at the frontier point of the flow fitted to every year (years)")
+for row in LEV.itertuples():
+    tag = latex.number_word(int(row.e0))
+    latex.report(f"fcTheoryGainAt{tag}", row.gain, digits=2,
+                 desc=f"Implied annual gain in e0 on the typical path at e0 = {row.e0:g} (years per year)")
+    latex.report(f"fcTheoryGapAt{tag}", row.gap, digits=1,
+                 desc=f"Female minus male e0 gap on the typical path at e0 = {row.e0:g} (years)")
+for row in BANDS.itertuples():
+    tag = latex.number_word(int(row.low)) + latex.number_word(int(row.high))
+    latex.report(f"fcTheoryObsGain{tag}", row.gain, digits=2,
+                 desc=f"Median observed centred gain in e0, e0 in ({row.low:g}, {row.high:g}] (years per year)")
+    latex.report(f"fcTheoryObsGap{tag}", row.gap, digits=1,
+                 desc=f"Median observed female minus male e0 gap, e0 in ({row.low:g}, {row.high:g}] (years)")
+    latex.report(f"fcTheoryObsYear{tag}", row.year, text=latex.fmt_year(latex.round_half_up(row.year)),
+                 desc=f"Median calendar year of the observed country-years with e0 in ({row.low:g}, {row.high:g}]")
+latex.report("fcTheoryObsGainN", int(OBS["gain"].notna().sum()), desc="Country-years with an observed centred gain")
+latex.report("fcTheoryObsN", len(OBS), desc="Observed country-years in the theory figure")
+# How many populations the forecaster's shape law sees at the lower levels, in its own window.
+in_window = OBS[OBS["year"] > last - FFS.shape_window]
+low = float(TH["low_level"])
+latex.report("fcTheoryLowLevel", low, digits=0, desc="e0 below which the forecaster's shape law has few populations")
+latex.report("fcTheoryLowPops", int(in_window.loc[in_window["e0"] < low, "pop"].nunique()),
+             desc=f"Populations observed below e0 {low:g} in the last {FFS.shape_window} years")
+latex.report("fcTheoryWindowPops", int(in_window["pop"].nunique()),
+             desc=f"Populations observed in the last {FFS.shape_window} years")
+# The dip of the implied gain inside a band of e0, and its recovery up to the frontier point.
+def dip(path, band, front):
+    """The smallest implied gain with e0 inside ``band`` and its e0; then the largest gain after it up to the
+    frontier point, and its e0 (the recovery)."""
+    seg = path[path["e0"].between(*band)]
+    i = seg["gain"].idxmin()
+    low, low_e0 = float(seg.loc[i, "gain"]), float(seg.loc[i, "e0"])
+    after = path[(path["e0"] > low_e0) & (path["e0"] <= front)]
+    j = after["gain"].idxmax()
+    return low, low_e0, float(after.loc[j, "gain"]), float(after.loc[j, "e0"])
+
+
+DIP_BAND = [float(x) for x in TH["dip_band"]]
+
+
+def report_dip(path, front, tag, what):
+    low, low_e0, high, high_e0 = dip(path, DIP_BAND, front)
+    band = f"e0 {DIP_BAND[0]:.0f}-{DIP_BAND[1]:.0f}"
+    latex.report(f"fcTheory{tag}GainDip", low, digits=2, desc=f"{what}: smallest implied gain with {band}")
+    latex.report(f"fcTheory{tag}GainDipEzero", low_e0, digits=0, desc=f"{what}: e0 at that smallest gain (years)")
+    latex.report(f"fcTheory{tag}GainRecover", high, digits=2,
+                 desc=f"{what}: largest implied gain after it, up to the frontier point")
+    latex.report(f"fcTheory{tag}GainRecoverEzero", high_e0, digits=0, desc=f"{what}: e0 at that largest gain (years)")
+
+
+report_dip(PATH, front_e0, "", "Every population")
+# Without the populations of Central and Eastern Europe (theory.toml), whose long stagnation and reversal
+# of male mortality fall at these levels: the flow refitted without them, and the medians of both groups.
+CEE = [p_ for p_ in TH["central_eastern"] if p_ in PIDX]
+keep_o = space_last["keep"].copy()
+keep_o[[PIDX[p_] for p_ in CEE]] = False
+flow_o = ff.build_flow(space_last["scores"], keep_o, years, E0, last, FFS_ALL)
+s1_o = space_last["scores"][..., 0][keep_o]
+PATH_O = theory.typical_path(flow_o, space_last["z_mean"], space_last["L"],
+                             np.linspace(s1_o.min(), s1_o.max(), int(TH["grid_points"])))
+by_s1_o = PATH_O.sort_values("s1")
+front_o = float(np.interp(flow_o["sign"] * flow_o["s1_star"], by_s1_o["s1"], by_s1_o["e0"]))
+LEV_O = theory.at_levels(PATH_O, [x for x in TH["levels"] if PATH_O["e0"].min() <= x <= PATH_O["e0"].max()],
+                         ["gain", "gap"])
+OBS["cee"] = OBS["pop"].isin(CEE)
+BANDS_O = theory.binned_medians(OBS[~OBS["cee"]], "e0", ["gain", "gap", "year"], TH["bands"])
+BANDS_C = theory.binned_medians(OBS[OBS["cee"]], "e0", ["gain", "gap", "year"], TH["bands"])
+latex.report("fcTheoryCeePops", len(CEE), desc="Populations of Central and Eastern Europe (theory.toml)")
+i_go, i_po = PATH_O["gain"].idxmax(), PATH_O["gap"].idxmax()
+latex.report("fcTheoryOtherGainPeak", PATH_O.loc[i_go, "gain"], digits=2,
+             desc="Without Central and Eastern Europe: largest implied gain on the typical path")
+latex.report("fcTheoryOtherGainPeakEzero", PATH_O.loc[i_go, "e0"], digits=0, desc="… and its e0")
+latex.report("fcTheoryOtherGapPeak", PATH_O.loc[i_po, "gap"], digits=1,
+             desc="Without Central and Eastern Europe: largest sex gap on the typical path (years)")
+latex.report("fcTheoryOtherGapPeakEzero", PATH_O.loc[i_po, "e0"], digits=0, desc="… and its e0")
+report_dip(PATH_O, front_o, "Other", "Without Central and Eastern Europe")
+for row in LEV_O.itertuples():
+    tag = latex.number_word(int(row.e0))
+    latex.report(f"fcTheoryOtherGainAt{tag}", row.gain, digits=2,
+                 desc=f"Without Central and Eastern Europe: implied gain at e0 = {row.e0:g} (years per year)")
+    latex.report(f"fcTheoryOtherGapAt{tag}", row.gap, digits=1,
+                 desc=f"Without Central and Eastern Europe: sex gap on the typical path at e0 = {row.e0:g} (years)")
+for name, tab in (("Other", BANDS_O), ("Cee", BANDS_C)):
+    for row in tab.itertuples():
+        tag = latex.number_word(int(row.low)) + latex.number_word(int(row.high))
+        who = "the other populations" if name == "Other" else "Central and Eastern Europe"
+        if np.isfinite(row.gain):
+            latex.report(f"fcTheoryObsGain{name}{tag}", row.gain, digits=2,
+                         desc=f"Median observed gain in e0, {who}, e0 in ({row.low:g}, {row.high:g}]")
+        latex.report(f"fcTheoryObsGap{name}{tag}", row.gap, digits=1,
+                     desc=f"Median observed sex gap, {who}, e0 in ({row.low:g}, {row.high:g}]")
+        latex.report(f"fcTheoryObsYear{name}{tag}", row.year, text=latex.fmt_year(latex.round_half_up(row.year)),
+                     desc=f"Median year of the observed country-years, {who}, e0 in ({row.low:g}, {row.high:g}]")
+print(LEV.round(3).to_string(index=False))
+print(BANDS.round(3).to_string(index=False))
+print("Without Central and Eastern Europe:"); print(LEV_O.round(3).to_string(index=False))
+print(BANDS_O.round(3).to_string(index=False)); print(BANDS_C.round(3).to_string(index=False))
+print("Below", low, "in the window:", sorted(in_window.loc[in_window["e0"] < low, "pop"].unique()))
+```
+
+```{python}
+#| label: fig-fc-theory
+#| fig-cap: "What the flow field fitted to every year says about mortality change. Left: the annual gain in e₀ against e₀, observed (grey: centred 10-year gains of the country-years; black dots: medians in bands of e₀; open squares: the same without the populations of Central and Eastern Europe) and implied by the typical path (solid line; dashed: the flow refitted without those populations); the vertical line marks the frontier point. Right: the female minus male gap in e₀ against e₀, in the same way."
+mid = (BANDS["low"] + BANDS["high"]) / 2
+mid_o = (BANDS_O["low"] + BANDS_O["high"]) / 2
+fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
+ax = axes[0]
+g_obs = OBS.dropna(subset=["gain"])
+ax.scatter(g_obs["e0"], g_obs["gain"], s=2, color="0.78", rasterized=True)
+ax.plot(mid, BANDS["gain"], "o", color="black", ms=4, label="medians, all")
+ax.plot(mid_o, BANDS_O["gain"], "s", mfc="none", mec="black", ms=5, label="medians, without C. & E. Europe")
+ax.plot(PATH["e0"], PATH["gain"], color=COLOR["FF"], lw=2, label="typical path")
+ax.plot(PATH_O["e0"], PATH_O["gain"], color=COLOR["FF"], lw=1.4, ls="--", label="refitted without C. & E. Europe")
+ax.axvline(front_e0, color="0.3", ls=":", lw=1)
+ax.legend(frameon=False, fontsize=7, loc="upper left")
+ax.axhline(0, color="0.5", lw=0.6)
+ax.set_ylim(*np.nanpercentile(g_obs["gain"], [0.5, 99.5]))
+ax.set_xlabel("e₀ (years)")
+ax.set_ylabel("Gain in e₀ (years per year)")
+ax.set_title("The pace of improvement against the level")
+ax = axes[1]
+ax.scatter(OBS["e0"], OBS["gap"], s=2, color="0.78", rasterized=True)
+ax.plot(mid, BANDS["gap"], "o", color="black", ms=4)
+ax.plot(mid_o, BANDS_O["gap"], "s", mfc="none", mec="black", ms=5)
+ax.plot(PATH["e0"], PATH["gap"], color=COLOR["FF"], lw=2)
+ax.plot(PATH_O["e0"], PATH_O["gap"], color=COLOR["FF"], lw=1.4, ls="--")
+ax.set_xlabel("e₀ (years)")
+ax.set_ylabel("Female − male e₀ (years)")
+ax.set_title("The gap between the sexes against the level")
+plotting.save_figure(fig, "fig-fc-theory");
+```
+
+The implied gain rises with e₀ to `{python} num("fcTheoryGainPeak")` years a
+year at e₀ `{python} num("fcTheoryGainPeakEzero")`, dips to
+`{python} num("fcTheoryGainDip")` at e₀ `{python} num("fcTheoryGainDipEzero")`, recovers to
+`{python} num("fcTheoryGainRecover")` at `{python} num("fcTheoryGainRecoverEzero")` and declines
+to `{python} num("fcTheoryGainAtEighty")` at 80.  The dip is mostly the populations of Central and
+Eastern Europe: their median observed gain at e₀ 65–70 is
+`{python} num("fcTheoryObsGainCeeSixtyfiveSeventy")` years a year (median year
+`{python} num("fcTheoryObsYearCeeSixtyfiveSeventy")`), against
+`{python} num("fcTheoryObsGainOtherSixtyfiveSeventy")` for the other populations.  Refitted
+without them, the flow's gain is `{python} num("fcTheoryOtherGainAtSeventy")` at e₀ 70; its dip
+is `{python} num("fcTheoryOtherGainDip")` at `{python} num("fcTheoryOtherGainDipEzero")` and it
+reaches `{python} num("fcTheoryOtherGainRecover")` at `{python} num("fcTheoryOtherGainRecoverEzero")`.
+The gap between the sexes on the typical path is about
+`{python} num("fcTheoryGapAtFortyfive")` years at e₀ 45, peaks at
+`{python} num("fcTheoryGapPeak")` years at e₀ `{python} num("fcTheoryGapPeakEzero")`
+(`{python} num("fcTheoryOtherGapPeak")` at `{python} num("fcTheoryOtherGapPeakEzero")` without
+Central and Eastern Europe) and narrows to `{python} num("fcTheoryGapAtEighty")` at 80.  Paper
+§11.4 ("What the flow field says about mortality change") interprets these against the
+literature.
+
+## One population, both forecasters: Sweden
+
+The figures, in the companion only, show the forecast of Sweden from its last observed year by both
+forecasters and the comparators, all from data up to that year.  (The
+comparators are the methods chapter 12 evaluates.)
+
+```{python}
+#| label: c11-showcase
+#| code-summary: "Forecast Sweden from its last observed year with every method (cached)"
+ctx = ev.context(P)                               # the comparators' inputs (shared with chapter 12)
+SHOW = F["showcase_pop"]
+c_sw = PIDX[SHOW]
+o_sw = int(years[observed[c_sw]].max())
+H_sw = int(F["showcase_horizon"])
+job_sw = pd.DataFrame([{"pop": SHOW, "origin": o_sw, "horizon": H_sw,
+                        "first_year": int(years[observed[c_sw]].min()), "last_train_year": o_sw}])
+set_sw = dataclasses.replace(SET, horizon=H_sw)
+show_mdmx = artifacts.stage(
+    "forecast_showcase_mdmx",
+    functools.partial(fc.mdmx_origin, M, observed, pops, years, o_sw, job_sw, set_sw, anchor=E["mdmx_anchor"]),
+    inputs=["tensor"], params={"settings": set_sw.as_dict(), "pop": SHOW, "anchor": E["mdmx_anchor"]},
+    code=MDMX_CODE, desc=f"MDMx forecast of {SHOW} from its last observed year")
+space_sw = fc.origin_space(M, observed, years, o_sw, tau=SET.tau, age_rank=r2, smooth=SET.smooth, n_pc=SET.n_pc)
+show_ff = ff.forecast_origin(M, space_sw, pops, years, job_sw, o_sw, H_sw, E0, FFS, schedules=True)
+show_r = artifacts.stage(
+    "forecast_showcase_cmp",
+    functools.partial(fc.comparator_forecasts, ctx["rates"], ctx["smoothed"], job_sw, CMP, tag="demography-showcase"),
+    inputs=["forecast_cmp_rates", "forecast_cmp_smoothed"], params={**ctx["r_params"], "pop": SHOW, "horizon": H_sw},
+    code=[fc.comparator_forecasts, rbridge.run], desc=f"Comparator forecasts of {SHOW} from its last observed year")
+print(f"R failures for the showcase: {len(show_r['failures'])}")
+sw_z = {"MDMx": show_mdmx["schedules"], "FF": show_ff["schedules"]}
+sw_pts = {"MDMx": show_mdmx["points"], "FF": show_ff["points"]}
+for m in ("LC", "HU", "CFDM"):
+    out_ = fc.comparator_points(show_r, m, A, CMP["mx_to_qx_ax"])
+    sw_z[m] = out_["schedules"][out_["schedule_index"]["year"].to_numpy() > o_sw]
+    sw_pts[m] = out_["points"]
+latex.report("fcShowcaseOrigin", o_sw, text=str(o_sw), desc="Origin of the showcase forecast")
+```
+
+```{python}
+#| label: fig-fc-continuity-swe
+#| fig-cap: "Sweden from its last observed year. Top: logit(q_x) at selected ages, observed (solid; gaps are exceptional years) and forecast by anchored MDMx (dashed) and the flow field (dotted); both start from the observed schedule with its departure from the scores smoothed over age. Bottom: e₀ observed and forecast by every method."
+hist_years = np.arange(o_sw - F["showcase_history"] + 1, o_sw + 1)
+th = hist_years - years[0]
+fc_years_sw = o_sw + np.arange(1, H_sw + 1)
+z_hist = np.where(observed[c_sw, th][None, None, :], M[:, :, c_sw, th], np.nan)    # (2, A, n)
+fig = plt.figure(figsize=(13, 8.5))
+gs = fig.add_gridspec(2, 2, height_ratios=[3, 2], hspace=0.3)
+cmap = plt.cm.viridis
+for s, sex in enumerate(plotting.SEX_LABELS):
+    ax = fig.add_subplot(gs[0, s])
+    for j, age in enumerate(F["trace_ages"]):
+        colour = cmap(j / (len(F["trace_ages"]) - 1))
+        ax.plot(hist_years, z_hist[s, age], color=colour, lw=1.2, label=f"Age {age}")
+        ax.plot(fc_years_sw, sw_z["MDMx"][:, s, age], "--", color=colour, lw=1.2)
+        ax.plot(fc_years_sw, sw_z["FF"][:, s, age], ":", color=colour, lw=1.4)
+    ax.axvline(o_sw, color="grey", ls=":")
+    ax.set_title(sex)
+    ax.set_ylabel(r"logit$(q_x)$")
+    if s == 0:
+        ax.legend(ncol=2, fontsize=7)
+    ax = fig.add_subplot(gs[1, s])
+    e_hist = lifetable.e0_from_logit(np.moveaxis(z_hist[s], 0, -1))
+    ax.plot(hist_years, e_hist, "o-", ms=3, color=plotting.COLORS["observed"], label="observed")
+    for m in METHODS:
+        g = sw_pts[m][(sw_pts[m]["sex"] == sex.lower()) & (sw_pts[m]["year"] > o_sw)]
+        ax.plot(g["year"], g["e0_fc"], color=COLOR[m], lw=1.6 if m in ("MDMx", "FF") else 1.0, label=LABEL[m])
+    ax.set_xlabel("Year")
+    ax.set_ylabel("$e_0$ (years)")
+    if s == 0:
+        ax.legend(fontsize=7)
+plotting.save_figure(fig, "fig-fc-continuity-swe")
+plt.show()
+```
+
+## Forecast surfaces
+
+e₀ cannot show how a method moves the *age pattern* of mortality.  The
+next figure shows the whole forecast surface of Sweden from its last
+observed year for every method that forecasts schedules, female and male,
+and the sex difference, on common colour scales.
+
+```{python}
+#| label: fig-fc-method-surface-swe
+#| fig-cap: "Forecast mortality surfaces for Sweden from its last observed year: rows are the methods that forecast schedules; columns show female and male logit(q_x) and the male–female difference, ages 0–99, the last observed years (blank: exceptional years) and the forecast. The white dashed line marks the origin; all panels in a column share a colour scale."
+max_age = 100
+vmin, vmax = np.nanpercentile(z_hist[:, :max_age], [1, 99])
+dmax = np.nanpercentile(np.abs(z_hist[1, :max_age] - z_hist[0, :max_age]), 99)
+fig, axes = plt.subplots(len(METHODS), 3, figsize=(15, 3.2 * len(METHODS)), sharex=True, sharey=True,
+                         layout="constrained")
+extent = (hist_years[0] - 0.5, fc_years_sw[-1] + 0.5, -0.5, max_age - 0.5)
+for row, m in enumerate(METHODS):
+    full_z = np.concatenate([z_hist, np.moveaxis(sw_z[m], 0, -1)], axis=-1)    # (2, A, years)
+    panels = [(full_z[0, :max_age], "viridis", vmin, vmax, "Female"),
+              (full_z[1, :max_age], "viridis", vmin, vmax, "Male"),
+              (full_z[1, :max_age] - full_z[0, :max_age], "RdBu_r", -dmax, dmax, "Male − female")]
+    for col, (data, cm, lo_, hi_, title) in enumerate(panels):
+        ax = axes[row, col]
+        im = ax.imshow(data, aspect="auto", origin="lower", extent=extent, cmap=cm, vmin=lo_, vmax=hi_,
+                       interpolation="nearest")
+        ax.axvline(o_sw + 0.5, color="white", ls="--", lw=1)
+        ax.grid(False)
+        if row == 0:
+            ax.set_title(title)
+        if col == 0:
+            ax.set_ylabel(f"{LABEL[m]}\nAge")
+        if row == len(METHODS) - 1:
+            ax.set_xlabel("Year")
+            fig.colorbar(im, ax=axes[:, col], shrink=0.5, location="right")
+plotting.save_figure(fig, "fig-fc-method-surface-swe")
+plt.show()
+```
+
+## Sex differences in the long run
+
+MDMx forecasts both sexes at every age from one set of scores, so the age
+pattern of the sex difference is forecast jointly — not held fixed by
+assumption, as in the coherent FDM (whose sex ratios are stationary), nor
+left free, as in Lee–Carter and Hyndman–Ullah.  How does it behave far
+ahead?  The forecast drift of the scores reverts to the hierarchical
+target δ_hier (Step 3), so in the long run the male − female difference of
+logit(q_x) at age x changes at the constant rate
+$(L_{\text{male}} - L_{\text{female}})\,\delta_{\text{hier}}$
+(`mdmx.compare.sex_difference_slope`).  On the logit scale any non-zero
+rate means that the difference keeps changing, so the question is how
+fast.  The cell computes the rate for every population at the latest data
+year, `{python} int(years[-1])` — split into the part that comes from the
+HMD-wide drift (common to the populations) and the population's own
+part — and compares the change it implies over 100 years with the change
+actually observed over each population's last 50 years (as pre-specified).
+
+```{python}
+#| label: c11-longrun
+#| code-summary: "MDMx's long-run age-specific sex difference: the rate per population, and Sweden over 100 years (cached)"
+OV = F["overall"]
+LR_H = int(OV["longrun_horizon"])
+lr_origin = int(years[-1])
+lr_jobs = fc.cv_jobs(observed, pops, years, [lr_origin], LR_H, F["min_train_years"], 0)
+lr_set = dataclasses.replace(SET, horizon=LR_H)
+lr = artifacts.stage(
+    "forecast_longrun",
+    functools.partial(fc.mdmx_origin, M, observed, pops, years, lr_origin, lr_jobs, lr_set, workers=WORKERS,
+                      anchor=E["mdmx_anchor"]),
+    inputs=["tensor"], params={"settings": lr_set.as_dict(), "jobs": artifacts.content_hash(lr_jobs),
+                               "anchor": E["mdmx_anchor"]},
+    code=MDMX_CODE, desc=f"MDMx forecasts {LR_H} years ahead from {lr_origin} (long-run sex differences)")
+lr_p = SET.n_pc
+lr_target = lr["jobs"][[f"target_{i + 1}" for i in range(lr_p)]].to_numpy()          # (J, p), per year
+# The HMD part of each target: w_HMD·δ_HMD, or all of it where the population's own drift was undefined.
+lr_hmd = (np.where(lr["jobs"]["own_drift"].to_numpy(bool), SET.weight_hmd, 1.0)[:, None]
+          * lr["hmd_drift"][None, :lr_p])
+lr_rate = cp.sex_difference_slope(lr["L"], lr_target)                                # (J, A), logit per year
+lr_rate_hmd = cp.sex_difference_slope(lr["L"], lr_hmd)
+
+
+lr_century = 100 * cp.group_means(lr_rate, GROUPS)     # (J, G): change per century implied by the rate
+lr_century_hmd = 100 * cp.group_means(lr_rate_hmd, GROUPS)
+# Observed: the change of the difference over the last `longrun_lag` years of each population.
+lr_obs = cp.observed_sex_difference_change(M, observed, years, [PIDX[p_] for p_ in lr["jobs"]["pop"]], GROUPS,
+                                           lag=int(OV["longrun_lag"]), window=int(OV["longrun_window"]))
+lr_tab = pd.DataFrame({
+    "100 y (median)": np.median(lr_century, axis=0),
+    "100 y, HMD part (median)": np.median(lr_century_hmd, axis=0),
+    "|100 y| (median)": np.median(np.abs(lr_century), axis=0),
+    "last 50 y observed (median)": np.median(lr_obs, axis=0),
+    "|last 50 y| (median)": np.median(np.abs(lr_obs), axis=0),
+}, index=list(GROUPS))
+for lab, row in lr_tab.iterrows():
+    word = lab.split()[0]
+    latex.report(f"fcLongrunCentury{word}", row["|100 y| (median)"], digits=2,
+                 desc=f"MDMx: median |long-run change of the male-female logit difference| per century, {lab}")
+    latex.report(f"fcLongrunObserved{word}", row["|last 50 y| (median)"], digits=2,
+                 desc=f"Median |observed change of the male-female logit difference| over the last 50 years, {lab}")
+latex.report("fcLongrunOrigin", lr_origin, text=str(lr_origin), desc="Origin of the long-run forecasts")
+latex.report("fcLongrunPops", len(lr["jobs"]), desc="Populations forecast in the long-run check")
+latex.report("fcLongrunObsPops", len(lr_obs), desc="Populations with 55 observed years for the observed change")
+# Sweden, 100 years ahead: e₀ of the two sexes and their gap.
+lr_sw = lr["points"][lr["points"]["pop"] == SHOW].pivot(index="year", columns="sex", values="e0_fc")
+lr_gap = lr_sw["female"] - lr_sw["male"]
+latex.report("fcLongrunGapSWEStart", float(lr_gap.iloc[0]), digits=1,
+             desc=f"MDMx: female-male e0 gap of {SHOW}, first forecast year from {lr_origin}")
+latex.report("fcLongrunGapSWEEnd", float(lr_gap.iloc[-1]), digits=1,
+             desc=f"MDMx: female-male e0 gap of {SHOW}, {LR_H} years ahead")
+# Like for like: the observed change scaled to a century.
+change_ratio = lr_tab["|100 y| (median)"] / (100 / int(OV["longrun_lag"]) * lr_tab["|last 50 y| (median)"])
+slower = [lab.lower() for lab in change_ratio.index[change_ratio < 1]]
+latex.report("fcLongrunMinYears", F["min_train_years"],
+             desc="Observed years up to the origin a population needs for the long-run check")
+latex.report("fcLongrunHorizon", LR_H, desc="Horizon (years) of the long-run MDMx forecasts")
+latex.report("fcLongrunLag", int(OV["longrun_lag"]), desc="Years over which the observed change of the sex difference is measured")
+latex.report("fcLongrunGroups", len(change_ratio), desc="Age groups of the long-run check")
+latex.report("fcLongrunSlowerGroups", len(slower),
+             desc="Age groups in which the forecast changes the sex difference more slowly than observed (per century)")
+lr_note = (f"Over 100 years the model's long-run rate changes the male − female logit difference by a median "
+           f"{lr_tab['|100 y| (median)'].min():.2f}–{lr_tab['|100 y| (median)'].max():.2f} across the age groups, "
+           f"against {lr_tab['|last 50 y| (median)'].min():.2f}–{lr_tab['|last 50 y| (median)'].max():.2f} actually "
+           f"observed over the last {int(OV['longrun_lag'])} years ({len(lr_obs)} populations).  Per century (the "
+           "observed change scaled to a century) the forecast sex differences change "
+           + ("more slowly than the observed ones in every age group." if len(slower) == len(change_ratio) else
+              "at least as fast as the observed ones in every age group." if not slower else
+              f"more slowly than the observed ones in {len(slower)} of the {len(change_ratio)} age groups "
+              f"({', '.join(slower)}).")
+           + f"  For {NAME[SHOW]} the female − male gap in e₀ goes from {lr_gap.iloc[0]:.1f} years in "
+             f"{lr_gap.index[0]} to {lr_gap.iloc[-1]:.1f} in {lr_gap.index[-1]}.")
+print(lr_note)
+lr_tab.round(3)
+```
+
+`{python} lr_note`  MDMx therefore forecasts the sexes jointly at every age
+without fixing their difference: far ahead it changes at the pace of the
+HMD-wide trend of the sex difference, so MDMx is not coherent in the
+formal long-run sense (bounded sex ratios), while its sex differences
+evolve from one joint model rather than independently.
+
+```{python}
+#| label: fig-c11-longrun
+#| fig-cap: "MDMx's age-specific sex differences in the long run. Top left: Sweden, male − female logit(q_x) by age — observed in its last observed year and forecast 15, 50 and 100 years ahead. Top right: the long-run rate of change of the male − female difference per century by age, median over the populations (line; band: interquartile range) and the part due to the HMD-wide drift (dashed). Bottom: Sweden, female and male e₀ (left) and their gap (right), observed and forecast 100 years ahead."
+fig, axes = plt.subplots(2, 2, figsize=(13, 8.4))
+ax = axes[0, 0]
+c_sw = PIDX[SHOW]
+t_last = np.flatnonzero(observed[c_sw])[-1]
+ax.plot(ages, M[1, :, c_sw, t_last] - M[0, :, c_sw, t_last], color=plotting.COLORS["observed"],
+        label=f"observed {years[t_last]}")
+sw_idx = lr["schedule_index"].reset_index(drop=True)
+shades = plt.get_cmap("Greens")(np.linspace(0.45, 0.95, 3))
+for h, colour in zip((15, 50, LR_H), shades):
+    row = sw_idx.index[(sw_idx["pop"] == SHOW) & (sw_idx["year"] == lr_origin + h)][0]
+    z = lr["schedules"][row]
+    ax.plot(ages, z[1] - z[0], color=colour, label=f"forecast +{h} y")
+ax.axhline(0, color="grey", lw=0.6)
+ax.set_xlabel("Age"); ax.set_ylabel("Male − female logit($q_x$)"); ax.legend(fontsize=8)
+ax.set_title(NAME[SHOW], fontsize=10)
+ax = axes[0, 1]
+q25, q50, q75 = np.percentile(100 * lr_rate, [25, 50, 75], axis=0)
+ax.fill_between(ages, q25, q75, color=COLOR["MDMx"], alpha=0.25, lw=0)
+ax.plot(ages, q50, color=COLOR["MDMx"], label="median over populations")
+ax.plot(ages, np.median(100 * lr_rate_hmd, axis=0), "--", color=COLOR["MDMx"], label="HMD-wide part")
+ax.axhline(0, color="grey", lw=0.6)
+ax.set_xlabel("Age"); ax.set_ylabel("Change per century (logit)"); ax.legend(fontsize=8)
+ax.set_title("Long-run rate of the male − female difference", fontsize=10)
+obs_sw = truth[(truth["pop"] == SHOW) & (truth["year"] > lr_origin - 60)].pivot(index="year", columns="sex",
+                                                                                  values="e0_obs")
+ax = axes[1, 0]
+for sex, style in (("female", "-"), ("male", "--")):
+    ax.plot(obs_sw.index, obs_sw[sex], style, color=plotting.COLORS["observed"])
+    ax.plot(lr_sw.index, lr_sw[sex], style, color=COLOR["MDMx"], label=f"{sex}")
+ax.set_xlabel("Year"); ax.set_ylabel("$e_0$ (years)"); ax.legend(fontsize=8)
+ax = axes[1, 1]
+ax.plot(obs_sw.index, obs_sw["female"] - obs_sw["male"], color=plotting.COLORS["observed"], label="observed")
+ax.plot(lr_gap.index, lr_gap, color=COLOR["MDMx"], label="MDMx forecast")
+ax.set_xlabel("Year"); ax.set_ylabel("Female − male $e_0$ (years)"); ax.legend(fontsize=8)
+fig.tight_layout()
+plt.show()
+```
+
+## How often one start would have been enough {#sec-c11-starts}
+
+The long-run forecasts come from one fit per population at
+`{python} lr_origin`, each to the population's whole history, with the
+starts of Step 3.  The cell counts the fits in which some start, and those
+in which the single moment-based start ($\rho$ in the middle of its
+range), ended more than `{python} f"{float(F['mle_start_gap_report']):g}"`
+below the maximum log-likelihood.
+
+```{python}
+#| label: c11-start-gaps
+#| code-summary: "How far below the maximum the starts of the long-run fits ended"
+START_GAP = float(F["mle_start_gap_report"])
+lr_fits = lr["jobs"]
+n_fits = len(lr_fits)
+n_gap_any = int((lr_fits["start_gap_max"] > START_GAP).sum())
+n_gap_moment = int((lr_fits["moment_gap"] > START_GAP).sum())
+# Starts per fit: the best grid points of the profile likelihood, the moment-based start with ρ mid-range,
+# and the moment-based starts at each fixed ρ; every fit must have used them all.
+n_starts = SET.mle_grid_top + 1 + len(SET.mle_rho_starts)
+if not (lr_fits["n_starts"] == n_starts).all():
+    raise ValueError(f"The long-run fits used {sorted(lr_fits['n_starts'].unique())} starts, not {n_starts}.")
+latex.report("fcNStarts", n_starts, desc="Starts of the optimiser per MDMx fit")
+latex.report("fcStartGapThreshold", START_GAP, text=f"{START_GAP:g}",
+             desc="Log-likelihood below the maximum at which a start counts as having missed it")
+print(f"{n_fits} fits from {lr_origin}: {int(lr_fits['converged'].sum())} converged; best start by kind: "
+      f"{lr_fits['best_start_kind'].value_counts().to_dict()}")
+print(f"Some start more than {START_GAP:g} below the maximum: {n_gap_any}; the moment-based start: {n_gap_moment}")
+latex.report("fcStartGapFits", n_fits,
+             desc=f"MDMx fits of the long-run forecasts (one per population, whole history, origin {lr_origin})")
+latex.report("fcStartGapAny", n_gap_any,
+             desc=f"Long-run fits in which some start ended more than {START_GAP:g} below the maximum log-likelihood")
+latex.report("fcStartGapMoment", n_gap_moment,
+             desc=f"Long-run fits in which the moment-based start (rho mid-range) ended more than {START_GAP:g} "
+                  "below the maximum log-likelihood")
+start_note = (f"In {n_gap_any} of the {n_fits} fits at least one start ended more than {START_GAP:g} below the "
+              "maximum log-likelihood"
+              + (f", and in {n_gap_moment} the moment-based start did: with that start alone, "
+                 f"{'that fit' if n_gap_moment == 1 else 'those fits'} would have stopped short of the maximum."
+                 if n_gap_moment else
+                 f"; the moment-based start came within {START_GAP:g} of the maximum in every fit."))
+print(start_note)
+```
+
+`{python} start_note`
+
+## Relation to existing methods
+
+The structural comparison of the methods, in the companion only, is generated from the settings
+actually used in this chapter.
+
+```{python}
+#| label: tbl-fc-comparison
+#| code-summary: "Table: structural comparison, generated from the settings used"
+oa = CMP["open_age"]
+R_SESSION = ctx["r_params"]["r"]
+R_BL = rbridge.session_info("bayeslife_forecast.R", bl.R_PACKAGES)
+dem = f"\\texttt{{demography}} {R_SESSION['packages']['demography']}"
+common_data = f"HMD deaths and exposures, ages 0--{oa - 1} and {oa}+"
+comparison = pd.DataFrame.from_dict({
+    "Data": [common_data, common_data, common_data,
+             "$\\operatorname{logit}({}_1q_x)$ of the curated HMD life tables, ages 0--109"],
+    "Years used": [f"observed years $\\le$ origin: whole history, or last {WIN} years; "
+                   "gaps filled by interpolation"] * 3
+                  + [f"own series: observed years $\\le$ origin, whole history or last {WIN} years, "
+                     "gaps skipped by the filter; bases, PCA and HMD drift: all populations, "
+                     "$\\le$ origin"],
+    "Smoothing": ["none", "each year: weighted monotonic splines", "as Hyndman--Ullah",
+                  "age basis smoothed (\\cref{sec:tucker:bsmooth}); the anchor's residual over age "
+                  f"(Whittaker, $\\nu$ = {SET.anchor_smoothing:,.0f})"],
+    "Age pattern": ["one fixed $b^{\\mathrm{LC}}_x$ (rank-1 SVD of $\\log m_x$)",
+                    f"{CMP['fdm_order']} functional components of $\\log m_x$",
+                    f"{CMP['coherent_order_product']} components (product) and "
+                    f"{CMP['coherent_order_ratio']} (each ratio)",
+                    f"{r2} shared age basis functions; {SET.n_pc} PCA scores of the "
+                    f"${r1}\\times{r2}$ core"],
+    "Sexes": ["fitted independently", "fitted independently",
+              "product--ratio: sex ratios stationary",
+              "one model; shared sex and age bases"],
+    "Time series": [f"random walk with drift on $k^{{\\mathrm{{LC}}}}_t$ ($k^{{\\mathrm{{LC}}}}_t$ fitted to deaths: \\texttt{{{CMP['lc_adjust']}}})",
+                    f"{CMP['fdm_ts_method'].upper()} (automatic) per coefficient",
+                    "ARIMA (product), ARFIMA (ratios)",
+                    f"damped local linear trend, Kalman filter, $\\rho\\in[{SET.rho_bounds[0]}, "
+                    f"{SET.rho_bounds[1]}]$, maximum likelihood"],
+    "Other populations": ["none", "none", "none (the two sexes)",
+                          f"drift target {SET.weight_hmd}$\\times$HMD-wide + "
+                          f"{SET.weight_country}$\\times$own ($W={SET.drift_window}$ years)"],
+    "Jump-off": [f"fitted (\\texttt{{{CMP['lc_jumpchoice']}}})",
+                 f"fitted (\\texttt{{{CMP['fdm_jumpchoice']}}})", "fitted",
+                 "filtered state, plus the observed schedule's residual smoothed over age (persistent anchor)"],
+    "Software": [f"\\texttt{{lca}}, {dem}", f"\\texttt{{fdm}}, {dem}",
+                 f"\\texttt{{coherentfdm}}, {dem}", "\\texttt{mdmx.forecast}"],
+}, orient="index", columns=[LABEL_TEX[m] for m in ("LC", "HU", "CFDM", "MDMx")])
+# R prints a package's version with dots (5.3.1); CRAN and the article write the last separator as a hyphen.
+bl_ver = R_BL["packages"]["bayesLife"]
+bl_ver = bl_ver[::-1].replace(".", "-", 1)[::-1] if bl_ver.count(".") == 2 else bl_ver
+comparison.insert(3, LABEL_TEX["BL"], [
+    "$e_0$ of the same HMD deaths and exposures",
+    f"as Lee--Carter: observed years $\\le$ origin, whole history or last {WIN} years; gaps filled",
+    "none",
+    "none: forecasts $e_0$ only",
+    "female $e_0$ modelled; male $e_0$ from the female--male gap model",
+    "double-logistic gain in $e_0$ plus noise, Bayesian hierarchical model (MCMC), annual steps",
+    "hierarchical: world parameters from the non-overlapping HMD populations",
+    "last observed $e_0$",
+    f"\\texttt{{bayesLife}} {bl_ver}"])
+comparison.insert(5, LABEL_TEX["FF"], [
+    "$\\operatorname{logit}({}_1q_x)$ of the curated HMD life tables, ages 0--109",
+    "all populations' observed years $\\le$ origin: the speed on every year, the shape law on the last "
+    f"{FFS.shape_window}",
+    "each population's $s_1$ over time; the speed and the shape law (LOWESS on $s_1$); the anchor's residual "
+    "over age, as anchored MDMx",
+    f"MDMx's space: {SET.n_pc} PCA scores; scores 2--{SET.n_pc} follow $s_1$ along the shape law",
+    "one model; MDMx's shared sex and age bases",
+    "none: $s_1$ moves at the pooled speed of its level; deviations from the shape law decay",
+    f"pooled over all populations; beyond the frontier, the {FFS.frontier_k} leading populations' pace",
+    "the observed schedule, its residual smoothed over age (persistent anchor)",
+    "\\texttt{mdmx.flowfield}"])
+comparison = comparison.reset_index().rename(columns={"index": "Feature"})
+comparison = comparison.rename(columns={LABEL_TEX["MDMx"]: "Anchored MDMx"})
+# The table standard: two tables, the established methods and this article's two forecasters, so that each
+# fits the page with its text wrapped.
+ESTABLISHED = [LABEL_TEX[m] for m in ("LC", "HU", "CFDM", "BL")]
+latex.save_table(
+    comparison[["Feature", *ESTABLISHED]], "tbl-fc-comparison",
+    "The established forecasting methods as they are run in this article.  The two forecasters of this "
+    "article are compared in the next table.",
+    short_caption="The established forecasting methods",
+    wrap={m: "2.9cm" for m in ESTABLISHED}, escape_cells=False)
+latex.save_table(
+    comparison[["Feature", "Anchored MDMx", LABEL_TEX["FF"]]], "tbl-fc-comparison-forecasters",
+    "The two forecasters of this article, under the same headings as the established methods in the previous "
+    "table.", short_caption="The two forecasters",
+    wrap={"Anchored MDMx": "6.2cm", LABEL_TEX["FF"]: "6.2cm"}, escape_cells=False)
+comparison
+```
+
+## Summary
+
+MDMx and the flow field forecast the same object, the complete schedule of
+both sexes, in the same space, and both start from the observed schedule,
+its departure from the scores smoothed over age.
+MDMx extrapolates each population's own damped trend, pulled towards the
+HMD-wide drift; the flow field moves each population along the paths that
+populations at its level of mortality followed, at the leaders' pace beyond
+the frontier.  Chapter 12 evaluates both, with the established methods,
+from every origin between 1900 and 2015.
+
+```{python}
+#| label: c11-end
+#| code-summary: "Write this chapter's numbers and close"
+latex.write_numbers()
+provenance.end_chapter();
+```

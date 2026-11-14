@@ -1,0 +1,36 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Checks asked for by the reviews of the full draft (Sam, 2026-11-04; docs/reviews/2026-11-04-*) and of
+# the article's text (Sam, 2026-11-06).
+# Each is reported beside the results it checks and changes none of them.
+# ══════════════════════════════════════════════════════════════════════════════
+
+[checks]
+# What the regimes add (chapters 07 and 09): the typology at this number of clusters beside the agreed K,
+# and the typical schedule alone.  K = 2 is the smallest number of clusters the mixtures were fitted with.
+k_alt = 2
+# Paired differences of the MAE of e0 (chapter 12, late era): pairs of entries (labels as in the chapter),
+# the first `paired_bands` horizon bands, bootstrap draws over origins, and the seed.
+paired_pairs = [["Flow field", "Ensemble"],
+                ["Flow field", "bayesLife, last 50 years"],
+                ["Flow field", "Lee–Carter, last 50 years, actual jump-off"],
+                ["Flow field", "MDMx + anchor, all years"],
+                ["Flow field", "FR2-all"]]
+paired_bands = 3
+paired_draws = 4000
+paired_seed = 20261104
+# The age-scoring sensitivity (chapter 12): the schedule and sex-difference measures with the ages from this
+# age on folded into one open interval (the comparators forecast one rate for it, which their schedules
+# repeat at every older age), for every entry and the truth alike; e65 unchanged.
+open_age = 100
+# The truncated HOSVD against higher-order orthogonal iteration in the completion model (chapter 04):
+# random hold-out splits, each hiding the rank search's share of observed country-years, and their seed
+# (not the rank search's, whose split chose the ranks).  The ranks and EM settings stay the model's.
+hooi_splits = 10
+hooi_seed = 20261106
+# The gap and the sex differences by age (chapter 12), a diagnostic beside the overall comparison and not an
+# entry of it: the anchored forecasts scored again with the male − female difference of the jump-off schedule
+# they keep replaced by its moving average over this many single ages; and the error of that difference split
+# into the ages up to sexdiff_young_last, those between, and those from sexdiff_old_first.
+sexdiff_smooth_ages = 7
+sexdiff_young_last = 39
+sexdiff_old_first = 90

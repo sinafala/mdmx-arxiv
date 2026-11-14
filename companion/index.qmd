@@ -1,0 +1,45 @@
+---
+title: "Preface"
+number-sections: false
+---
+
+This book is the computational companion to
+
+> Clark, S. J. (2026). *Multi-dimensional Mortality (MDMx)*. arXiv:2603.20518.
+
+It reproduces every figure, table and number in the paper from the Human
+Mortality Database, and explains each step of the analysis in more detail
+than a journal article can.
+
+## How the book is organised
+
+* **Part I — Data pipeline** (chapters d1–d6, paper §2) takes the HMD
+  download to the four-way mortality tensor: verifying the release, reading the files,
+  curation, the event dictionary of wars and pandemics, adaptive temporal
+  pooling, and assembling the tensor.  Every change made to the published
+  data is recorded in `results/ledger/data-changes.csv`.
+* **Part II — Analysis** has one chapter per section of the paper's methods and
+  results: 04 (the Tucker decomposition, paper §3), 06 (a typology of age patterns, §4),
+  07 (reconstruction at arbitrary mortality levels, §5), 08 (exceptional mortality, §6),
+  09 (life table fitting, §7), 10 (prediction from summary indicators, §8),
+  11 (the two forecasters, §9, and what the flow field says about mortality change,
+  §11.4) and 12 (the forecast evaluation, §10).  The chapters' file names keep their
+  own numbers (04, 06, …), which do not follow the paper's sections.  Each chapter
+  also shows results that the paper leaves out.
+* **Appendices** describe the computing environment and show the
+  provenance of every result.
+
+## How to read a chapter
+
+Each chapter starts with a box naming the paper sections it reproduces and
+the figures and tables it writes.  Code is shown next to the prose that
+explains it; the routine machinery lives in the `mdmx` Python package
+(`src/mdmx/`), whose functions are documented line by line.
+
+## How results reach the paper
+
+Chapters write figures to `results/figures/`, tables to `results/tables/`
+and every number the paper quotes to `results/numbers/` (as LaTeX macros).
+The paper reads only those files, so the paper and the book can never
+disagree.  `results/manifest.json` records, for every one of these files,
+the chapter that produced it and the checksums of its inputs.

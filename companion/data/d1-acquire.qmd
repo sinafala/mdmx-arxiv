@@ -1,0 +1,154 @@
+---
+title: "Acquiring the data"
+subtitle: "Which HMD release, which files, and how we know they are the right ones"
+---
+
+::: {.callout-note appearance="simple"}
+## Paper correspondence
+Paper §2.1 ("The Human Mortality Database") and the data and code availability
+statement of §13 ("Computational Environment").  This chapter produces no figure or
+table; it establishes the **provenance anchor** for everything that follows.
+:::
+
+## The Human Mortality Database release
+
+All analyses use the period life tables of the
+[Human Mortality Database](https://www.mortality.org) (HMD).  The HMD is
+revised continually — new years are added and past estimates are sometimes
+corrected — so "the HMD" is not a fixed data set.  To make the analysis
+reproducible we therefore pin one specific **release**: the bulk download
+("all statistics" zip archive) dated **29 October 2026**.
+
+The HMD licenses its estimates (life tables, death rates, exposures) under
+CC BY 4.0, but asks users to obtain the data from its website rather than
+from third parties.  This repository therefore does **not** contain the data.
+You download the zip yourself (a free registration is required) and save it,
+unopened and unrenamed apart from the name below, as
+
+```
+raw/hmd/hmd_statistics_20261029.zip
+```
+
+The file `raw/MANIFEST.json` — which *is* part of the repository — records
+the release, where it came from, and SHA-256 checksums of the zip and of the
+four files inside it that the analysis reads.  A checksum is a 64-character
+fingerprint of a file's exact bytes: if a single byte differs, the
+fingerprint differs.  Verifying it proves that you are running the analysis
+on exactly the data the paper used.
+
+```{python}
+#| label: d1-setup
+#| code-summary: "Chapter setup: imports and provenance tracking"
+
+# Every chapter starts the same way: import the project package, declare
+# which chapter is running (so every artefact, figure, table and number it
+# produces is attributed to it), and load the analysis parameters.
+import json
+
+import pandas as pd
+
+from mdmx import artifacts, data, latex, paths, provenance
+from mdmx.config import params
+
+provenance.start_chapter("d1-acquire")
+P = params()
+print(f"Project root : {paths.root().name}/")          # the folder's name: the full path is the reader's own
+print(f"HMD release  : {P.data.hmd_release}")
+```
+
+## The manifest
+
+```{python}
+#| label: d1-manifest
+#| code-summary: "Show what the manifest says about the release"
+
+manifest = json.loads((paths.raw() / "MANIFEST.json").read_text(encoding="utf-8"))
+release = manifest["hmd"][P.data.hmd_release]
+released = pd.Timestamp(P.data.hmd_release)
+latex.report("dataReleaseDate", f"{released.day} {released:%B %Y}", desc="Date of the HMD release used")
+latex.report("dataReleaseDoi", release["doi"], desc="Version DOI of the HMD release used")
+for key in ("title", "source_url", "file", "zip_sha256", "zip_bytes",
+            "last_modified_stamp", "downloaded", "license"):
+    print(f"{key:>20s} : {release[key]}")
+print("\nFiles read from inside the zip, with their SHA-256 checksums:")
+for member, digest in release["members"].items():
+    print(f"  {member:<45s} {digest}")
+```
+
+Only four of the 176 files in the archive are used: the female and male
+1×1 period life tables (single years of age by single calendar years), and
+the 1×1 death counts and exposures to risk, which the adaptive pooling step
+needs (chapter d5).
+
+## Verifying the release
+
+`mdmx.data.verify_release()` locates the release and recomputes every
+checksum.  It accepts either the zip exactly as downloaded or — for
+convenience — a folder `raw/hmd/20261029/` holding just the four files with
+their paths as inside the zip.  In both cases each of the four files must
+match the manifest, and if the zip is present its own checksum must match
+too.  Any mismatch stops the pipeline with an error.
+
+```{python}
+#| label: d1-verify
+#| code-summary: "Verify the checksums and register the release as the root artefact"
+
+report = data.verify_release(P.data.hmd_release)
+print(f"Release found at: {report['source']}")
+if report["zip_sha256"]:
+    print(f"Zip checksum     : OK ({report['zip_sha256'][:16]}…)")
+for member, res in report["members"].items():
+    print(f"  {member:<45s} {'OK' if res['ok'] else 'MISMATCH'}")
+
+# Record the verified release as the root of the provenance graph.  Its
+# content is the release label and the checksums of the four member files —
+# deliberately NOT the file location or the zip's own checksum, so that the
+# cache is identical whether the data were read from the zip or from an
+# extracted folder, on any computer.  Every downstream artefact is thereby
+# tied to exactly these bytes.
+artifacts.save(
+    "hmd_release",
+    {"release": P.data.hmd_release,
+     "members": {m: r["sha256"] for m, r in report["members"].items()}},
+    params={"release": P.data.hmd_release},
+    desc="Verified HMD bulk release: checksums of the four files used",
+)
+```
+
+## The populations
+
+The HMD covers 50 populations in this release.  Several are not
+independent: the United Kingdom total (GBR_NP) contains England & Wales,
+Scotland and Northern Ireland; Germany (DEUTNP) contains East and West
+Germany for the years they overlap; and New Zealand (NZL_NP) contains its
+Māori and non-Māori populations.  The HMD also publishes *civilian-only*
+series for France and England & Wales, which omit military deaths in war
+years.  The register below records these relationships; it lives in
+`config/populations.csv`, so it can be read and edited without touching code.
+
+```{python}
+#| label: d1-populations
+#| code-summary: "The population register"
+
+pops = data.load_populations()
+artifacts.save("populations", pops, inputs=["hmd_release"],
+               desc="Population register: HMD codes, names, aggregates, inclusion")
+pd.set_option("display.max_rows", 60)
+used = pops[pops["included"] == "yes"]
+latex.report("dataNCountries", int((used["aggregate_of"] == "").sum()),
+             desc="Countries and territories: the populations used that are not part of another")
+pops
+```
+
+The two civilian series are excluded (`included = no`), leaving
+`{python} len(used)` populations.  The overlapping aggregates are *kept*, as in the paper: each is
+a population in its own right.  The consequences — some populations count
+twice in the decomposition, and their forecast errors are not independent —
+are discussed in the paper (§2.1, and §11.5, "Limitations").
+
+```{python}
+#| label: d1-end
+#| code-summary: "Close the chapter"
+latex.write_numbers()
+provenance.end_chapter();
+```

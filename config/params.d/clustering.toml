@@ -1,0 +1,183 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Parameters of book chapter 06-clustering (paper §6, "Clustering mortality
+# regimes").  Read with  P = params();  P.clustering.<sub-table>.<name>.
+#
+# Each sub-table is hashed separately by the artefact store, so changing a
+# display setting does not refit the mixtures.
+# ══════════════════════════════════════════════════════════════════════════════
+
+[clustering]
+
+# ──────────────────────────────────────────────────────────────────────────────
+[clustering.features]  # paper §6.2 (level-free features)
+# ──────────────────────────────────────────────────────────────────────────────
+# Number of age columns of the effective core used: the smallest k whose
+# columns capture this share of the sum of squares of the observed schedules
+# (the τ rule of paper Eq. 15 applied at 99.9% instead of 99.99%).  The level
+# column (age component 1) is then dropped, leaving columns 2…k for both sex
+# components.  The chapter shows that these columns are smooth and
+# signal-dominated and the next ones are not.
+column_share = 0.999
+# The e0-conditional mean of every core entry is a LOWESS curve against the
+# sex-average e0 of the observed schedule, fitted across all observed
+# country-years: span (share of points), robustifying iterations, and the
+# statsmodels speed-up `delta` as a share of the e0 range.
+conditional_frac = 0.10
+conditional_iterations = 3
+conditional_delta = 0.01
+# Step (years) of the e0 grid on which the conditional mean is stored.
+e0_grid_step = 0.1
+# Share of the variance of the residual features kept by PCA (paper: 99.9%).
+pca_variance = 0.999
+
+# ──────────────────────────────────────────────────────────────────────────────
+[clustering.gmm]  # paper §6.3, Eq. (bic)
+# ──────────────────────────────────────────────────────────────────────────────
+# Candidate numbers of mixture components (paper §6.3: K = 2, …, 15).
+k_min = 2
+k_max = 15
+# "Each with its own mean vector and covariance matrix" (paper §6.3): an
+# unrestricted ("full") covariance matrix per component.  Shared ("tied")
+# and diagonal covariances are compared in the supplementary section.
+covariance_type = "full"
+# EM restarts per K (best likelihood kept), iteration cap, convergence
+# tolerance on the mean log-likelihood, and the ridge added to every
+# covariance diagonal (scikit-learn defaults except n_init and max_iter).
+# The level-free features have many local optima of similar likelihood, so
+# 20 starts are used (with 5, BIC comparisons between K were unreliable).
+n_init = 20
+max_iter = 500
+tol = 1e-3
+reg_covar = 1e-6
+# Seed for the k-means starting values of EM.
+seed = 20260218
+
+# ──────────────────────────────────────────────────────────────────────────────
+[clustering.stability]  # paper §6.3: the choice of K (decision A2, 2026-10-26)
+# ──────────────────────────────────────────────────────────────────────────────
+# K is the largest number of clusters whose partition is reproducible: the
+# mixture is refitted for every K from these seeds of the k-means starting
+# values (besides gmm.seed, with gmm.n_init starts each), and K must have a
+# mean pairwise adjusted Rand index (ARI) of at least `reproducibility_ari`
+# between the refits, as must every smaller K.
+seeds = [1, 2, 3, 4]
+reproducibility_ari = 0.9
+# Whether the clusters depend on which populations are in the sample is
+# reported, not used to choose K: whole population families (a population
+# and its HMD parts, from config/populations.csv) are resampled with
+# replacement, the mixture is refitted on each resample (with gmm.n_init EM
+# starts, as the chapter's partition, so that the check measures the
+# populations and not the starting values), and each cluster's Jaccard
+# similarity with its best match is computed on the country-years in the
+# resample (Hennig 2007).  The typical schedule and the PCA are not refitted.  Reading of a cluster's mean Jaccard (documentation of Hennig's
+# fpc::clusterboot): at least `jaccard_stable` = a valid, stable cluster;
+# from `jaccard_doubtful` up to that = a pattern whose members are doubtful;
+# below `jaccard_doubtful` = not to be trusted.
+bootstrap_resamples = 50
+bootstrap_seed = 20261026
+jaccard_doubtful = 0.6
+jaccard_stable = 0.75
+# Worker processes for the refits (0: one per CPU core; 1: none).  The
+# results do not depend on it, so it is left out of the cache keys.
+workers = 0
+
+# ──────────────────────────────────────────────────────────────────────────────
+[clustering.epochs]  # paper §6.6
+# ──────────────────────────────────────────────────────────────────────────────
+# Rolling-window width W (years) and the minimum number of observed years a
+# window must contain for its slope to be used.
+window = 15
+min_points = 8
+# Countries with fewer observed years than this are not classified.
+min_years = 15
+# Thresholds on the slope of the (oriented) level signal G_{c,t}[1,1], in
+# level units per year: |slope| ≤ delta is stagnation, |slope| > delta_rapid
+# is rapid change (paper §6.6: δ = 0.05, δ_rapid = 0.20).  The chapter
+# translates them into years of e0 per year.
+delta = 0.05
+delta_rapid = 0.20
+# LOWESS smoothing of each country's level and e0 series: span = the larger
+# of lowess_frac and lowess_min_points / (number of observed years), with
+# lowess_iterations robustifying iterations (the statsmodels default, 3).
+lowess_frac = 0.20
+lowess_min_points = 10
+lowess_iterations = 3
+
+# ──────────────────────────────────────────────────────────────────────────────
+[clustering.diagnostics]  # checks of what distinguishes the clusters
+# Ages (inclusive) over which the roughness of an observed schedule — the
+# mean squared second difference of logit(q_x) — is measured.  Age 0 is
+# excluded because the infant–child discontinuity is genuine.
+noise_ages = [1, 59]
+# A cluster is flagged as a small-population noise cluster if its members'
+# schedules are, at the median, more than `noise_roughness_ratio` times as
+# rough as typical schedules with the same e0, AND more than
+# `noise_small_share` of its members come from the smallest quarter of
+# country-years by population size (total HMD exposure).
+noise_roughness_ratio = 2.0
+noise_small_share = 0.5
+
+# ──────────────────────────────────────────────────────────────────────────────
+[clustering.display]  # figures only; changing these refits nothing
+# ──────────────────────────────────────────────────────────────────────────────
+# Countries shown in the feature-space trajectory figure (fig-s5-trajectories).
+trajectory_countries = ["SWE", "FRATNP", "GBRTENW", "USA", "JPN", "RUS",
+                        "ESP", "ITA", "AUS", "POL", "DEUTNP", "NLD"]
+# Countries shown in the epoch figure (fig-s5-epoch-trajectories).
+epoch_countries = ["SWE", "FRATNP", "GBRTENW", "USA", "JPN", "RUS",
+                   "ESP", "ITA", "ISL", "POL", "DEUTNP", "AUS"]
+# Number of merges shown in the truncated Ward dendrogram.
+dendrogram_leaves = 60
+# Width of the calendar bins and of the e0 bins of the time-structure figure.
+time_bin = 10
+e0_bin = 5
+# e0 values at which fig-s5-centroid-overlay draws the typical schedule.
+typical_e0 = [30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 85.0]
+# A cluster counts as "present" in an e0 band if it has at least this many
+# members there (Step 8).
+band_min_members = 10
+# An e0 band counts as well filled if it holds at least this many observed
+# country-years (Step 8).
+band_min_obs = 100
+# A country-year's assignment counts as uncertain if its largest posterior
+# probability is below this (Step 5).
+posterior_cut = 0.9
+# In the text describing each cluster, an age group is mentioned when the
+# cluster's mean deviation there is at least this large (logit units; 0.15
+# is about 16% higher or lower odds of dying than typical at the same e0).
+describe_threshold = 0.15
+# At most this many member schedules are drawn per cluster in the spaghetti
+# plots (a random subset drawn with `seed`); the centroid uses all members.
+spaghetti_max_lines = 300
+seed = 20260218
+
+# ──────────────────────────────────────────────────────────────────────────────
+[clustering.regions]  # fig-s5-region-summary
+# ──────────────────────────────────────────────────────────────────────────────
+# World region of every population in the tensor.  Every population must appear exactly once; the chapter stops with an
+# error otherwise.  Sub-national and aggregate series (e.g. GBR_NP and its
+# parts) are all listed, because all of them are clustered.
+"Nordic countries" = ["SWE", "NOR", "DNK", "FIN", "ISL"]
+"Western Europe" = ["GBR_NP", "GBRTENW", "GBR_SCO", "GBR_NIR", "IRL", "BEL", "NLD",
+                    "LUX", "CHE", "AUT", "FRATNP"]
+"Southern Europe" = ["ESP", "PRT", "ITA", "GRC"]
+"Central Europe" = ["DEUTNP", "DEUTE", "DEUTW", "CZE", "POL", "SVK", "SVN", "HUN", "HRV"]
+"Eastern Europe" = ["RUS", "UKR", "BLR", "LTU", "LVA", "EST", "BGR"]
+"North America" = ["USA", "CAN"]
+"Latin America" = ["CHL"]
+"Asia-Pacific" = ["JPN", "KOR", "TWN", "HKG", "AUS", "NZL_NP", "NZL_MA", "NZL_NM"]
+"Middle East" = ["ISR"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+[clustering.supplementary]  # the chapter's last section (not in the paper)
+# ──────────────────────────────────────────────────────────────────────────────
+# Alternatives compared with the main specification: other covariance
+# structures, other numbers of age columns k, other LOWESS spans for the
+# conditional mean, and residuals also divided by their e0-conditional
+# root-mean-square (standardised).  K range, seed and EM settings as in
+# [clustering.gmm], except the number of EM starts.
+sensitivity_covariance = ["tied", "diag"]
+sensitivity_columns = [4, 8, 10]
+sensitivity_frac = [0.05, 0.20]
+sensitivity_standardised = true
+sensitivity_n_init = 2

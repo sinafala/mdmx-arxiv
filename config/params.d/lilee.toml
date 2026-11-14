@@ -1,0 +1,62 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Li–Lee coherent forecasts — a benchmark of chapter 12-evaluation; paper §12
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Read with  LiLeeSettings.from_params(P.section("lilee"))  (module mdmx.lilee).
+# Li & Lee (2005)'s augmented common factor model, log m_{x,t,i} = a_{x,i} +
+# B_x K_t + b_{x,i} k_{t,i}, in two forms (Sam, 2026-11-01): the group of the
+# origin's populations, each sex separately, and the two sexes of one
+# population.  Reported beside the comparison, never ranked, at the
+# development origins only.  Its rates are the comparators' smoothed rates
+# (each year smoothed on its own); K is refitted to the group's life expectancy
+# and the k_i are not refitted, as Li & Lee (2005) did (`refit`; Sam,
+# 2026-11-01, after the paper was checked).  K is forecast by a random walk with drift,
+# each k_i by an AR(1); a k_i whose AR(1) coefficient is not inside (−1, 1) is
+# held at its last value (a fixed rule, stated in the module, not a setting).
+
+[lilee]
+
+# Fitting window in calendar years.  Group form: the common factor is
+# estimated on [origin − window + 1, origin] (or on the latest earlier window
+# with min_core complete populations, when the origin year is unobserved
+# nearly everywhere: 1920), and every population's own terms on its years from
+# that window's first year to its last observed year.  Sex-coherent form: each
+# population's last `window` years up to its last observed year before the
+# origin.  The same length as the evaluation's second fitting-period policy
+# ([evaluation] window).
+window = 50
+# A population (group form) or a population's pair of sexes (sex-coherent
+# form) with fewer years in its window is not forecast, and is listed in the
+# failures.  The evaluation's jobs have at least 30 observed years up to the
+# origin ([evaluation] min_train_years), so this binds only for a population
+# whose years end well before the origin.  At least 3 (the AR(1) of k).
+min_years = 20
+# Group form: the common factor needs at least this many core populations
+# (rates in every year of the window, an aggregate never together with its
+# parts); with fewer, the origin's populations are not forecast.
+min_core = 3
+# The aggregate whose Lee–Carter fit is the common factor: "exposure", the
+# combined population's death rate Σ_i m_i E_i / Σ_i E_i (ΣD/ΣE when m = D/E;
+# Li & Lee's group rate), or "logmean", the mean of the members' log rates
+# (equal weights).
+aggregate = "exposure"
+# The second stage, after the SVD (module mdmx.lilee, "Second stage"):
+#   "deaths"  K refitted so that the core's implied deaths equal its observed
+#             total deaths in each year (Lee & Carter 1992's criterion, the
+#             book's Lee–Carter: demography::lca(adjust = "dt")), then each k_i
+#             so that its population's (or sex's) implied deaths equal its own.
+#             Li & Lee reject refitting the k_i: on the HMD it has no exact
+#             solution in 14.5 % of the sex-coherent member-years.  Needs
+#             aggregate = "exposure" (so does "deaths_common").
+#   "deaths_common"  K refitted to the core's deaths, the k_i not refitted
+#             (Li & Lee's structure with Lee & Carter's criterion).
+#   "e0"      Li & Lee (2005) as published (the book's choice): K refitted to
+#             the life expectancy of the aggregate rate; the k_i are not
+#             refitted (PMC1356525, "Extending the LC method").
+#   "none"    no second stage (the SVD's K and k_i), a sensitivity.
+# The forecast jumps off from the fit of the last year after this stage.
+refit = "e0"
+# Method codes in the forecasts' `method` column (letters and digits only:
+# they name artefacts).
+method_group = "LLG"
+method_sex = "LLS"

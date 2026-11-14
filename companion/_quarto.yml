@@ -1,0 +1,82 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# The MDMx computational companion book
+# ══════════════════════════════════════════════════════════════════════════════
+# Render from the repository root with:      uv run mdmx render --project companion
+# (which runs quarto render in companion/ with MDMX_PROJECT=companion)
+#
+# Every chapter executes its code on each render.  Heavy steps are cached by
+# the artefact store (mdmx.artifacts), which recomputes a step only when its
+# inputs, parameters or code change — so we do NOT use Quarto's `freeze`,
+# which could silently show results computed from out-of-date inputs.
+
+project:
+  type: book
+  output-dir: _output
+
+book:
+  title: "MDMx: Multi-dimensional Mortality"
+  subtitle: "Computational companion to arXiv:2603.20518 — every figure, table and number in the paper, reproduced from the downloaded data"
+  author: "Samuel J. Clark"
+  date: today
+  repo-url: https://github.com/sinafala/mdmx-arxiv
+  chapters:
+    - index.qmd
+    - part: "Part I — Data pipeline"
+      chapters:
+        - data/d1-acquire.qmd
+        - data/d2-ingest.qmd
+        - data/d3-curate.qmd
+        - data/d4-events.qmd
+        - data/d5-pooling.qmd
+        - data/d6-tensor.qmd
+    - part: "Part II — Analysis (one chapter per paper section)"
+      chapters:
+        - analysis/04-tucker.qmd
+        - analysis/06-clustering.qmd
+        - analysis/07-trajectories.qmd
+        - analysis/08-exceptional.qmd
+        - analysis/09-fitting.qmd
+        - analysis/10-svdcomp.qmd
+        - analysis/11-forecasting.qmd
+        - analysis/12-evaluation.qmd
+  appendices:
+    - appendices/A-environment.qmd
+    - appendices/B-provenance.qmd
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: show
+    code-tools: true
+    code-line-numbers: true
+    code-overflow: wrap
+    fig-width: 8
+    fig-height: 5
+    html-math-method: mathjax
+    include-in-header:
+      text: |
+        <script>
+        window.MathJax = { tex: { macros: {
+          ezero: "e_0", qx: "{}_1q_x",
+          M: "\\mathcal{M}", G: "\\mathcal{G}",
+          bS: "\\mathbf{S}", bA: "\\mathbf{A}", bC: "\\mathbf{C}", bT: "\\mathbf{T}",
+          R: "\\mathbb{R}", logit: "\\operatorname{logit}"
+        } } };
+        </script>
+
+execute:
+  echo: true
+  warning: true
+  message: false
+  freeze: false
+  cache: false
+  # No kernel daemon: a kept-alive kernel would carry the previous render's environment (MDMX_FORCE)
+  # and its already-imported modules into the next render.
+  daemon: false
+
+jupyter: python3
+
+bibliography: references.bib

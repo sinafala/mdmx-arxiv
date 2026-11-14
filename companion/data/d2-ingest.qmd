@@ -1,0 +1,243 @@
+---
+title: "Ingesting the life tables"
+subtitle: "From HMD text files to tidy long tables, and a first look at the data"
+---
+
+::: {.callout-note appearance="simple"}
+## Paper correspondence
+Paper §2 ("Data and Their Preparation"), §2.1–2.2.  Produces
+`fig-s1-coverage`, `fig-s1-e0-trends`, `fig-s1-qx-profiles`,
+`fig-s1-logit-qx` and `fig-s1-sex-diff`, all in the companion only.
+:::
+
+## What the files look like
+
+Each HMD bulk file holds every population in one whitespace-separated
+table.  The first line names the series and gives its "Last modified"
+stamp, the second is blank, and the third is the column header.  Missing
+values are written as a single dot, and the oldest age group is written
+`110+` (the open interval: everyone aged 110 or more).
+
+```{python}
+#| label: d2-setup
+#| code-summary: "Chapter setup"
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from mdmx import artifacts, data, latex, lifetable, plotting, provenance
+from mdmx.config import params
+
+provenance.start_chapter("d2-ingest")
+plotting.use_style()
+P = params()
+release = artifacts.load("hmd_release")
+source = data.hmd_source(P.data.hmd_release)
+```
+
+```{python}
+#| label: d2-peek
+#| code-summary: "Print the first lines of the female life-table file"
+with data.open_member(source, data.HMD_MEMBERS["lt_female"]) as fh:
+    for _ in range(5):
+        print(fh.readline().rstrip())
+```
+
+## Reading the files
+
+`mdmx.data.ingest_life_tables()` reads the female and male files with
+pandas (splitting on runs of whitespace and treating `.` as missing),
+converts `110+` to the integer 110, and stacks the two sexes into one
+**long** table with one row per population × sex × year × age.  A long table
+is the natural format for a data pipeline: every filter, join and summary is
+a one-liner, and each row is one fact.  `ingest_deaths_exposures()` does the
+same for the death counts and exposures, which are published with female,
+male and total columns side by side and are reshaped to the same long form.
+
+Both tables are saved as **artefacts** — Parquet files in `work/companion/artifacts/`
+with a provenance record that names their input (the verified release) — so
+later chapters load them in a fraction of a second instead of re-parsing
+200 MB of text.
+
+```{python}
+#| label: d2-ingest
+#| code-summary: "Parse the four HMD files into long tables (cached)"
+
+def _ingest():
+    lt, lt_report = data.ingest_life_tables(source)
+    de, de_report = data.ingest_deaths_exposures(source)
+    return {"lt": lt, "de": de, "report": {**lt_report, **de_report}}
+
+raw = artifacts.stage("hmd_raw", _ingest, inputs=["hmd_release"], code=[_ingest, data],
+                      desc="HMD 1x1 period life tables, deaths and exposures, long format")
+lt_raw, de_raw = raw["lt"], raw["de"]
+
+for member, rep in raw["report"].items():
+    print(f"{member:<45s} {rep['rows']:>9,} rows   [{rep['title'][:60]}]")
+print()
+print(lt_raw.head())
+```
+
+```{python}
+#| label: d2-counts
+#| code-summary: "Basic counts"
+n_pops = lt_raw["pop"].nunique()
+n_tables = lt_raw.groupby(["pop", "sex", "year"], observed=True).ngroups
+first, last = int(lt_raw["year"].min()), int(lt_raw["year"].max())
+missing_rows = int(lt_raw[["mx", "qx", "ax"]].isna().any(axis=1).sum())
+
+latex.report("dataNPopsHMD", n_pops, desc="Populations in the HMD release")
+latex.report("dataNTablesHMD", n_tables, desc="Sex-specific 1x1 period life tables in the release")
+latex.report("dataFirstYear", first, text=str(first), desc="First calendar year in the HMD")
+latex.report("dataLastYear", last, text=str(last), desc="Last calendar year in the HMD")
+print(f"{n_pops} populations, {n_tables:,} sex-specific life tables, years {first}–{last}")
+print(f"{missing_rows:,} rows contain a missing value (all in the tables listed in chapter d3)")
+```
+
+## A first look
+
+The figures in this section show the data **as published by the HMD**,
+before any curation.  They use the 48 populations retained for the analysis
+(the two civilian-only duplicate series are left out, see chapter d1).
+
+```{python}
+#| label: d2-included
+#| code-summary: "Restrict the descriptive figures to the retained populations"
+pops = artifacts.load("populations")
+keep = set(pops.loc[pops["included"] == "yes", "code"])
+names = dict(zip(pops["code"], pops["name"]))
+lt48 = lt_raw[lt_raw["pop"].isin(keep)]
+e0 = (lt48[lt48["age"] == 0][["pop", "sex", "year", "ex"]]
+      .rename(columns={"ex": "e0"}).reset_index(drop=True))
+```
+
+### Coverage
+
+The HMD is **ragged**: Sweden's series begins in 1751, but many populations
+enter only in the second half of the twentieth century.  This raggedness is
+the central data problem the decomposition has to deal with (chapter 04).
+
+```{python}
+#| label: fig-s1-coverage
+#| fig-cap: "HMD temporal coverage by population. Each coloured cell indicates that a 1×1 period life table is available for that population-year. Populations are sorted by the first year of available data."
+#| fig-height: 7
+cov = (e0[e0["sex"] == "female"].assign(v=1)
+       .pivot_table(index="pop", columns="year", values="v", fill_value=0))
+cov = cov.loc[cov.idxmax(axis=1).sort_values().index]           # sort by first year
+fig, ax = plt.subplots(figsize=(10, 7))
+ax.imshow(cov.to_numpy(), aspect="auto", interpolation="nearest",
+          cmap=plt.matplotlib.colors.ListedColormap(["#f0f0f0", "#2171b5"]),
+          extent=(cov.columns[0] - 0.5, cov.columns[-1] + 0.5, len(cov) - 0.5, -0.5))
+ax.set_yticks(range(len(cov)), [names[p] for p in cov.index], fontsize=7)
+ax.set_xlabel("Year")
+ax.grid(False)
+plotting.save_figure(fig, "fig-s1-coverage")
+plt.show()
+latex.report("dataNPopsBeforeNineteenHundred", int((cov.idxmax(axis=1) < 1900).sum()),
+             desc="Retained populations whose series start before 1900")
+latex.report("dataNPopsFromNineteenThirtyThree", int((cov.idxmax(axis=1) >= 1933).sum()),
+             desc="Retained populations whose series start in 1933 or later")
+```
+
+### Life expectancy at birth
+
+```{python}
+#| label: fig-s1-e0-trends
+#| fig-cap: "Life expectancy at birth over time for all retained HMD populations, by sex. Thin lines: individual populations; bold line: the median across populations in each year. Sharp dips mark wars and pandemics."
+fig, axes = plt.subplots(1, 2, figsize=(10, 4.5), sharey=True)
+for ax, sex in zip(axes, data.SEXES):
+    sub = e0[e0["sex"] == sex]
+    for _, g in sub.groupby("pop"):
+        ax.plot(g["year"], g["e0"], color=plotting.COLORS[sex], alpha=0.15, lw=0.6)
+    med = sub.groupby("year")["e0"].median()
+    ax.plot(med.index, med.to_numpy(), color=plotting.COLORS[sex], lw=2, label="Median")
+    ax.set_title(sex.title())
+    ax.set_xlabel("Year")
+    ax.legend(loc="lower right")
+axes[0].set_ylabel(r"$e_0$ (years)")
+plotting.save_figure(fig, "fig-s1-e0-trends")
+plt.show()
+```
+
+### The age pattern of mortality
+
+The probability of dying, $q_x$, has the familiar U (or J) shape: high in
+infancy, lowest around age 10, then rising roughly exponentially with age.
+The logit transform, $\operatorname{logit}(q) = \log\{q/(1-q)\}$, maps
+probabilities onto the whole real line; on that scale the old-age rise is
+close to linear, variability is more even across ages, and differences
+between schedules are additive — which is why the whole analysis works with
+$\operatorname{logit}(q_x)$ (paper §2.2, "The quantity modelled").
+
+```{python}
+#| label: d2-selection
+#| code-summary: "Schedules used to illustrate the age pattern"
+# Russia's HMD series ends in 2014, so its most recent table is used.
+SELECTION = [("SWE", 1800), ("SWE", 1900), ("SWE", 2020), ("JPN", 2020),
+             ("USA", 2020), ("RUS", 2014)]
+def schedule(pop, year, sex):
+    s = lt48[(lt48["pop"] == pop) & (lt48["year"] == year) & (lt48["sex"] == sex)
+             & (lt48["age"] <= P.data.age_max)].sort_values("age")
+    return s["age"].to_numpy(), s["qx"].to_numpy()
+```
+
+```{python}
+#| label: fig-s1-qx-profiles
+#| fig-cap: "Age-specific probability of dying (q_x, log scale) for selected populations and years: high infant mortality, a childhood minimum, and an approximately exponential increase at older ages."
+fig, axes = plt.subplots(1, 2, figsize=(10, 4.5), sharey=True)
+for ax, sex in zip(axes, data.SEXES):
+    for pop, year in SELECTION:
+        age, q = schedule(pop, year, sex)
+        ax.semilogy(age, np.clip(q, 1e-6, None), lw=1.1, label=f"{names[pop]} {year}")
+    ax.set_title(sex.title()); ax.set_xlabel("Age"); ax.set_ylim(1e-5, 1)
+axes[0].set_ylabel(r"$q_x$ (log scale)")
+axes[1].legend(fontsize=7, loc="lower right")
+plotting.save_figure(fig, "fig-s1-qx-profiles")
+plt.show()
+```
+
+```{python}
+#| label: fig-s1-logit-qx
+#| fig-cap: "The same schedules on the logit scale. Above age 40 the rise is close to linear (the Gompertz law); the transform stabilises variance and makes differences between schedules additive."
+fig, axes = plt.subplots(1, 2, figsize=(10, 4.5), sharey=True)
+for ax, sex in zip(axes, data.SEXES):
+    for pop, year in SELECTION:
+        age, q = schedule(pop, year, sex)
+        ax.plot(age, lifetable.logit(q, P.data.q_min), lw=1.1, label=f"{names[pop]} {year}")
+    ax.set_title(sex.title()); ax.set_xlabel("Age")
+axes[0].set_ylabel(r"logit$(q_x)$")
+axes[1].legend(fontsize=7, loc="lower right")
+plotting.save_figure(fig, "fig-s1-logit-qx")
+plt.show()
+```
+
+### The sex differential
+
+On the logit scale the male–female difference
+$\operatorname{logit}(q^{m}_x) - \operatorname{logit}(q^{f}_x)$ is a log odds
+ratio.  Positive values mean higher male mortality, which is the case at
+almost every age; the excess is largest in young adulthood and has grown
+since the nineteenth century.
+
+```{python}
+#| label: fig-s1-sex-diff
+#| fig-cap: "Male–female difference in logit mortality by age, Sweden, selected years. Values above zero indicate excess male mortality."
+fig, ax = plt.subplots(figsize=(8, 4.5))
+years = [1800, 1850, 1900, 1950, 2000, 2020]
+for year, colour in zip(years, plt.cm.viridis(np.linspace(0, 0.9, len(years)))):
+    age, qf = schedule("SWE", year, "female")
+    _, qm = schedule("SWE", year, "male")
+    ax.plot(age, lifetable.logit(qm) - lifetable.logit(qf), color=colour, lw=1.2, label=str(year))
+ax.axhline(0, color="grey", lw=0.8, ls="--")
+ax.set_xlabel("Age"); ax.set_ylabel(r"logit$(q_x^{m})$ − logit$(q_x^{f})$")
+ax.legend(ncol=3, fontsize=8)
+plotting.save_figure(fig, "fig-s1-sex-diff")
+plt.show()
+```
+
+```{python}
+#| label: d2-end
+#| code-summary: "Write this chapter's numbers and close"
+latex.write_numbers()
+provenance.end_chapter();
+```

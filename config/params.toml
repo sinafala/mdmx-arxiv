@@ -1,0 +1,102 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# MDMx analysis parameters — the single source of truth
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Every tunable value used by the book lives here.  Chapters read them with
+#     from mdmx.config import params;  P = params()
+# and never hard-code them.  The artefact store hashes the parameters each
+# step uses, so editing a value here makes the affected steps (and only
+# those) recompute on the next render.
+#
+# Each entry says what it is, where it is used, and where the paper
+# describes it.
+
+# ──────────────────────────────────────────────────────────────────────────────
+[data]  # Part I of the book (chapters d1–d6); paper §2–§3
+# ──────────────────────────────────────────────────────────────────────────────
+
+# HMD bulk-download release used for the article (the date in the file name of
+# the "all statistics" zip; Sam, 2026-11-03: the latest release, archived as the
+# article's reference copy).  raw/MANIFEST.json holds its SHA-256.
+hmd_release = "20261029"
+
+# HMD populations not used.  FRACNP and GBRCENW are civilian-only series that
+# duplicate FRATNP and GBRTENW except in war years, when they omit military
+# deaths (paper §2.1).
+populations_excluded = ["FRACNP", "GBRCENW"]
+
+# Oldest single-year age kept; the open interval 110+ is dropped (paper §2.3).
+age_max = 109
+
+# Floor and cap applied to q_x before the logit (paper Eq. 4).
+q_min = 1e-8
+
+# a₀, the average fraction of the first year lived by infants who die: the book's one value, in L₀
+# of every e₀ and in every conversion of a forecast m₀ to q₀ (decision R1, 2026-11-01).  HMD's own
+# a₀ is 0.29–0.31 when infant mortality is high, where it matters.  The code's constant is
+# mdmx.lifetable.A0; a test keeps the two equal.
+a0 = 0.3
+
+# Flat old-age tail rule (paper §3.1 step 2): a life table whose q_x is
+# identical at these two ages lacked the data to estimate old-age mortality.
+flat_tail_ages = [105, 109]
+
+# A population enters the tensor only if it has at least this many observed,
+# non-exceptional years (paper §3.3.1).
+min_observed_years = 5
+
+# ── Adaptive temporal pooling (paper §3.4) ───────────────────────────────────
+# "Valley ages": ages whose median q_x across all populations, sexes and
+# years is below this threshold.  Only valley-age zeros trigger pooling.
+valley_q_threshold = 0.005
+# A pooling block may skip over at most this many missing or exceptional
+# calendar years (e.g. 2019 and 2023 can be pooled across COVID 2020–2022);
+# exceptional years themselves are never pooled.
+pool_max_gap = 3
+# Zero rates below this age (where HMD m_x are raw deaths/exposures) also
+# trigger pooling, in addition to the valley ages; above it HMD rates are
+# model-smoothed and never zero.
+pool_raw_rate_age_limit = 80
+
+# ── Crisis screen (book chapter d4, a diagnostic only) ───────────────────────
+# Country-years NOT in the event dictionary whose e0 falls this many years
+# below the median of the surrounding ±5 years are listed for review.
+crisis_screen_drop = 5.0
+crisis_screen_halfwidth = 5
+
+# ──────────────────────────────────────────────────────────────────────────────
+[tucker]  # chapter 04-tucker; paper §4–§5
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Cumulative-variance threshold for the rank of the shared age basis
+# (paper §4.7).  The sex mode is always kept at full rank (2).
+tau = 0.9999
+# Bounds [r_min, r_max] on the age rank.
+age_rank_bounds = [2, 80]
+
+# ── Completion model for unobserved country-years (paper §3.3.4, §4.7) ───────
+# Candidate (country rank, year rank) pairs compared by hiding observed
+# country-years and predicting them.
+completion_country_ranks = [5, 10, 15, 20, 30]
+completion_year_ranks = [5, 10, 15, 20]
+# Share of observed country-years hidden, and the random seed used.
+holdout_share = 0.05
+holdout_seed = 20260218
+# EM settings: stop when the filled values change by less than em_tol
+# (relative), or after em_max_iter iterations.
+em_max_iter = 1500
+em_tol = 1e-5
+# Iterations per candidate in the rank search (enough to rank candidates).
+search_max_iter = 300
+
+# ── Variable-bandwidth smoothing of the age basis (paper §4.8, Eq. 16) ───────
+# For components 2–5: [x_ramp, s_min, sigma_max] — the kernel SD rises from
+# s_min·sigma_max at age 0 to sigma_max at age x_ramp and beyond.
+smooth_components = [[30, 0.1, 2.0], [15, 0.1, 2.0], [40, 0.1, 3.75], [35, 0.1, 3.0]]
+# Components 6 and higher share one narrow, constant bandwidth.
+smooth_rest_sigma = 0.75
+# Ages 0..(smooth_preserve−1) are reset to their unsmoothed values before
+# re-orthonormalisation (the infant–child discontinuity is genuine).
+smooth_preserve = 2
+# Re-orthonormalise with QR if max|AᵀA − I| exceeds this.
+smooth_orth_tol = 1e-4

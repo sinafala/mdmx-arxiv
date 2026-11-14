@@ -1,0 +1,129 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# The final evaluation — chapter 12-evaluation; paper §12
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Read with  Design.from_params(P.section("evaluation"))  (module mdmx.evaluation) and by the
+# chapter.  Every value below is the frozen design of the evaluation (written down 2026-10-29,
+# before any of its numbers), with the clarifications of docs/changes/12-evaluation.md (Sam,
+# 2026-10-30).  The overall comparison's families, SMAA draws and seed are T5b's, in
+# [forecast.overall].
+
+[evaluation]
+
+# ── Origins and horizon ──────────────────────────────────────────────────────
+# Every origin from 1900 to 2015 in steps of 5 (first, last, step); 2020 has no eligible
+# population.  A population is forecast from an origin only with at least min_train_years observed
+# years up to it and min_test_years after it; horizon 50.
+origins = [1900, 2015, 5]
+horizon = 50
+min_train_years = 30
+min_test_years = 3
+# The second fitting-period policy: each population's last `window` years before the origin.
+window = 50
+# Horizon bands (first, last), inclusive.
+bands = [[1, 5], [6, 10], [11, 15], [16, 25], [26, 35], [36, 50]]
+
+# ── The held-out block ───────────────────────────────────────────────────────
+# Never used for a choice; scored once, after the first full render, by a commit that sets
+# score_held_out = true and changes nothing else.  Its intervals are calibrated on the late era.
+held_out = [2005, 2015]
+held_out_by = "late"
+score_held_out = true
+
+# ── The entries ──────────────────────────────────────────────────────────────
+# MDMx's jump-off anchor (decision C revised): persistent.  The decaying anchor of the sensitivity
+# analysis has this half-life in years (Sam, 2026-10-30: the rate of the first development study).
+mdmx_anchor = "persistent"
+decaying_anchor_half_life = 2.0
+# The ensemble's members, equally weighted (Sam, 2026-10-29: kept, its long-horizon
+# weakness reported): entry labels of the chapter.
+ensemble = ["MDMx + anchor, all years", "Flow field", "Lee–Carter, last 50 years"]
+# bayesLife's schedules (decision 13, MortCast): MortCast matches e0 in its own life table, so its
+# target is moved until the schedules' e0 in the book's life table is bayesLife's median to this
+# tolerance (years), in at most this many further calls (Sam, 2026-10-31).  MortCast itself meets
+# its target only to 0.01 years (measured: median 0.004, largest 0.010), so the tolerance is 2.5
+# times that.
+bl_schedule_e0_tol = 0.025
+bl_schedule_max_rounds = 4
+
+# ── Diagnostics ──────────────────────────────────────────────────────────────
+# A job that starts below s1* by at most this share of the range of s1 is "near", further "far".
+positions_near = 0.2
+# Age groups of the error split (first ages; the last runs to age 109) and their labels.
+age_group_starts = [0, 1, 15, 50, 65, 80]
+age_group_labels = ["0", "1–14", "15–49", "50–64", "65–79", "80+"]
+# Leading populations of the realised frontier pace (as the flow field's frontier).
+frontier_k = 3
+# The window curve: these windows, besides every year.
+window_curve = [25, 50, 75, 100]
+# The window curve's errors are averaged over horizons 1 to this horizon (the views' short horizons) and
+# over the horizons beyond it, to the end of the forecast.
+window_curve_split = 15
+# The pace of improvement: a forecast's implied e0 gain at the start of the horizon is averaged over these
+# horizons (first, last).  The gain is e0(h) − e0(h − 1) within a forecast, so horizon 1, which has no
+# forecast year before it, has none: these are the first band's horizons that have one.
+pace_start = [2, 5]
+# The frontier's realised e0 pace after an origin is its mean annual gain over this many years after it
+# (a description of what happened; never an input to a forecast).
+frontier_after = 25
+# The size of the age-0 correction (Deviation 3), reported: the median change of e0 when the comparators'
+# input rates are converted at age 0 with the book's a0 instead of their a_x above age 0, over the
+# population-years before this year.
+a0_offset_before = 1950
+
+[evaluation.overall]
+# Deviation 2 (Sam, 2026-11-01, after two independent reviews): the comprehensive comparison that
+# decides the headline.  The frozen design ([forecast.overall]) is reported beside it.
+# * Bias is not a measure: |mean error| next to MAE rewards errors that offset (MAE already contains
+#   the bias); bias is reported descriptively.
+# * The families do not overlap: each sex's level once (no "both", their average), the gap, the
+#   age-specific sex differences, the age pattern, the uncertainty.
+# * The age measures weight each age by the observed deaths d_x (not survivors l_x, which put ~90 % of
+#   the weight on ages 1-49), and the age family adds the error of life expectancy at old_age.
+# * Every entry's intervals come from one rule: the empirical quantiles of its own errors at the other
+#   origins of the era (evaluation.empirical_quantiles).
+families.level = ["mae:female", "mae:male"]
+families.gap = ["mae:gap"]
+families.sex_age = ["rmse:sexdiff_dx"]
+families.age = ["rmse:schedule_dx", "mae:e65female", "mae:e65male"]
+families.interval = ["wis:female", "wis:male"]
+composite_full = ["level", "gap", "sex_age", "age", "interval"]
+composite_e0 = ["level", "gap", "interval"]
+old_age = 65
+# Views reported beside the frozen ones: each horizon band of the primary view (T5b's pre-specified
+# per-band comparison), and a descriptive long-horizon view.
+band_views = [[1, 5], [6, 10], [11, 15]]
+long_view = { origins = "late", horizons = [26, 50] }
+
+[evaluation.bl_machines]
+# Where bayesLife's off-site runs ran (Sam, 2026-10-31: run time by machine): the user name in each run's
+# simulation folder → the machine and how many runs it made at once.  `main` is the machine of the other
+# methods' reference runs.
+main = "samueljclark"
+samueljclark = { machine = "Apple M1 Max, 10 cores", at_once = 3 }
+"clark.2962" = { machine = "Apple M4 Max, 16 cores", at_once = 5 }
+
+[evaluation.eras]
+# Era → its origins (first, last); the step is the origins'.
+early = [1900, 1950]
+late = [1955, 2000]
+
+[evaluation.views]
+# The overall comparison's views: which origins and horizons each scores.  "early",
+# "late" and "held" are eras; "development" is early and late together.  The primary view decides
+# the headline.
+primary = { origins = "late", horizons = [1, 15] }
+secondary = { origins = "early", horizons = [1, 15] }
+pooled = { origins = "development", horizons = [1, 15] }
+sensitivity = { origins = "late", horizons = [16, 25] }
+held_out = { origins = "held", horizons = [1, 15] }
+
+[evaluation.window_margins]
+# "More history must not hurt": the MAE of e₀ with every year minus with the last 50 years may exceed
+# 0 by at most a margin in each era and band, computed in chapter 12 (evaluation.regret_margins):
+# `multiplier` × the median, over the other entries, of the standard error of the difference of MAE
+# between the flow field and that entry, over a bootstrap of population families (`draws`, `seed`).
+bands = ["1–5", "6–10", "11–15"]
+multiplier = 2
+draws = 2000
+seed = 20261107

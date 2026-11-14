@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use this companion or its results, please cite the article below and the Human Mortality Database."
+title: "MDMx: the computational companion of arXiv:2603.20518"
+type: software
+authors:
+  - family-names: Clark
+    given-names: Samuel J.
+    orcid: "https://orcid.org/0000-0002-4929-6231"
+version: "arxiv-v3"
+license: PolyForm-Noncommercial-1.0.0
+repository-code: "https://github.com/sinafala/mdmx-arxiv"
+url: "https://sinafala.github.io/mdmx-arxiv/arxiv-v3/"
+preferred-citation:
+  type: article
+  title: "Multi-dimensional Mortality (MDMx): One Tensor Decomposition for Model Life Tables, Fitting, Summary-Indicator Prediction, and Forecasting"
+  authors:
+    - family-names: Clark
+      given-names: Samuel J.
+      orcid: "https://orcid.org/0000-0002-4929-6231"
+  year: 2026
+  journal: "arXiv"
+  identifiers:
+    - type: other
+      value: "arXiv:2603.20518v3"
+  url: "https://arxiv.org/abs/2603.20518v3"
+references:
+  - type: database
+    title: "Human Mortality Database"
+    authors:
+      - name: "Max Planck Institute for Demographic Research (Germany), University of California, Berkeley (USA), and French Institute for Demographic Studies (France)"
+    url: "https://www.mortality.org"
+    doi: "10.4054/HMD.Countries.20261029"

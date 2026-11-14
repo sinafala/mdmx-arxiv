@@ -1,0 +1,47 @@
+---
+title: "Provenance of every result"
+---
+
+Every intermediate result is stored in `work/companion/artifacts/<name>/` with a
+`meta.json` that records the chapter that produced it, the artefacts it was
+computed from (with their content checksums), the parameters and a checksum
+of the code.  The graph below is drawn from those records, so it shows the
+actual dependencies of this render — not a hand-drawn diagram.
+
+```{python}
+#| label: appB-graph
+#| code-summary: "Build the dependency graph from the artefact records"
+#| output: asis
+import json
+import pandas as pd
+from mdmx import paths
+rows = []
+for meta_path in sorted(paths.artifacts().glob("*/meta.json")):
+    m = json.loads(meta_path.read_text(encoding="utf-8"))
+    rows.append({"artefact": m["name"], "chapter": m.get("chapter"), "inputs": list(m.get("inputs", {})),
+                 "description": m.get("desc", ""), "MB": round(m.get("size_bytes", 0) / 1e6, 2),
+                 "checksum": m["content_hash"][:12]})
+arts = pd.DataFrame(rows)
+lines = ["```{mermaid}", "flowchart LR"]
+for r in arts.itertuples():
+    for i in r.inputs:
+        lines.append(f"  {i.replace('-', '_')} --> {r.artefact.replace('-', '_')}")
+lines.append("```")
+print("\n".join(lines))
+```
+
+```{python}
+#| label: appB-table
+#| code-summary: "All artefacts"
+arts[["artefact", "chapter", "description", "MB", "checksum"]]
+```
+
+## Paper-facing files
+
+```{python}
+#| label: appB-manifest
+#| code-summary: "The results manifest"
+man = json.loads((paths.results() / "manifest.json").read_text(encoding="utf-8"))["files"]
+pd.DataFrame([{"file": f, "kind": v["kind"], "chapter": v["chapter"], "sha256": v["sha256"][:12]}
+              for f, v in man.items()])
+```

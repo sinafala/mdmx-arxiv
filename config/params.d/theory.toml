@@ -1,0 +1,31 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# What the flow field's fitted objects say about mortality change — the article's
+# section on theory; computed in the companion's chapter 11 (module mdmx.theory)
+# ══════════════════════════════════════════════════════════════════════════════
+
+[theory]
+# The flow the section describes: the forecaster's flow at the latest data year, with the shape
+# law estimated on every year instead of the forecaster's last 50.  Over the last 50 years few
+# populations are below e0 of about 65, so the forecaster's shape law describes the lower levels
+# from very few populations; the section is about the whole transition.
+shape_window = "all"
+# Levels of s1 on the typical path: this many points evenly between the lowest and the highest
+# observed level.
+grid_points = 400
+# Observed gains in e0 are centred over 2 × this many years: (e0(t + w) − e0(t − w)) / 2w.
+gain_half_window = 5
+# The levels of e0 (years) at which the text quotes the typical path.
+levels = [45, 60, 70, 75, 80]
+# Bands of e0 (years, right-closed) for the medians of the observed gains and gaps.
+bands = [20, 40, 50, 60, 65, 70, 75, 80, 85]
+# Below this e0 (years) the text counts the populations that the forecaster's shape law sees in
+# its window (the last shape_window years of [flowfield]).
+low_level = 65
+# The band of e0 in which the implied gain dips (the trough between the peak and the frontier point is
+# measured inside it, and the recovery after it up to the frontier point): a description, set where the
+# populations of Central and Eastern Europe stood in their decades of stagnation.
+dip_band = [65, 75]
+# The populations of Central and Eastern Europe (the former socialist countries and East Germany), whose
+# long stagnation and reversal of male mortality from the 1960s to the 1990s fall at e0 of about 65–75.
+# The section shows the flow and the observed medians also without them (review A, 2026-11-04).
+central_eastern = ["BGR", "BLR", "CZE", "DEUTE", "EST", "HRV", "HUN", "LTU", "LVA", "POL", "RUS", "SVK", "SVN", "UKR"]

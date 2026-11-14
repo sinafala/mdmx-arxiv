@@ -1,0 +1,591 @@
+---
+title: "The Tucker decomposition"
+subtitle: "Shared sex and age bases, effective cores, and the completion of unobserved country-years"
+---
+
+::: {.callout-note appearance="simple"}
+## Paper correspondence
+Paper §3 ("The Shared Basis") and the completion model of §2.5 ("The tensor and its
+completion").  Produces `fig-s4-age-basis` (§3.4).  `tbl-s4-tucker-ranks`, `fig-s4-loadings`,
+`fig-s4-sv-decay`, `fig-s4-rank-search`, `fig-s4-reconstruction`, `tbl-s4-compression` and
+`fig-s3-imputation` are in the companion only, as is the comparison of the truncated HOSVD with
+higher-order orthogonal iteration.  Also produces the artefact `tucker`, used by every later
+chapter.
+:::
+
+```{python}
+#| label: c04-setup
+#| code-summary: "Chapter setup"
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from mdmx import artifacts, hooi, latex, lifetable, plotting, provenance, smoothing
+from mdmx import tensor as tz
+from mdmx.config import params
+
+provenance.start_chapter("04-tucker")
+plotting.use_style()
+P = params()
+T = artifacts.load("tensor")
+M, observed = T["M"], T["observed"]
+S, A, C, Tn = M.shape
+years, pops, names = T["years"], T["pops"], T["pop_names"]
+obs4 = np.broadcast_to(observed[None, None], M.shape)
+Mz = np.nan_to_num(M)            # unobserved cells are never read, but must be numbers
+```
+
+## What the decomposition is for
+
+The decomposition has two jobs (paper §3).  The first is to find a **shared
+basis** in which every mortality schedule can be written: a sex factor
+matrix $\mathbf{S}$ ($2 \times r_1$) and an age factor matrix $\mathbf{A}$
+($110 \times r_2$) that are the same for every population and every year.
+Writing each schedule in that common basis gives every output of the
+system — model life tables, fitted schedules, predictions, forecasts — what
+we call *shared-basis coherence*: both sexes' schedules are combinations of
+the same age patterns.  The basis itself does not tie the two sexes together
+(with $r_1 = 2$ the sex factor imposes nothing; see below); they are tied by
+the low-rank models built on the cores downstream, such as the forecasters'
+few principal components and the regimes' deviations.  The coordinates of a country-year's
+schedule in the basis form its **effective core**, the $r_1 \times r_2$
+matrix
+
+$$
+\mathcal{G}_{c,t} \;=\; \mathbf{S}^{\top}\, \mathcal{M}_{c,t}\, \mathbf{A},
+\qquad\text{so that}\qquad
+\mathcal{M}_{c,t} \;\approx\; \mathbf{S}\, \mathcal{G}_{c,t}\, \mathbf{A}^{\top}
+$$
+
+where $\mathcal{M}_{c,t}$ is the $2 \times 110$ matrix of
+$\operatorname{logit}(q_x)$ for population $c$ in year $t$.  Every later
+chapter works with these effective cores.
+
+The second job is to describe how mortality varies **across populations
+and over time** — the country and year modes of the tensor — and, in doing
+so, to say something about the country-years for which we have no
+(non-exceptional) data.  That is a *completion* problem: about 70% of the
+country-year cells are unobserved.
+
+The two jobs are done in turn, so that values filled in for the unobserved
+country-years never shape the basis or the cores of the observed ones.  The
+sex and age bases are estimated from observed schedules only, which needs
+no imputation, and every observed country-year is represented by its exact
+projection on that basis (steps 1–3).  The unobserved country-years are
+then filled by a low-rank model of the country and year modes, fitted to
+observed data only by EM, with its ranks chosen by out-of-sample prediction
+(step 4).
+
+## Step 1 — the shared sex and age bases
+
+Each observed country-year contributes one complete $2 \times 110$ schedule.
+Stacking those schedules side by side gives the age unfolding
+$\mathbf{M}_{(2)}$ ($110 \times 2N_{\text{obs}}$) and the sex unfolding
+$\mathbf{M}_{(1)}$ ($2 \times 110 N_{\text{obs}}$) of the *observed* data,
+with no gaps.  Their left singular vectors are the factor matrices
+(the paper's shared bases, §3.2).  The sex mode has only two levels and is kept at full rank,
+$r_1 = 2$.  The age rank $r_2$ is the smallest number of components that
+captures a share $\tau =$ `{python} P.tucker.tau` of the variance of
+$\mathbf{M}_{(2)}$ (the paper's rank rule, in §3.2).  Computing an SVD of a $110 \times 9{,}000$
+matrix is quick; we use the equivalent eigen-decomposition of the
+$110 \times 110$ matrix $\mathbf{M}_{(2)} \mathbf{M}_{(2)}^\top$
+(`mdmx.tensor.leading_left_vectors`).  Singular vectors are only defined up
+to sign; `mdmx.tensor.fix_signs` makes the largest entry of each positive so
+that results are identical on every computer.  The first age vector is then
+turned, where needed, to point the same way as the mean observed schedule, so
+that it has the shape of a $\operatorname{logit}(q_x)$ schedule (negative at almost every
+age) and its core entry rises as mortality falls.
+
+```{python}
+#| label: c04-bases
+#| code-summary: "Estimate the shared sex and age bases from observed schedules (cached)"
+def _bases():
+    return tz.sex_age_bases(Mz, observed, tau=P.tucker.tau,
+                            age_bounds=tuple(P.tucker.age_rank_bounds))
+
+bases = artifacts.stage("tucker_bases", _bases, inputs=["tensor"], params=P.section("tucker"),
+                        code=[_bases, tz.sex_age_bases, tz.leading_left_vectors, tz.select_rank,
+                              tz.fix_signs], desc="Shared sex and age bases from observed schedules")
+U_sex, U_age_raw = bases["U_sex"], bases["U_age"]
+latex.report("tuckerTau", P.tucker.tau, text=f"{P.tucker.tau:g}", desc="Variance share tau of the rank rule for r2")
+r1, r2 = U_sex.shape[1], U_age_raw.shape[1]
+print(f"r1 (sex) = {r1}, r2 (age) = {r2}")
+print(f"Variance of the age unfolding captured by {r2} components: {bases['cumvar_age'][r2 - 1]:.6f}")
+print("Sex factor matrix S (rows: female, male):")
+print(np.round(U_sex, 3))
+latex.report("tuckerRankSex", r1, desc="Sex rank r1")
+latex.report("tuckerRankAge", r2, desc="Age rank r2 (tau rule on observed schedules)")
+latex.report("tuckerVarAge", 100 * bases["cumvar_age"][r2 - 1], digits=3,
+             desc="Percent of age-unfolding variance captured by r2 components")
+latex.report("tuckerVarAgeFirst", 100 * bases["cumvar_age"][0], digits=1,
+             desc="Percent of age-unfolding variance captured by the first component")
+```
+
+The two columns of $\mathbf{S}$ have entries of the same sign (first column:
+the average of the sexes) and of opposite sign (second column: the sex
+difference).  Because $r_1 = 2 = S$, $\mathbf{S}$ is just a change of
+coordinates between "female, male" and "average, difference"; the sex
+structure of every schedule is carried by the effective cores, and its
+*coherence* across the system comes from the shared age basis.
+
+```{python}
+#| label: fig-s4-sv-decay
+#| fig-cap: "Cumulative share of variance captured by the leading components of the age unfolding of the observed schedules (left) and the singular values on a log scale (right). The dashed line marks τ = 0.9999 and the vertical line the selected age rank."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+k = np.arange(1, len(bases["sigma_age"]) + 1)
+ax1.plot(k, bases["cumvar_age"], marker="o", ms=2.5, color=plotting.COLORS["model"])
+ax1.axhline(P.tucker.tau, ls="--", color="grey", lw=0.8)
+ax1.axvline(r2, color=plotting.COLORS["highlight"], lw=1)
+ax1.set_ylim(0.999, 1.00002)
+ax1.set_xlabel("Number of age components"); ax1.set_ylabel("Cumulative variance share")
+ax2.semilogy(k, bases["sigma_age"], marker="o", ms=2.5, color=plotting.COLORS["model"])
+ax2.axvline(r2, color=plotting.COLORS["highlight"], lw=1)
+ax2.set_xlabel("Component"); ax2.set_ylabel("Singular value")
+plotting.save_figure(fig, "fig-s4-sv-decay")
+plt.show()
+```
+
+## Step 2 — smoothing the age basis
+
+The leading age components are smooth, but the higher-order ones pick up
+some single-year wiggle where the data are noisy.  Following paper §3.2,
+each column except the first is smoothed with a Gaussian kernel whose width
+grows with age, so that the infant peak, the childhood minimum and
+the young-adult "accident hump" are smoothed lightly and the old-age tail
+more strongly.  Components 2–5 have their own settings; all higher
+components share one narrow, constant bandwidth.  Ages 0 and 1 are reset to
+their unsmoothed values, and the basis is then re-orthonormalised (QR).
+`mdmx.smoothing` implements the kernel as a matrix, so smoothing a column
+is one matrix–vector product.
+
+```{python}
+#| label: c04-smooth
+#| code-summary: "Smooth the age basis and re-orthonormalise (cached)"
+def _smooth():
+    U, diag = smoothing.smooth_age_basis(
+        U_age_raw, P.tucker.smooth_components, P.tucker.smooth_rest_sigma,
+        P.tucker.smooth_preserve, P.tucker.smooth_orth_tol)
+    return {"U_age": U, "diagnostics": diag}
+
+sm = artifacts.stage("tucker_age_smoothed", _smooth, inputs=["tucker_bases"],
+                     params=P.section("tucker"), code=[_smooth, smoothing],
+                     desc="Smoothed, orthonormal age basis")
+U_age = sm["U_age"]
+for k_, v_ in sm["diagnostics"].items():
+    print(f"{k_:>28s}: {v_:.2e}")
+latex.report("tuckerQRMaxChange", sm["diagnostics"]["max_change_preserved_ages"], digits=3,
+             desc="Largest change at ages 0-1 caused by re-orthonormalisation")
+latex.report("tuckerSmoothOwnLast", 1 + len(P.tucker.smooth_components),
+             desc="Last age component with a bandwidth of its own (components 2 to it; later ones share one)")
+```
+
+```{python}
+#| label: fig-s4-age-basis
+#| fig-cap: "The first six age basis functions (columns of A) after smoothing (solid) and before (thin grey). The first is close to the mean logit(q_x) schedule; each later one changes sign and rebalances mortality between age groups."
+fig, axes = plt.subplots(2, 3, figsize=(11, 6), sharex=True)
+ages = T["ages"]
+crossings = {}
+for k_, ax in enumerate(axes.flat):
+    ax.plot(ages, U_age_raw[:, k_], color="#bbbbbb", lw=0.8)
+    ax.plot(ages, U_age[:, k_], color=plotting.COLORS["model"], lw=1.5)
+    ax.axhline(0, color="black", lw=0.5)
+    ax.set_title(f"Component {k_ + 1}", fontsize=10)
+    sgn = np.sign(U_age[1:, k_])
+    crossings[k_ + 1] = [int(a) for a in ages[1:][np.flatnonzero(np.diff(sgn) != 0) + 1]]
+for ax in axes[1]:
+    ax.set_xlabel("Age")
+plotting.save_figure(fig, "fig-s4-age-basis")
+plt.show()
+print("Ages (≥1) at which each component changes sign:", crossings)
+if crossings[2]:
+    latex.report("tuckerAgeTwoCrossing", crossings[2][0], text=str(crossings[2][0]),
+                 desc="Age at which the second age component first changes sign")
+```
+
+## Step 3 — the effective cores of the observed country-years
+
+With $\mathbf{S}$ and $\mathbf{A}$ fixed, the effective core of each
+observed country-year is a projection, $\mathcal{G}_{c,t} =
+\mathbf{S}^\top \mathcal{M}_{c,t}\mathbf{A}$, and the schedule implied by
+it is $\hat{\mathcal{M}}_{c,t} = \mathbf{S}\mathcal{G}_{c,t}\mathbf{A}^\top$.
+The only approximation is the truncation of the age basis to $r_2$
+components, so the reconstruction of observed data is very close.
+
+```{python}
+#| label: c04-cores
+#| code-summary: "Project every observed schedule onto the shared basis; measure the fit"
+Y_obs = tz.effective_cores(Mz, observed, U_sex, U_age)            # (r1, r2, C, T), NaN if unobserved
+M_rec = tz.schedules_from_cores(np.nan_to_num(Y_obs), U_sex, U_age)
+err = (M_rec - Mz)[obs4]
+r2_obs = 1 - np.sum(err ** 2) / np.sum((Mz[obs4] - Mz[obs4].mean()) ** 2)
+rel_err = np.linalg.norm(err) / np.linalg.norm(Mz[obs4])
+e0_obs = lifetable.e0_from_logit(np.moveaxis(Mz, 1, -1))[:, observed]
+e0_rec = lifetable.e0_from_logit(np.moveaxis(M_rec, 1, -1))[:, observed]
+de0 = np.abs(e0_rec - e0_obs)
+print(f"Observed cells: RMSE {np.sqrt(np.mean(err ** 2)):.4f}, R² {r2_obs:.6f}, "
+      f"relative error {rel_err:.4f}")
+print(f"|Δe0| between observed and reconstructed schedules: mean {de0.mean():.3f}, max {de0.max():.3f} years")
+latex.report("tuckerObsRMSE", float(np.sqrt(np.mean(err ** 2))), digits=3, desc="RMSE (logit) on observed cells")
+latex.report("tuckerObsRsq", float(r2_obs), digits=5, desc="R-squared on observed cells")
+latex.report("tuckerObsRelErr", float(rel_err), digits=4, desc="Relative Frobenius error on observed cells")
+latex.report("tuckerObsMeanAbsDeZero", float(de0.mean()), digits=3, desc="Mean |delta e0|, observed vs reconstructed")
+latex.report("tuckerObsMaxAbsDeZero", float(de0.max()), digits=2, desc="Max |delta e0|, observed vs reconstructed")
+```
+
+## Step 4 — completing the unobserved country-years
+
+To describe the country and year modes, and to say what the model implies
+for country-years without baseline data, we fit a Tucker model to the
+effective cores in which the country and year modes are compressed to ranks
+$r_3$ and $r_4$:
+
+$$
+\mathcal{G}_{c,t} \;\approx\; \mathcal{G} \times_3 \mathbf{c}_c^\top \times_4 \mathbf{t}_t^\top ,
+$$
+
+with $\mathbf{C}$ ($C \times r_3$) and $\mathbf{T}$ ($T \times r_4$)
+orthonormal.  It is fitted to observed country-years only, by the EM
+algorithm (`mdmx.tensor.complete_cores`): start with the country means
+of the observed cores, fit the model, replace *only* the unobserved slices by the
+fit, and repeat until the filled values stop changing.  At convergence the
+observed slices are data, the unobserved slices are the model's own
+prediction, and the factors are those of the completed array — so the made-
+up values exert no pull of their own.  One limit follows: a calendar year in
+which *no* population is observed — every year of the influenza pandemics and
+of COVID-19, for example, is exceptional in every population with data — gives
+its year loading nothing to be estimated from, so EM leaves it close to where
+it started and the model returns roughly each country's mean schedule there
+(for Sweden the same e₀ in 1918 as in each of 2020–22; chapter 08).  The model's values
+in such years are not predictions; chapter 08 builds the baselines of
+exceptional years differently.
+
+### Choosing the ranks by prediction
+
+A variance threshold cannot choose $r_3$ and $r_4$ here: most of the array
+is missing, and the share of variance a component "explains" depends on how
+the gaps were filled.  Instead we ask how well each candidate pair predicts
+data it has not seen.  A random `{python} f"{100 * P.tucker.holdout_share:.0f}"`% of the
+observed country-years is hidden, the model is fitted to the rest, and the
+hidden schedules are predicted.
+
+```{python}
+#| label: c04-rank-search
+#| code-summary: "Hold-out search over the completion ranks (cached; a few minutes)"
+grid = [(rc, rt) for rc in P.tucker.completion_country_ranks for rt in P.tucker.completion_year_ranks]
+
+def _loss(Y_completed, hidden):
+    rec = tz.schedules_from_cores(Y_completed, U_sex, U_age)
+    h4 = np.broadcast_to(hidden[None, None], M.shape)
+    e0p = lifetable.e0_from_logit(np.moveaxis(rec, 1, -1))[:, hidden]
+    e0t = lifetable.e0_from_logit(np.moveaxis(Mz, 1, -1))[:, hidden]
+    return {"rmse": float(np.sqrt(np.mean((rec[h4] - Mz[h4]) ** 2))),
+            "e0_mae": float(np.mean(np.abs(e0p - e0t)))}
+
+def _search():
+    rows = tz.holdout_rank_search(Y_obs, observed, grid, share=P.tucker.holdout_share,
+                                  seed=P.tucker.holdout_seed, max_iter=P.tucker.search_max_iter,
+                                  tol=P.tucker.em_tol, loss=_loss)
+    # Country-mean imputation, a naive benchmark, on the same hidden cells.
+    rows.append({"r_country": 0, "r_year": 0, "iterations": 0,
+                 **_loss(tz.country_mean_impute(np.nan_to_num(Y_obs), observed & ~_hidden()), _hidden())})
+    return pd.DataFrame(rows)
+
+def _hidden():
+    rng = np.random.default_rng(P.tucker.holdout_seed)
+    ci, ti = np.nonzero(observed)
+    pick = rng.choice(len(ci), size=max(1, int(round(P.tucker.holdout_share * len(ci)))), replace=False)
+    h = np.zeros_like(observed); h[ci[pick], ti[pick]] = True
+    return h
+
+search = artifacts.stage("tucker_rank_search", _search, inputs=["tucker_bases", "tucker_age_smoothed", "tensor"],
+                         params=P.section("tucker"),
+                         code=[_search, _loss, _hidden, tz.complete_cores, tz.holdout_rank_search],
+                         desc="Hold-out prediction error of the completion model by rank")
+cand = search[search["r_country"] > 0]
+best = cand.loc[cand["rmse"].idxmin()]
+ref = search[search["r_country"] == 0].iloc[0]
+r3, r4 = int(best["r_country"]), int(best["r_year"])
+print(cand.pivot(index="r_country", columns="r_year", values="rmse").round(3))
+print(f"\nSelected ranks: r3 = {r3}, r4 = {r4}  (hold-out RMSE {best['rmse']:.3f}, e0 MAE {best['e0_mae']:.2f} y)")
+print(f"Country-mean imputation on the same cells: RMSE {ref['rmse']:.3f}, e0 MAE {ref['e0_mae']:.2f} y")
+latex.report("tuckerRankCountry", r3, desc="Country rank r3 of the completion model (hold-out)")
+latex.report("tuckerRankYear", r4, desc="Year rank r4 of the completion model (hold-out)")
+latex.report("tuckerHoldRMSE", float(best["rmse"]), digits=3, desc="Hold-out RMSE (logit), selected completion model")
+latex.report("tuckerHoldMAE", float(best["e0_mae"]), digits=2, desc="Hold-out e0 MAE (years), selected completion model")
+latex.report("tuckerHoldRMSEMean", float(ref["rmse"]), digits=3, desc="Hold-out RMSE, country-mean imputation")
+latex.report("tuckerHoldMAEMean", float(ref["e0_mae"]), digits=2, desc="Hold-out e0 MAE, country-mean imputation")
+latex.report("tuckerHoldN", int(_hidden().sum()), desc="Country-years hidden in the rank search")
+```
+
+```{python}
+#| label: fig-s4-rank-search
+#| fig-cap: "Hold-out prediction error of the completion model for each pair of country and year ranks: RMSE of logit(q_x) (left) and mean absolute error of e0 (right) on the hidden country-years. The selected pair is outlined; country-mean imputation (EM's starting values) gives the values in the titles."
+fig, axes = plt.subplots(1, 2, figsize=(10, 3.8))
+for ax, col, lab in zip(axes, ["rmse", "e0_mae"], ["RMSE, logit$(q_x)$", "MAE, $e_0$ (years)"]):
+    piv = cand.pivot(index="r_country", columns="r_year", values=col)
+    im = ax.imshow(piv.to_numpy(), cmap="viridis_r", aspect="auto")
+    ax.set_xticks(range(piv.shape[1]), piv.columns); ax.set_yticks(range(piv.shape[0]), piv.index)
+    ax.set_xlabel("Year rank $r_4$"); ax.set_ylabel("Country rank $r_3$"); ax.grid(False)
+    for (i, j), v in np.ndenumerate(piv.to_numpy()):
+        ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=7, color="white")
+    bi, bj = list(piv.index).index(r3), list(piv.columns).index(r4)
+    ax.add_patch(plt.Rectangle((bj - 0.5, bi - 0.5), 1, 1, fill=False, ec="red", lw=2))
+    ax.set_title(f"{lab}; country means: {ref[col]:.2f}", fontsize=9)
+plotting.save_figure(fig, "fig-s4-rank-search")
+plt.show()
+```
+
+### The final completion model
+
+```{python}
+#| label: c04-complete
+#| code-summary: "Fit the completion model at the selected ranks (cached)"
+def _complete():
+    Yc, (U_c, U_t), core, hist = tz.complete_cores(Y_obs, observed, r3, r4,
+                                                   max_iter=P.tucker.em_max_iter, tol=P.tucker.em_tol)
+    return {"G_ct": Yc, "U_country": U_c, "U_year": U_t, "core": core,
+            "history": pd.DataFrame(hist)}
+
+comp = artifacts.stage("tucker_completion", _complete, inputs=["tucker_rank_search", "tucker_bases", "tucker_age_smoothed", "tensor"],
+                       params={**P.section("tucker"), "r3": r3, "r4": r4},
+                       code=[_complete, tz.complete_cores],
+                       desc="Completion model: country and year factors, core, completed effective cores")
+hist = comp["history"]
+print(f"EM iterations: {len(hist)}; final relative change {hist['rel_change'].iloc[-1]:.1e}")
+latex.report("tuckerEMIterations", len(hist), desc="EM iterations of the final completion model")
+
+
+def _sci(x: float) -> str:
+    """x as a power of ten in text-mode LaTeX, e.g. $5.5 \\times 10^{-5}$ (not for use inside math)."""
+    mantissa, exponent = f"{x:.1e}".split("e")
+    power = f"10^{{{int(exponent)}}}"
+    return f"${power}$" if mantissa == "1.0" else f"${mantissa} \\times {power}$"
+
+
+latex.report("tuckerEMTol", P.tucker.em_tol, text=_sci(P.tucker.em_tol),
+             desc="EM tolerance: relative change of the filled values")
+latex.report("tuckerEMFinalChange", float(hist["rel_change"].iloc[-1]), text=_sci(float(hist["rel_change"].iloc[-1])),
+             desc="Relative change of the filled values at the last EM iteration")
+```
+
+### The HOSVD or higher-order orthogonal iteration
+
+Each iteration of the completion model computes $\mathbf{C}$ and $\mathbf{T}$ by a truncated
+HOSVD of the filled array: the leading left singular vectors of its country and year unfoldings.
+A truncated HOSVD is quasi-optimal, not optimal.  Its squared error is at most the sum, over the
+truncated modes, of the squared singular values each one discards, so with two modes truncated its
+error is at most $\sqrt{2}$ times that of the best approximation with the same ranks.
+Higher-order orthogonal iteration can come closer to the best: it updates each factor matrix in
+turn, given the other, by least squares.  To see whether that would serve the completion model
+better, the same EM is fitted with one sweep of it in place of the HOSVD at every iteration
+(`mdmx.hooi.complete_cores_hooi`), at the selected ranks and with the same settings, and the two are
+compared twice: by the residual of the observed cores after the final model's
+`{python} f"{P.tucker.em_max_iter:,}"` iterations, and by how well they predict hidden country-years.
+The second comparison uses `{python} P.section("checks")["hooi_splits"]` random splits, each hiding
+`{python} f"{100 * P.tucker.holdout_share:.0f}"`% of the observed country-years as the rank search
+does, drawn with their own seed rather than the one whose split chose the ranks.
+
+```{python}
+#| label: c04-hooi
+#| code-summary: "The completion model with higher-order orthogonal iteration (cached; about a minute)"
+CK = P.section("checks")
+
+
+def _hooi_check():
+    done, fac, core, hist = hooi.complete_cores_hooi(Y_obs, observed, r3, r4,
+                                                     max_iter=P.tucker.em_max_iter, tol=P.tucker.em_tol)
+    fit = pd.DataFrame({
+        "method": ["HOSVD", "HOOI"],
+        "resid_obs": [hooi.observed_residual(comp["G_ct"], observed, [comp["U_country"], comp["U_year"]],
+                                             comp["core"]),
+                      hooi.observed_residual(done, observed, fac, core)],
+        "iterations": [len(comp["history"]), len(hist)]})
+    rng = np.random.default_rng(CK["hooi_seed"])
+    ci, ti = np.nonzero(observed)
+    rows = []
+    for split in range(CK["hooi_splits"]):
+        pick = rng.choice(len(ci), size=max(1, int(round(P.tucker.holdout_share * len(ci)))), replace=False)
+        hidden = np.zeros_like(observed)
+        hidden[ci[pick], ti[pick]] = True
+        for name, complete in (("HOSVD", tz.complete_cores), ("HOOI", hooi.complete_cores_hooi)):
+            Yc = complete(Y_obs, observed & ~hidden, r3, r4, max_iter=P.tucker.search_max_iter,
+                          tol=P.tucker.em_tol)[0]
+            rows.append({"split": split + 1, "method": name, **_loss(Yc, hidden)})
+    return {"fit": fit, "holdout": pd.DataFrame(rows)}
+
+
+hc = artifacts.stage("tucker_hooi_check", _hooi_check,
+                     inputs=["tensor", "tucker_bases", "tucker_age_smoothed", "tucker_completion"],
+                     params={"r3": r3, "r4": r4, "em_max_iter": P.tucker.em_max_iter,
+                             "search_max_iter": P.tucker.search_max_iter, "em_tol": P.tucker.em_tol,
+                             "holdout_share": P.tucker.holdout_share, "splits": CK["hooi_splits"],
+                             "seed": CK["hooi_seed"]},
+                     code=[_hooi_check, _loss, hooi.complete_cores_hooi, hooi.observed_residual,
+                           tz.complete_cores],
+                     desc="The completion model with higher-order orthogonal iteration in place of the HOSVD: "
+                          "fit to the observed cores and prediction of hidden country-years")
+res = hc["fit"].set_index("method")["resid_obs"]
+hooi_gain = 100 * (1 - res["HOOI"] / res["HOSVD"])
+ho = hc["holdout"].pivot(index="split", columns="method", values=["rmse", "e0_mae"])
+hooi_worse = int((ho[("rmse", "HOOI")] > ho[("rmse", "HOSVD")]).sum())
+hooi_worse_e0 = int((ho[("e0_mae", "HOOI")] > ho[("e0_mae", "HOSVD")]).sum())
+mean = ho.mean()
+print(f"Residual of the observed cores: HOSVD {res['HOSVD']:.2f}, HOOI {res['HOOI']:.2f} ({hooi_gain:.1f} % lower)")
+print(f"Hold-out, mean of {CK['hooi_splits']} splits: RMSE HOSVD {mean[('rmse', 'HOSVD')]:.3f}, "
+      f"HOOI {mean[('rmse', 'HOOI')]:.3f} (HOOI worse in {hooi_worse}); e0 MAE HOSVD "
+      f"{mean[('e0_mae', 'HOSVD')]:.2f}, HOOI {mean[('e0_mae', 'HOOI')]:.2f} y (HOOI worse in {hooi_worse_e0})")
+latex.report("tuckerHOOIResidGain", hooi_gain, digits=1,
+             desc="Residual of the observed cores, % lower with higher-order orthogonal iteration than with the HOSVD")
+latex.report("tuckerHOSVDHoldRMSE", float(mean[("rmse", "HOSVD")]), digits=3,
+             desc="Hold-out RMSE (logit), completion model with the HOSVD, mean of the random splits")
+latex.report("tuckerHOOIHoldRMSE", float(mean[("rmse", "HOOI")]), digits=3,
+             desc="Hold-out RMSE (logit), completion model with higher-order orthogonal iteration, mean of the splits")
+latex.report("tuckerHOSVDHoldMAE", float(mean[("e0_mae", "HOSVD")]), digits=2,
+             desc="Hold-out e0 MAE (years), completion model with the HOSVD, mean of the random splits")
+latex.report("tuckerHOOIHoldMAE", float(mean[("e0_mae", "HOOI")]), digits=2,
+             desc="Hold-out e0 MAE (years), completion model with higher-order orthogonal iteration, mean of the splits")
+latex.report("tuckerHOOIWorseSplits", hooi_worse, desc="Random splits in which HOOI's hold-out RMSE is higher")
+latex.report("tuckerHOOIWorseSplitsMAE", hooi_worse_e0, desc="Random splits in which HOOI's hold-out e0 MAE is higher")
+latex.report("tuckerHOOISplits", int(CK["hooi_splits"]), desc="Random hold-out splits of the HOSVD/HOOI comparison")
+ho.round(3)
+```
+
+Higher-order orthogonal iteration fits the observed cores more closely, as it must: one sweep never
+moves the model away from the filled array, so the residual of the observed cores cannot rise from
+one iteration to the next.  The closer fit does not carry over to country-years the model has not
+seen: in `{python} hooi_worse` of the `{python} CK["hooi_splits"]` splits it predicts them less
+well than the HOSVD.  The completion model keeps the HOSVD, which also keeps each iteration in
+closed form.
+
+## The decomposition artefact
+
+Everything later chapters need is saved as one artefact, `tucker`:
+
+* `U_sex`, `U_age` — the shared bases ($\mathbf{S}$, smoothed $\mathbf{A}$);
+* `G_ct` — the effective core of **every** country-year: the exact projection
+  where observed, the completion model's prediction elsewhere;
+* `observed` — which country-years are data;
+* `U_country`, `U_year`, `core` — the completion model.
+
+```{python}
+#| label: c04-save
+#| code-summary: "Assemble and save the decomposition"
+G_ct = np.where(observed[None, None], np.nan_to_num(Y_obs), comp["G_ct"])
+tucker = artifacts.stage(
+    "tucker",
+    lambda: {"U_sex": U_sex, "U_age": U_age, "U_age_raw": U_age_raw, "G_ct": G_ct,
+             "observed": observed, "U_country": comp["U_country"], "U_year": comp["U_year"],
+             "core": comp["core"], "ranks": np.array([r1, r2, r3, r4]),
+             "pops": pops, "years": years, "ages": T["ages"]},
+    inputs=["tensor", "tucker_bases", "tucker_age_smoothed", "tucker_completion"],
+    params=P.section("tucker"), desc="The MDMx decomposition used by every later chapter")
+M_hat = tz.schedules_from_cores(tucker["G_ct"], tucker["U_sex"], tucker["U_age"])   # (S, A, C, T)
+```
+
+```{python}
+#| label: tbl-s4-tucker-ranks
+#| code-summary: "Table: ranks and how each was chosen"
+ranks_tab = pd.DataFrame({
+    "Mode": ["Sex", "Age", "Country", "Year"],
+    "Size": [S, A, C, Tn],
+    "Rank": [r1, r2, r3, r4],
+    "Chosen by": ["full rank", f"$\\tau = {P.tucker.tau}$ on observed schedules",
+                  "hold-out prediction (completion model)", "hold-out prediction (completion model)"],
+})
+latex.save_table(ranks_tab, "tbl-s4-tucker-ranks", "Ranks of the decomposition.  The sex and age "
+                 "bases are estimated from observed schedules; the country and year ranks are those "
+                 "of the completion model for unobserved country-years.", column_format="lrrl",
+                 escape_cells=False)
+ranks_tab
+```
+
+```{python}
+#| label: tbl-s4-compression
+#| code-summary: "Table: size and accuracy of the representation"
+n_obs_cells = int(obs4.sum())
+n_param_basis = S * r1 + A * r2
+n_param_cores = r1 * r2 * int(observed.sum())
+fit_tab = pd.DataFrame({
+    "Quantity": ["Observed cells (data)", "Parameters: sex and age bases",
+                 "Parameters: effective cores of observed country-years",
+                 "Compression ratio (observed cells / parameters)",
+                 "RMSE, $\\operatorname{logit}({}_1q_x)$, observed cells", "$R^2$, observed cells",
+                 "Mean $|\\Delta e_0|$, observed country-years (years)",
+                 "Completion model: hold-out RMSE (country means)",
+                 "Completion model: hold-out $e_0$ MAE, years (country means)"],
+    "Value": [latex.fmt_int(n_obs_cells), latex.fmt_int(n_param_basis), latex.fmt_int(n_param_cores),
+              f"{n_obs_cells / (n_param_basis + n_param_cores):.2f}",
+              f"{np.sqrt(np.mean(err ** 2)):.3f}", f"{r2_obs:.5f}", f"{de0.mean():.3f}",
+              f"{best['rmse']:.3f} ({ref['rmse']:.3f})", f"{best['e0_mae']:.2f} ({ref['e0_mae']:.2f})"],
+})
+latex.save_table(fit_tab, "tbl-s4-compression", "Size and accuracy of the representation.",
+                 column_format="lr", escape_cells=False)
+latex.report("tuckerCompression", n_obs_cells / (n_param_basis + n_param_cores), digits=2,
+             desc="Observed cells per parameter")
+fit_tab
+```
+
+## Interpreting the country and year modes
+
+```{python}
+#| label: fig-s4-loadings
+#| fig-cap: "Factor loadings of the completion model. Left: populations on the first two country components. Right: the first three year components against calendar year."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
+Uc, Ut = tucker["U_country"], tucker["U_year"]
+ax1.scatter(Uc[:, 0], Uc[:, 1], s=12, color=plotting.COLORS["model"])
+for i, p in enumerate(pops):
+    ax1.annotate(p, (Uc[i, 0], Uc[i, 1]), fontsize=6, alpha=0.8)
+ax1.set_xlabel("Country component 1"); ax1.set_ylabel("Country component 2")
+for k_ in range(3):
+    ax2.plot(years, Ut[:, k_], lw=1.2, label=f"Year component {k_ + 1}")
+ax2.set_xlabel("Year"); ax2.legend()
+plotting.save_figure(fig, "fig-s4-loadings")
+plt.show()
+```
+
+## Reconstruction and completion, illustrated
+
+```{python}
+#| label: fig-s4-reconstruction
+#| fig-cap: "Observed logit(q_x) (points) and the schedule implied by the effective core (line) for four country-years, females and males. Every observed country-year is represented by its exact projection on the shared basis; the RMSE of each panel is shown."
+SHOW = [("SWE", 1900), ("JPN", 2000), ("USA", 1960), ("RUS", 1990)]
+pidx = {p: i for i, p in enumerate(pops)}
+fig, axes = plt.subplots(2, 2, figsize=(10, 7), sharex=True)
+for ax, (pop, yr) in zip(axes.flat, SHOW):
+    c, t = pidx[pop], int(yr - years[0])
+    for s, sex in enumerate(("female", "male")):
+        ax.plot(T["ages"], Mz[s, :, c, t], ".", ms=2.5, color=plotting.COLORS[sex], alpha=0.6)
+        ax.plot(T["ages"], M_hat[s, :, c, t], color=plotting.COLORS[sex], lw=1.2, label=sex.title())
+    rmse = np.sqrt(np.mean((M_hat[:, :, c, t] - Mz[:, :, c, t]) ** 2))
+    ax.set_title(f"{names[c]} {yr} (RMSE {rmse:.3f}{'' if observed[c, t] else ', not observed'})", fontsize=9)
+axes[0, 0].legend()
+for ax in axes[1]:
+    ax.set_xlabel("Age")
+plotting.save_figure(fig, "fig-s4-reconstruction")
+plt.show()
+```
+
+```{python}
+#| label: fig-s3-imputation
+#| fig-cap: "Left: share of each population's years in the tensor that are not observed (no data before the series starts, exceptional years, curation). Right: logit(q_50), females, for four populations — observed years (points) and the completion model's values for unobserved years (line), including the years before each series starts."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 5), gridspec_kw={"width_ratios": [1, 1.4]})
+frac = 1 - observed.mean(axis=1)
+order = np.argsort(frac)
+ax1.barh(range(C), frac[order], color=plotting.COLORS["grey"])
+ax1.set_yticks(range(C), names[order], fontsize=6)
+ax1.set_xlabel("Share of tensor years not observed")
+for pop, colour in zip(["SWE", "FRATNP", "JPN", "ISL"], plt.cm.tab10.colors):
+    c = pidx[pop]
+    ax2.plot(years, M_hat[0, 50, c, :], color=colour, lw=1, label=names[c])
+    ax2.plot(years[observed[c]], Mz[0, 50, c, observed[c]], ".", ms=2, color=colour)
+ax2.set_xlabel("Year"); ax2.set_ylabel(r"logit$(q_{50})$, females"); ax2.legend(fontsize=8)
+plotting.save_figure(fig, "fig-s3-imputation")
+plt.show()
+```
+
+```{python}
+#| label: c04-end
+#| code-summary: "Write this chapter's numbers and close"
+latex.write_numbers()
+provenance.end_chapter();
+```

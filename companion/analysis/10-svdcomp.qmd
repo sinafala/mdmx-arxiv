@@ -1,0 +1,1474 @@
+---
+title: "Predicting schedules from summary indicators"
+subtitle: "SVD-Comp in the Tucker basis: a neural network for truncated core weights, exact reproduction of the inputs, nested cross-validation by population, and a comparison with Log-Quad and SVD-Comp"
+---
+
+::: {.callout-note appearance="simple"}
+## Paper correspondence
+Paper §8 ("Predicting Schedules from Summary Indicators") and the claims about it in §1 and
+§11.2.  Produces the tables `tbl-s10-accuracy` and `tbl-s10-comparison` and the figures
+`fig-s10-benchmark`, `fig-s10-cage`, `fig-s10-model1-diag`, `fig-s10-model2-diag`,
+`fig-s10-comparison` and `fig-s10-model2-45q15`, all in the companion only.  Also produces the
+numbers with prefix `svd`, and the artefacts `svdcomp_model1` and `svdcomp_model2`
+(the trained models, which the Shiny app loads) plus `svdcomp_cv`,
+`svdcomp_sweep`, `svdcomp_nested` and `svdcomp_basis_cv` (the
+cross-validation results).
+:::
+
+```{python}
+#| label: c10-setup
+#| code-summary: "Chapter setup"
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from mdmx import artifacts, latex, lifetable, plotting, provenance, smoothing
+from mdmx import logquad as lq
+from mdmx import nn as mnn
+from mdmx import svdcomp as sc
+from mdmx import tensor as tz
+from mdmx.config import params
+
+provenance.start_chapter("10-svdcomp")
+plotting.use_style()
+P = params()
+PS = P.section("svdcomp")
+T = artifacts.load("tensor")
+tucker = artifacts.load("tucker")
+register = artifacts.load("populations")
+Mz = np.nan_to_num(T["M"])          # unobserved cells are never read, but must be numbers
+observed = T["observed"]
+A = Mz.shape[1]
+ages = T["ages"]
+U_sex, U_age = tucker["U_sex"], tucker["U_age"]
+AGE_GROUPS = PS["age_groups"]
+AB_STARTS = lq.abridged_starts(A)
+SEXES = ("female", "male")
+```
+
+## The task
+
+The previous chapters build mortality schedules from the decomposition.
+This chapter addresses a different, very practical question (paper §8):
+*given only a summary indicator of mortality, what is the most likely
+complete schedule?*  In much of the world, child mortality ₅q₀ — the
+probability of dying before age 5 — is the only well-measured indicator,
+sometimes together with adult mortality ₄₅q₁₅, the probability that a
+15-year-old dies before age 60.  Model life-table systems turn such
+indicators into full life tables; the best known are Coale–Demeny, the
+Log-Quad model of @Wilmoth2012 and SVD-Comp [@Clark2019].
+
+MDMx reformulates SVD-Comp in the Tucker framework.  Every schedule — the
+$2 \times 110$ matrix of $\operatorname{logit}(q_x)$ for one country-year —
+is written in the shared sex basis $\mathbf{S}$ and age basis $\mathbf{A}$
+of chapter 04 as $\mathcal{M}_{c,t} = \mathbf{S}\,\mathcal{G}_{c,t}\,\mathbf{A}^\top$.
+Stacking the female and then the male schedule into one vector
+$\mathbf{z}$ of length $2A = 220$, the reconstruction is linear in the
+core,
+
+$$
+\mathbf{z} = \mathbf{R}\,\operatorname{vec}(\mathcal{G}), \qquad
+\mathbf{R} = \mathbf{S} \otimes \mathbf{A}_{c}
+\qquad\text{(paper Eq. 21)},
+$$
+
+where $\mathbf{A}_{c}$ keeps only the first $c_{\text{age}}$ columns of the
+age basis.  A small neural network $f_\theta$ maps the logit of the input
+indicators to the $2 c_{\text{age}}$ core weights (paper Eq. 22), trained
+so that $\mathbf{R} f_\theta(\cdot)$ — the *whole schedule* — matches the
+observed schedule, with extra weight on ages 0–4.
+Finally, the predicted core weights are moved by (to first order) the
+smallest amount that makes the schedule reproduce its inputs *exactly*, as
+Log-Quad does (paper §8.3, Eq. 23).  Two models are fitted (§8.2):
+
+* **Model 1** — inputs $\operatorname{logit}({}_5q_0^F)$ and
+  $\operatorname{logit}({}_5q_0^M)$;
+* **Model 2** — additionally $\operatorname{logit}({}_{45}q_{15}^F)$ and
+  $\operatorname{logit}({}_{45}q_{15}^M)$.
+
+Both predict both sexes at once, so the sex differential comes from one
+model in one basis.
+
+## Step 1 — the training data: observed schedules and their indicators
+
+The models are trained on every observed (non-exceptional) country-year of
+the tensor.  For each we take the observed $\operatorname{logit}(q_x)$
+schedule of both sexes and compute its ₅q₀ and ₄₅q₁₅ with the project's
+single life-table implementation (`mdmx.lifetable.nqx`).  The indicators
+are therefore exactly consistent with the schedules the models must
+reproduce.
+
+```{python}
+#| label: c10-data
+#| code-summary: "Observed schedules, their summary indicators and population families"
+Z, cell = sc.schedules_matrix(Mz, observed)            # (n, 220): female ages 0–109, then male
+ind = sc.indicators(Z, A)                              # 5q0_F, 5q0_M, 45q15_F, 45q15_M
+pop_of_row = T["pops"][cell[:, 0]]
+year_of_row = T["years"][cell[:, 1]]
+family = sc.population_families(T["pops"], register)[cell[:, 0]]
+n_obs = Z.shape[0]
+print(f"Observed country-years: {n_obs:,} from {len(np.unique(pop_of_row))} populations "
+      f"in {len(np.unique(family))} population families")
+print(ind.describe().loc[["min", "50%", "max"]].round(4))
+q5_both = ind[["5q0_F", "5q0_M"]].to_numpy()
+i_lo, i_hi = np.unravel_index(q5_both.argmin(), q5_both.shape), np.unravel_index(q5_both.argmax(), q5_both.shape)
+q5_lo, q5_hi = q5_both[i_lo], q5_both[i_hi]
+lo_label = f"{T['pop_names'][cell[i_lo[0], 0]]} {year_of_row[i_lo[0]]}, {SEXES[i_lo[1]]}s"
+hi_label = f"{T['pop_names'][cell[i_hi[0], 0]]} {year_of_row[i_hi[0]]}, {SEXES[i_hi[1]]}s"
+latex.report("svdNObs", n_obs, desc="Observed country-years used to train and evaluate the models")
+latex.report("svdNPops", len(np.unique(pop_of_row)), desc="Populations")
+latex.report("svdNFamilies", len(np.unique(family)), desc="Population families (CV blocking units)")
+latex.report("svdQfiveMin", float(q5_lo), digits=4, desc="Smallest observed 5q0 (either sex)")
+latex.report("svdQfiveMax", float(q5_hi), digits=2, desc="Largest observed 5q0 (either sex)")
+```
+
+The range is wide: ₅q₀ runs from `{python} f"{q5_lo:.4f}"`
+(`{python} lo_label`) to `{python} f"{q5_hi:.2f}"` (`{python} hi_label`).
+This is why the network's inputs are on the logit scale, where equal steps
+mean equal *relative* changes in the odds of dying.
+
+## Step 2 — the truncated basis, and what truncation alone costs
+
+The network predicts only the first $c_{\text{age}}$ age components of
+the $r_2$ = `{python} U_age.shape[1]` in the basis.  Two arguments favour
+a small $c_{\text{age}}$ such as `{python} PS["c_age"]`
+(`{python} 2 * PS["c_age"]` core weights): the higher components describe
+fine-grained structure that one or two summary indicators cannot be
+expected to predict, and the first few capture nearly all of the
+age-specific variance.  Both arguments can be checked.  For these checks
+the chapter uses **fixed settings**, $c_{\text{age}}$ = `{python} PS["c_age"]`
+and a weight $w_{\mathrm{child}}$ = `{python} f"{PS['alpha']:g}"` on ages 0–4 in the
+loss (Step 3); the final models' settings are chosen by nested
+cross-validation (Step 8).
+
+The second argument depends on what "variance" means.  An **oracle** helps.
+For every observed schedule, take the core weights that reproduce it as
+closely as possible in the truncated basis — the least-squares projection
+(`mdmx.svdcomp.truncation_oracle`).  No predictor of truncated core weights
+can come closer to the schedule in squared error, so the oracle's squared
+error is the price of the truncation alone (in $e_0$ it is a reference,
+not a bound).  We measure it three ways: the share of the *uncentred*
+sum of squares of logit(q_x) captured (what a variance threshold on the
+decomposition measures, dominated by the overall level of mortality); the
+share of the variation *around the mean schedule* captured; and, most
+interpretably, the error in life expectancy.
+
+The oracle also reveals a side-effect of the loss.  The loss of Step 3
+up-weights ages 0–4 by $w_{\mathrm{child}}$; with weights, the best truncated core is
+the *weighted* least-squares fit, which buys a closer fit at ages 0–4 at
+the expense of every other age.  We therefore compute the oracle both
+without weights ($w_{\mathrm{child}} = 0$) and with the fixed setting $w_{\mathrm{child}}$ =
+`{python} PS["alpha"]`.
+
+```{python}
+#| label: c10-oracle
+#| code-summary: "Truncation oracle for each c_age, without and with the ages 0–4 weights"
+cores_obs = sc.project_cores(Z, sc.reconstruction_matrix(U_sex, U_age, PS["c_age"]))
+ss_total = np.sum(Z ** 2)
+ss_about_mean = np.sum((Z - Z.mean(axis=0)) ** 2)
+oracle_rows = []
+for c in PS["c_age_grid"]:
+    for alpha in PS["alpha_grid"]:
+        w = sc.loss_weights(A, alpha, PS["young_ages"])
+        Z_orc = sc.truncation_oracle(Z, U_sex, U_age, c, w)
+        acc_orc = sc.accuracy_by_sex(Z_orc, Z, A, AGE_GROUPS)
+        ss_resid = np.sum((Z_orc - Z) ** 2)
+        oracle_rows.append({"c_age": c, "alpha": alpha,
+                            "share_uncentred": 1 - ss_resid / ss_total,
+                            "share_about_mean": 1 - ss_resid / ss_about_mean,
+                            "e0_mae_F": acc_orc.loc["female", "e0_mae"],
+                            "e0_mae_M": acc_orc.loc["male", "e0_mae"],
+                            "rmse_F": acc_orc.loc["female", "rmse_all"],
+                            "rmse_M": acc_orc.loc["male", "rmse_all"]})
+oracle = pd.DataFrame(oracle_rows)
+orc_main = oracle[(oracle.c_age == PS["c_age"]) & (oracle.alpha == 0)].iloc[0]
+orc_fixed = oracle[(oracle.c_age == PS["c_age"]) & (oracle.alpha == PS["alpha"])].iloc[0]
+latex.report("svdTruncShare", 100 * orc_main["share_uncentred"], digits=2,
+             desc="Percent of the uncentred sum of squares captured by c_age components")
+latex.report("svdTruncShareCentred", 100 * orc_main["share_about_mean"], digits=1,
+             desc="Percent of the variation about the mean schedule captured by c_age components")
+latex.report("svdOracleEzero", float((orc_main["e0_mae_F"] + orc_main["e0_mae_M"]) / 2), digits=2,
+             desc="e0 MAE of the unweighted truncation oracle at c_age (mean of sexes)")
+latex.report("svdOracleEzeroAlpha", float((orc_fixed["e0_mae_F"] + orc_fixed["e0_mae_M"]) / 2), digits=2,
+             desc=f"e0 MAE of the truncation oracle at c_age with the loss weight alpha = {PS['alpha']:g} "
+                  "on ages 0-4 (fixed setting; mean of sexes)")
+oracle.round(4)
+```
+
+At $c_{\text{age}}$ = `{python} PS["c_age"]` the truncated basis captures
+`{python} f"{100 * orc_main['share_uncentred']:.2f}"`% of the uncentred sum
+of squares, so the second argument holds in that sense, but only
+`{python} f"{100 * orc_main['share_about_mean']:.1f}"`% of the variation
+of schedules around the mean schedule, and even perfectly predicted
+truncated cores would miss life expectancy by
+`{python} f"{orc_main['e0_mae_F']:.2f}"` (females) and
+`{python} f"{orc_main['e0_mae_M']:.2f}"` (males) years on average.  With
+$w_{\mathrm{child}}$ = `{python} f"{PS['alpha']:g}"` the best truncated cores miss it by
+`{python} f"{orc_fixed['e0_mae_F']:.2f}"` and
+`{python} f"{orc_fixed['e0_mae_M']:.2f}"` years: with only six age
+components, fitting ages 0–4 very closely bends the rest of the schedule.
+
+## Step 3 — the network and its training
+
+The network (`mdmx.nn.MLP`) has the paper's architecture: inputs → two
+hidden layers of `{python} PS["hidden"][0]` ReLU units → a linear output of
+$2 c_{\text{age}}$ values.  Three design choices make it train reliably:
+
+* **Inputs are standardised** (`mdmx.nn.Standardizer`) to mean 0 and
+  standard deviation 1, using the training rows only.
+* **Outputs are standardised core weights.**  The core weights have very
+  different scales: across the observed schedules the first averages
+  `{python} f"{cores_obs[:, 0].mean():.0f}"` (standard deviation
+  `{python} f"{cores_obs[:, 0].std():.0f}"`), whereas the
+  `{python} PS["c_age"]`th varies around zero with a standard deviation of
+  `{python} f"{cores_obs[:, PS['c_age'] - 1].std():.2f}"`.  The network
+  predicts each weight in standard-deviation units, and the fixed affine
+  map back to core weights is folded into the reconstruction:
+  $\hat{\mathbf{z}} = \mathbf{R}\,(\text{out} \odot \boldsymbol{\sigma} + \boldsymbol{\mu})$.
+* **The loss is measured on the schedule** (`mdmx.nn.LinearDecoderLoss`):
+  the weighted squared error between $\hat{\mathbf{z}}$ and the observed
+  $\mathbf{z}$, with every cell weighted $1/(2A)$ and the ten cells at ages
+  0–4 weighted an extra $w_{\mathrm{child}}/10$ (the loss of the article's §8.2).
+
+Training (`mdmx.nn.fit_mlp`) is mini-batch Adam with weight decay, and
+early stopping: `{python} f"{100 * PS['val_frac']:.0f}"`% of the training
+rows — whole population families, so that validation also measures
+prediction for unseen populations — are held out, the weights of the
+epoch with the lowest validation loss are kept, and training stops after
+`{python} PS["patience"]` epochs without improvement.  `mdmx.nn` is
+checked by unit tests (`tests/test_nn.py`): the hand-written gradients agree
+with finite differences, and training is reproducible from its seed.
+
+```{python}
+#| label: c10-weights
+#| code-summary: "How the loss weights divide attention between ages"
+w_fixed = sc.loss_weights(A, PS["alpha"], PS["young_ages"]).reshape(2, A)
+young_share = w_fixed[:, :PS["young_ages"]].sum() / w_fixed.sum()
+net_demo = mnn.MLP([4, *PS["hidden"], 2 * PS["c_age"]], seed=0)
+print(f"Weight of one cell at ages 0–4: {w_fixed[0, 0]:.4f}; at other ages: {w_fixed[0, 10]:.4f} "
+      f"(ratio {w_fixed[0, 0] / w_fixed[0, 10]:.0f})")
+print(f"Share of the total loss weight on the 10 cells at ages 0–4: {100 * young_share:.1f}%")
+print(f"Trainable parameters, Model 2 network: {net_demo.n_params():,}")
+latex.report("svdYoungWeightShare", 100 * young_share, digits=0,
+             desc=f"Percent of the total loss weight on ages 0-4 (both sexes), alpha = {PS['alpha']:g} "
+                  "(fixed setting)")
+latex.report("svdCAge", PS["c_age"], desc="Age components predicted in the fixed setting (c_age)")
+latex.report("svdNFolds", PS["n_folds"], desc="Cross-validation folds")
+
+
+def _sci(x):
+    """A power of ten for the text: 1e-05 → $10^{-5}$, 2e-03 → $2 \\times 10^{-3}$."""
+    m, e = f"{x:.0e}".split("e")
+    return f"$10^{{{int(e)}}}$" if m == "1" else f"${m} \\times 10^{{{int(e)}}}$"
+
+
+# The text writes one macro for a value that several settings share; check
+# that they agree, so that a change of one cannot leave the text wrong.
+if not (PS["alpha"] == max(PS["alpha_grid"]) == max(PS["nested_alpha_grid"])
+        and min(PS["alpha_grid"]) == min(PS["nested_alpha_grid"]) == 0
+        and PS["c_age"] == min(PS["nested_c_age_grid"])):
+    raise RuntimeError("alpha, c_age and the grids no longer share the values the text assumes")
+if len(set(PS["hidden"])) != 1:
+    raise RuntimeError("the text assumes hidden layers of equal width")
+latex.report("svdFixedAlpha", f"{PS['alpha']:g}", desc="Weight alpha on ages 0-4 (fixed setting; also the grids' upper value)")
+latex.report("svdNestedCAgeHigh", max(PS["nested_c_age_grid"]), desc="Largest c_age of the nested grid")
+latex.report("svdHiddenLayers", len(PS["hidden"]), desc="Hidden layers of the network")
+latex.report("svdHiddenUnits", PS["hidden"][0], desc="Units in each hidden layer")
+latex.report("svdBatchSize", PS["batch_size"], desc="Mini-batch size (schedules)")
+latex.report("svdWeightDecay", _sci(PS["l2"]), desc="Weight decay on the weight matrices")
+latex.report("svdValShare", 100 * PS["val_frac"], digits=0, desc="Percent of training rows held out for early stopping")
+latex.report("svdPatience", PS["patience"], desc="Epochs without improvement before training stops")
+latex.report("svdEnforceTol", _sci(PS["enforce_tol"]), desc="Tolerance of the correction (logit of each indicator)")
+latex.report("svdYoungAgeLast", PS["young_ages"] - 1, desc="Last single-year age with the weight alpha")
+latex.report("svdYoungCells", 2 * PS["young_ages"], desc="Cells (both sexes) with the weight alpha")
+latex.report("svdCAgeGridSize", len(PS["c_age_grid"]), desc="Values of c_age in the sweep")
+latex.report("svdCAgeGridMin", min(PS["c_age_grid"]), desc="Smallest c_age of the sweep")
+latex.report("svdScComponents", PS["svdcomp_components"], desc="Components of the SVD-Comp benchmark")
+latex.report("svdLqVAgeLow", PS["logquad_v_ages"][0], desc="First age of Log-Quad's v_x")
+latex.report("svdLqVAgeHigh", PS["logquad_v_ages"][1] - 1, desc="Last age of Log-Quad's v_x")
+```
+
+With $w_{\mathrm{child}}$ = `{python} PS["alpha"]`, the ten cells at ages 0–4 carry
+`{python} f"{100 * young_share:.0f}"`% of the total weight of the loss and
+the other 210 cells the rest.
+
+## Step 4 — making the predictions reproduce their inputs {#sec-c10-enforce}
+
+A network trained to minimise a reconstruction loss does not reproduce its
+inputs exactly: the schedule it predicts for ₅q₀ = 0.05 implies a ₅q₀ near,
+but not equal to, 0.05.  A user who supplies ₅q₀ and ₄₅q₁₅ expects them
+back — Log-Quad guarantees it by construction — and errors in the
+indicators propagate into life expectancy.  MDMx therefore ends with a
+correction step (`mdmx.svdcomp.enforce_indicators`).
+
+Let $\mathbf{g}_0$ be the network's core weights for one country-year and
+$t_1, \dots, t_m$ its input indicators ($m = 2$ for Model 1: ₅q₀ of each
+sex; $m = 4$ for Model 2: also ₄₅q₁₅ of each sex).  For a schedule
+$\mathbf{z}$, write $h_j(\mathbf{z}) = 1 - \prod_{a \in W_j} \bigl(1 -
+\operatorname{expit}(z_a)\bigr)$ for the indicator over the ages $W_j$ of
+one sex (ages 0–4, or 15–59), and
+$f_j(\mathbf{g}) = \operatorname{logit} h_j(\mathbf{R}\mathbf{g}) - \operatorname{logit} t_j$
+for its error.  Since $\partial \operatorname{logit} h_j / \partial z_a =
+q_a / h_j$ for ages $a$ in $W_j$ (and 0 elsewhere), the Jacobian
+$\mathbf{J} = \partial \mathbf{f} / \partial \mathbf{g}$ ($m \times 2c_{\text{age}}$)
+is cheap to compute.
+
+**The directions.**  To first order, the smallest change of core weights
+that removes the errors is
+$\Delta\mathbf{g} = -\mathbf{J}^\top(\mathbf{J}\mathbf{J}^\top)^{-1}\mathbf{f}(\mathbf{g}_0)$,
+a combination of the $m$ columns of $\mathbf{D} = \mathbf{J}(\mathbf{g}_0)^\top$.
+Column $j$ of $\mathbf{D}$ is the gradient of indicator $j$ with respect to
+the schedule, projected onto the truncated basis: the change of schedule
+that moves indicator $j$ furthest per unit of change, concentrated in that
+indicator's age window as far as the basis allows.
+
+**The coefficients.**  The corrected core weights are
+
+$$
+\mathbf{g}^\star = \mathbf{g}_0 + \mathbf{D}\boldsymbol{\mu},
+\qquad\text{with } \boldsymbol{\mu} \in \mathbb{R}^m \text{ solving }
+\mathbf{f}(\mathbf{g}_0 + \mathbf{D}\boldsymbol{\mu}) = \mathbf{0},
+$$
+
+$m$ equations in $m$ unknowns, solved by Newton's method from
+$\boldsymbol{\mu} = \mathbf{0}$,
+$\boldsymbol{\mu} \leftarrow \boldsymbol{\mu} - \bigl(\mathbf{J}(\mathbf{g})\,\mathbf{D}\bigr)^{-1}\mathbf{f}(\mathbf{g})$,
+halving a step whenever it would not reduce the largest error.  The
+predicted schedule is $\mathbf{R}\mathbf{g}^\star$.  Three properties make
+this the natural choice:
+
+* **It stays inside the MDMx representation.**  The correction is a change
+  of core weights, so the corrected schedule is still a combination of the
+  shared sex and age basis functions — smooth across age, and built from
+  the same components for both sexes.
+* **It is (to first order) the smallest possible change to the predicted
+  schedule.**  The columns of $\mathbf{R}$ are orthonormal, so
+  $\lVert \mathbf{g} - \mathbf{g}_0 \rVert$ is exactly the root-sum-of-squares
+  change of the whole logit(q_x) schedule; the directions $\mathbf{D}$ are
+  those of the smallest change, and the coefficients make the indicators
+  exact rather than approximately right.  The predicted age pattern is
+  altered as little as the constraints allow, and only where it must be.
+  (Re-computing the directions at every step would converge to the
+  exactly smallest change, but that iteration can fail when the start is
+  far from the targets; `tests/test_svdcomp.py` checks that our change is
+  within 5% of the exactly smallest one, and in practice it is within
+  about 1%.)
+* **It respects the sexes.**  The span of $\mathbf{R} = \mathbf{S} \otimes
+  \mathbf{A}_c$ is "any female schedule in the span of $\mathbf{A}_c$,
+  and any male schedule in the span of $\mathbf{A}_c$", so the direction
+  of a female indicator alters only the female schedule, and both sexes
+  are corrected in the same age basis.
+
+The directions are fixed at $\mathbf{g}_0$, so each Newton step solves an
+$m \times m$ system per country-year: the correction is vectorised over
+country-years and takes well under a second for all
+`{python} f"{n_obs:,}"` of them.  Iteration stops when every
+$|\operatorname{logit} h_j - \operatorname{logit} t_j|$ is below
+`{python} f"{PS['enforce_tol']:.0e}"`; a country-year that has not
+converged after `{python} PS["enforce_max_iter"]` iterations is counted
+and reported (Step 8).  `tests/test_svdcomp.py` also checks that the
+inputs are reproduced to machine precision and that a female-only
+constraint leaves the male schedule untouched.
+
+What does the correction look like?  It is a combination of the
+directions $\mathbf{D}$: the figure shows, for the
+mean schedule, the smallest change that raises logit ₅q₀ by 0.1 while
+keeping ₄₅q₁₅ fixed, and the smallest change that raises logit ₄₅q₁₅ by
+0.1 while keeping ₅q₀ fixed.  With six components the change is smooth and
+spreads somewhat beyond the age window (a bump confined to ages 0–4 cannot
+be built from six smooth curves); with more components it becomes more
+local.  This figure is for the book only.
+
+```{python}
+#| label: fig-c10-adjustment
+#| fig-cap: "Shape of the correction, for the mean female schedule: the smallest change of logit(q_x), within the truncated basis, that raises logit 5q0 by 0.1 with 45q15 fixed (left) or raises logit 45q15 by 0.1 with 5q0 fixed (right), for c_age = 6 and 20. Grey bands: the age windows of the two indicators."
+z_mean = Z.mean(axis=0)[None, :]                   # (1, 2A): the mean schedule, both sexes
+_, grad_mean = sc.constraint_values(z_mean, [(0, 0, 5), (0, 15, 45)], A)
+G_rows = grad_mean[0][:, :A]                       # (2, A): d logit h / dz, female 5q0 and 45q15
+fig, axes = plt.subplots(1, 2, figsize=(11, 3.8), sharey=True)
+for ax, target, title in ((axes[0], np.array([0.1, 0.0]), r"logit $_5q_0$ + 0.1, $_{45}q_{15}$ fixed"),
+                          (axes[1], np.array([0.0, 0.1]), r"logit $_{45}q_{15}$ + 0.1, $_5q_0$ fixed")):
+    for c, ls in ((PS["c_age"], "-"), (20, "--")):
+        Ac = U_age[:, :c]
+        Jc = G_rows @ Ac                           # (2, c)
+        dz = Ac @ (Jc.T @ np.linalg.solve(Jc @ Jc.T, target))
+        ax.plot(ages, dz, ls=ls, color=plotting.COLORS["MDMx"], label=f"$c_{{age}}$ = {c}")
+    ax.axvspan(0, 4.5, color="grey", alpha=0.12); ax.axvspan(15, 59.5, color="grey", alpha=0.12)
+    ax.axhline(0, color="black", lw=0.5)
+    ax.set_title(title, fontsize=10); ax.set_xlabel("Age")
+axes[0].set_ylabel(r"Change in logit$(q_x)$"); axes[0].legend()
+plt.show()
+```
+
+## Step 5 — cross-validation blocked by population family {#sec-c10-folds}
+
+An honest estimate of how well a model predicts a schedule it has not seen
+must hold out data that are genuinely new.  Neighbouring years of the same
+population are nearly identical, so holding out *years* at random tests
+interpolation, not prediction.  We hold out whole
+populations instead — and more than that, whole **population families**:
+some HMD series overlap (the United Kingdom contains England & Wales,
+Scotland and Northern Ireland; Germany contains East and West Germany;
+New Zealand contains its Māori and non-Māori populations), and a model
+trained on England & Wales has effectively seen the United Kingdom.  A
+family is a population plus every population it contains, read from the
+population register.
+
+The `{python} len(np.unique(family))` families are dealt into
+`{python} PS["n_folds"]` folds, largest first, each to the fold with the
+fewest country-years so far (`mdmx.svdcomp.assign_folds`).  Every model —
+MDMx and the benchmarks — is trained on `{python} PS["n_folds"] - 1` folds
+and predicts the remaining one, `{python} PS["n_folds"]` times; each
+country-year's prediction therefore comes from a model that has never seen
+its population.
+
+```{python}
+#| label: c10-folds
+#| code-summary: "Assign population families to folds"
+FOLDS = sc.assign_folds(family, PS["n_folds"], PS["fold_seed"])
+fold_tab = (pd.DataFrame({"fold": FOLDS, "pop": pop_of_row, "family": family})
+            .groupby("fold")
+            .agg(country_years=("pop", "size"), families=("family", "nunique"),
+                 populations=("pop", lambda s: ", ".join(sorted(s.unique())))))
+fold_tab
+```
+
+## Step 6 — the fixed settings, out of fold, with and without the correction
+
+We first cross-validate the models at the fixed settings of Step 2
+($c_{\text{age}}$ = `{python} PS["c_age"]`, $w_{\mathrm{child}}$ = `{python} PS["alpha"]`),
+together with the two benchmarks (explained in
+§[Step 9](#sec-c10-benchmarks)).  The MDMx models are trained exactly as
+the final models are, including early stopping; fold $k$ uses the seed
+`seed` $+ k$.  Every network of the cross-validations is trained in sex
+and age bases estimated from its own training rows only, so that the
+held-out populations play no part in the bases either (Step 10 explains
+why this matters); the final models use the bases of chapter 04.  Because the correction is applied after the network, each
+cross-validation yields both the network's own schedules ("raw") and the
+corrected ones, from the same networks.
+
+```{python}
+#| label: c10-cv
+#| code-summary: "Cross-validate the fixed settings and the benchmarks on the same folds (cached; a few minutes)"
+SETTINGS = sc.model_settings(PS)          # the fixed c_age and alpha (config/params.d/svdcomp.toml)
+INPUTS = {"one": ["5q0_F", "5q0_M"], "two": ["5q0_F", "5q0_M", "45q15_F", "45q15_M"]}
+OWN_INPUTS = {"one": ["5q0"], "two": ["5q0", "45q15"]}
+CV_KEYS = (*sc.MODEL_KEYS, "seed", "n_folds", "fold_seed", "logquad_v_ages",
+           "svdcomp_components", "svdcomp_offset")
+cv_params = {k: PS[k] for k in CV_KEYS}
+# The bases of a fit come from its training rows, with chapter 04's
+# smoothing and the age rank held at its value on all the data (as the
+# forecasters of chapter 11 hold it at every origin), so that c_age means
+# the same in every fold.
+BASIS_PARAMS = {"tucker": P.section("tucker"), "age_rank": int(U_age.shape[1])}
+_BASES: dict[bytes, tuple[np.ndarray, np.ndarray]] = {}
+
+
+def train_bases(train):
+    """Sex and age bases (2, 2) and (A, r₂) from the rows ``train`` (n,) of Z."""
+    key = np.packbits(train).tobytes()
+    if key not in _BASES:
+        cells = np.zeros_like(observed)
+        cells[cell[train, 0], cell[train, 1]] = True
+        r2 = BASIS_PARAMS["age_rank"]
+        b = tz.sex_age_bases(Mz, cells, tau=P.tucker.tau, age_bounds=(r2, r2))
+        U_a, _ = smoothing.smooth_age_basis(b["U_age"], P.tucker.smooth_components,
+                                           P.tucker.smooth_rest_sigma, P.tucker.smooth_preserve,
+                                           P.tucker.smooth_orth_tol)
+        _BASES[key] = (b["U_sex"], U_a)
+    return _BASES[key]
+
+
+S_all, A_all = train_bases(np.ones(len(Z), dtype=bool))
+if not (np.allclose(S_all, U_sex, atol=1e-10) and np.allclose(A_all, U_age, atol=1e-10)):
+    raise RuntimeError("train_bases on every row does not reproduce chapter 04's bases")
+
+
+def _cv():
+    preds, runs = {}, []
+    for key, two in (("one", False), ("two", True)):
+        res = sc.cross_validate_core_model(sc.features(ind, INPUTS[key]), Z, inputs=INPUTS[key],
+                                           folds=FOLDS, groups=family, settings=SETTINGS,
+                                           seed=PS["seed"], basis=train_bases)
+        preds[f"paper_{key}"] = res["Z_hat"]
+        preds[f"paperraw_{key}"] = res["Z_raw"]
+        runs.append(res["runs"].assign(model=f"paper_{key}"))
+        for method in ("logquad", "svdcomp"):
+            preds[f"{method}_{key}"] = sc.cross_validate_benchmark(method, ind, Z, folds=FOLDS,
+                                                                   two_parameter=two, settings=PS)
+    # Out-of-fold schedules are stored in single precision (ample for
+    # logit(q_x) to six significant digits) to halve the artefact's size.
+    return {"Z_hat": {k: v.astype(np.float32) for k, v in preds.items()},
+            "runs": pd.concat(runs, ignore_index=True), "folds": FOLDS}
+
+
+cv = artifacts.stage("svdcomp_cv", _cv, inputs=["tensor", "tucker", "populations"],
+                     params={**cv_params, **BASIS_PARAMS}, code=[_cv, train_bases, sc, lq, mnn, tz, smoothing],
+                     desc="Out-of-fold schedules: MDMx at the fixed settings (raw, corrected), Log-Quad, SVD-Comp")
+if not np.array_equal(cv["folds"], FOLDS):
+    raise RuntimeError("stored folds differ from the folds computed now")
+oof = {k: v.astype(float) for k, v in cv["Z_hat"].items()}
+acc_cv = sc.summarise_accuracy(oof, Z, A, AGE_GROUPS, AB_STARTS)
+# The stored method keys "paper_*" and "paperraw_*" are the fixed settings, corrected and raw.
+show = acc_cv[acc_cv.method.str.startswith("paper")]
+print(show[["method", "sex", "e0_mae", "e0_bias", "rmse_all", "rmse_15_59", "q5_mae", "q45_mae"]].round(3)
+      .to_string(index=False))
+for key, tag in (("one", "One"), ("two", "Two")):
+    for variant, vtag in (("paperraw", "Raw"), ("paper", "Fixed")):
+        r = acc_cv[acc_cv.method == f"{variant}_{key}"].set_index("sex")
+        for sex, sx in zip(SEXES, "FM", strict=True):
+            latex.report(f"svd{vtag}{tag}Ezero{sx}", float(r.loc[sex, "e0_mae"]), digits=2,
+                         desc=f"Out-of-fold e0 MAE, fixed settings (c_age = {PS['c_age']}, alpha = "
+                              f"{PS['alpha']:g}), {'without' if vtag == 'Raw' else 'with'} "
+                              f"the correction, Model {1 if tag == 'One' else 2}, {sex}")
+```
+
+```{python}
+#| label: c10-cv-effect
+#| code-summary: "What the correction changes"
+cv_e0 = acc_cv.pivot_table(index="method", columns="sex", values="e0_mae")
+enf_shift = {key: float(np.sqrt(np.mean((oof[f"paper_{key}"] - oof[f"paperraw_{key}"]) ** 2)))
+             for key in ("one", "two")}
+print("RMS change of logit(q_x) made by the correction:",
+      {k: round(v, 3) for k, v in enf_shift.items()})
+```
+
+The correction is small — it changes logit(q_x) by
+`{python} f"{enf_shift['one']:.3f}"` (Model 1) and
+`{python} f"{enf_shift['two']:.3f}"` (Model 2) in root-mean-square terms —
+but it matters.  For Model 2 it reduces the out-of-fold $e_0$ error from
+`{python} f"{cv_e0.loc['paperraw_two', 'female']:.2f}"` to
+`{python} f"{cv_e0.loc['paper_two', 'female']:.2f}"` years for females
+and from `{python} f"{cv_e0.loc['paperraw_two', 'male']:.2f}"` to
+`{python} f"{cv_e0.loc['paper_two', 'male']:.2f}"` for males (by
+`{python} f"{100 * (1 - cv_e0.loc['paper_two'] / cv_e0.loc['paperraw_two']).min():.0f}"`–`{python} f"{100 * (1 - cv_e0.loc['paper_two'] / cv_e0.loc['paperraw_two']).max():.0f}"`%):
+the network's schedules missed the adult-mortality input, and honouring it
+removes about half of the $e_0$ error.  For Model 1, which has no adult
+input, the gain is smaller
+(`{python} f"{cv_e0.loc['paperraw_one', 'female']:.2f}"` →
+`{python} f"{cv_e0.loc['paper_one', 'female']:.2f}"` and
+`{python} f"{cv_e0.loc['paperraw_one', 'male']:.2f}"` →
+`{python} f"{cv_e0.loc['paper_one', 'male']:.2f}"` years).
+
+## Step 7 — how many age components, and how much weight on ages 0–4? {#sec-c10-cage}
+
+With all $r_2$ age components the predicted schedules could be noisy,
+since the higher-order weights can hardly be predicted from one or two
+summary indicators (Step 2); the weight $w_{\mathrm{child}}$ on ages 0–4 trades
+accuracy at those ages against accuracy elsewhere.  We repeat the
+whole cross-validation for $c_{\text{age}} \in$ `{python} PS["c_age_grid"]`
+and $w_{\mathrm{child}} \in$ `{python} PS["alpha_grid"]`, for both models, recording
+the accuracy with and without the correction.  This describes the
+trade-offs; it is *not* how the settings are chosen (that is Step 8),
+because choosing by these out-of-fold errors and then quoting them would
+be optimistic.
+
+```{python}
+#| label: c10-sweep
+#| code-summary: "Cross-validate Models 1 and 2 over c_age × alpha (cached; ten minutes or more)"
+sweep_params = {**cv_params, "c_age_grid": PS["c_age_grid"], "alpha_grid": PS["alpha_grid"]}
+
+
+def _sweep():
+    rows = []
+    for key in ("one", "two"):
+        X = sc.features(ind, INPUTS[key])
+        for c in PS["c_age_grid"]:
+            for alpha in PS["alpha_grid"]:
+                res = sc.cross_validate_core_model(
+                    X, Z, inputs=INPUTS[key], folds=FOLDS, groups=family,
+                    settings=sc.model_settings(PS, c_age=c, alpha=alpha), seed=PS["seed"],
+                    basis=train_bases)
+                for variant, Z_v in (("corrected", res["Z_hat"]), ("raw", res["Z_raw"])):
+                    a = sc.summarise_accuracy({f"mdmx_{key}": Z_v}, Z, A, AGE_GROUPS, AB_STARTS)
+                    rows.append(a.assign(c_age=c, alpha=alpha, variant=variant,
+                                         at_cap=int((res["runs"]["epochs_run"] == PS["max_epochs"]).sum()),
+                                         not_converged=int(res["runs"]["not_converged"].sum())))
+    return pd.concat(rows, ignore_index=True)
+
+
+sweep = artifacts.stage("svdcomp_sweep", _sweep, inputs=["tensor", "tucker", "populations"],
+                        params={**sweep_params, **BASIS_PARAMS},
+                        code=[_sweep, train_bases, sc, mnn, tz, smoothing],
+                        desc="Out-of-fold accuracy of MDMx Models 1-2 for each c_age and alpha, raw and corrected")
+sw = (sweep.groupby(["method", "variant", "c_age", "alpha"])
+      [["e0_mae", "rmse_all", "rmse_abridged", "q5_mae", "q45_mae"]].mean().reset_index())   # mean of sexes
+print(f"Sweep networks at the epoch cap: {int(sweep['at_cap'].sum()) // 4}; "
+      f"corrections not converged: {int(sweep['not_converged'].sum()) // 4}")
+sw.pivot_table(index=["method", "c_age"], columns=["variant", "alpha"], values="e0_mae").round(3)
+```
+
+```{python}
+#| label: fig-s10-cage
+#| fig-cap: "Out-of-fold accuracy (mean of the two sexes) as a function of the number of age components c_age, for Model 1 (left) and Model 2 (right): corrected predictions (solid; the method) and the network's raw predictions (dashed), each with the weight α = 10 on ages 0–4 and without it (α = 0). Grey dotted: the truncation oracle (the least-squares truncated cores, α = 0). Top: mean absolute error of e0. Bottom: RMSE of logit(q_x) over all ages. Plain 10-fold cross-validation by population family; settings are chosen separately by nested cross-validation."
+fig, axes = plt.subplots(2, 2, figsize=(11, 7.5), sharex=True)
+model_name = {"mdmx_one": "Model 1", "mdmx_two": "Model 2"}
+alpha_colour = {0.0: plotting.COLORS["MDMx"], 10.0: plotting.COLORS["highlight"]}
+orc0 = oracle[oracle.alpha == 0]
+for col, key in enumerate(("mdmx_one", "mdmx_two")):
+    for row, (metric, orc_cols, lab) in enumerate(
+            (("e0_mae", ["e0_mae_F", "e0_mae_M"], "MAE, $e_0$ (years)"),
+             ("rmse_all", ["rmse_F", "rmse_M"], r"RMSE, logit$(q_x)$"))):
+        ax = axes[row, col]
+        for alpha in PS["alpha_grid"]:
+            for variant, ls in (("corrected", "-"), ("raw", "--")):
+                d = sw[(sw.method == key) & (sw.alpha == alpha) & (sw.variant == variant)]
+                ax.plot(d["c_age"], d[metric], ls=ls, marker="o", ms=3,
+                        color=alpha_colour.get(alpha, plotting.COLORS["grey"]),
+                        label=f"α = {alpha:g}, {variant}")
+        ax.plot(orc0["c_age"], orc0[orc_cols].mean(axis=1), ":", color="grey", label="Oracle (α = 0)")
+        ax.axvline(PS["c_age"], color="grey", lw=0.6)
+        ax.set_xscale("log"); ax.minorticks_off()
+        ax.set_xticks(PS["c_age_grid"], [str(c) for c in PS["c_age_grid"]])
+        ax.set_ylabel(lab)
+        if row == 0:
+            ax.set_title(model_name[key])
+        else:
+            ax.set_xlabel("$c_{age}$ (age components predicted)")
+axes[0, 0].legend(fontsize=8)
+fig.tight_layout()
+plotting.save_figure(fig, "fig-s10-cage")
+plt.show()
+```
+
+```{python}
+#| label: c10-sweep-numbers
+#| code-summary: "Summarise the sensitivity analysis"
+a_lo, c_full = min(PS["alpha_grid"]), max(PS["c_age_grid"])
+corr = sw[sw.variant == "corrected"]
+e0_grid = corr.pivot_table(index="c_age", columns=["method", "alpha"], values="e0_mae")
+alpha_cost = {key: e0_grid[(key, PS["alpha"])] - e0_grid[(key, a_lo)] for key in ("mdmx_one", "mdmx_two")}
+e0_grid_raw = sw[sw.variant == "raw"].pivot_table(index="c_age", columns=["method", "alpha"], values="e0_mae")
+alpha_cost_raw = {key: e0_grid_raw[(key, PS["alpha"])] - e0_grid_raw[(key, a_lo)]
+                  for key in ("mdmx_one", "mdmx_two")}
+big_c = [c for c in PS["c_age_grid"] if c >= PS["c_age"]]          # c_age values from the fixed one up
+sweep_fixed, sweep_full = {}, {}
+for key, tag in (("mdmx_one", "One"), ("mdmx_two", "Two")):
+    d = corr[corr.method == key]
+    sweep_fixed[key] = d[(d.c_age == PS["c_age"]) & (d.alpha == PS["alpha"])].iloc[0]
+    sweep_full[key] = d[(d.c_age == c_full) & (d.alpha == PS["alpha"])].iloc[0]
+    print(f"{model_name[key]} (corrected): fixed settings e0 MAE {sweep_fixed[key]['e0_mae']:.2f}; "
+          f"all {c_full} components {sweep_full[key]['e0_mae']:.2f};  α={PS['alpha']:g} minus α={a_lo:g} by c_age: "
+          + ", ".join(f"{c}: {v:+.2f}" for c, v in alpha_cost[key].items()))
+    no_w = d[(d.c_age == PS["c_age"]) & (d.alpha == a_lo)].iloc[0]
+    no_w_full = d[(d.c_age == c_full) & (d.alpha == a_lo)].iloc[0]
+    latex.report(f"svdSweep{tag}NoWeightEzero", float(no_w["e0_mae"]), digits=2,
+                 desc=f"Out-of-fold e0 MAE, c_age = {PS['c_age']}, alpha = {a_lo:g}, corrected, Model {tag}")
+    latex.report(f"svdSweep{tag}NoWeightFullEzero", float(no_w_full["e0_mae"]), digits=2,
+                 desc=f"Out-of-fold e0 MAE, all age components, alpha = {a_lo:g}, corrected, Model {tag}")
+    latex.report(f"svdSweep{tag}FullEzero", float(sweep_full[key]["e0_mae"]), digits=2,
+                 desc=f"Out-of-fold e0 MAE, all age components, alpha = {PS['alpha']:g}, corrected, Model {tag}")
+    latex.report(f"svdSweep{tag}FixedEzero", float(sweep_fixed[key]["e0_mae"]), digits=2,
+                 desc=f"Out-of-fold e0 MAE, fixed c_age and alpha ({PS['c_age']}, {PS['alpha']:g}), corrected "
+                      f"(mean of sexes), Model {tag}")
+```
+
+Three things stand out.
+
+1. **A moderate truncation helps a little; predicting all components
+   costs little.**  With the correction, the out-of-fold $e_0$ error with
+   $c_{\text{age}}$ = `{python} PS["c_age"]` and with all
+   `{python} c_full` components is, for Model 1,
+   `{python} f"{e0_grid.loc[PS['c_age'], ('mdmx_one', a_lo)]:.2f}"` and
+   `{python} f"{e0_grid.loc[c_full, ('mdmx_one', a_lo)]:.2f}"` years
+   ($w_{\mathrm{child}}$ = `{python} f"{a_lo:g}"`) and
+   `{python} f"{e0_grid.loc[PS['c_age'], ('mdmx_one', PS['alpha'])]:.2f}"` and
+   `{python} f"{e0_grid.loc[c_full, ('mdmx_one', PS['alpha'])]:.2f}"`
+   ($w_{\mathrm{child}}$ = `{python} f"{PS['alpha']:g}"`); for Model 2,
+   `{python} f"{e0_grid.loc[PS['c_age'], ('mdmx_two', a_lo)]:.2f}"` and
+   `{python} f"{e0_grid.loc[c_full, ('mdmx_two', a_lo)]:.2f}"`, and
+   `{python} f"{e0_grid.loc[PS['c_age'], ('mdmx_two', PS['alpha'])]:.2f}"` and
+   `{python} f"{e0_grid.loc[c_full, ('mdmx_two', PS['alpha'])]:.2f}"`.
+   With early stopping the network learns small, smooth weights for
+   components it cannot predict, so predicting all of them costs little;
+   only very few components (two) clearly hurt.
+2. **The correction does most of the work for Model 2.**  The gap between
+   the dashed (raw) and solid (corrected) lines is the value of honouring
+   the inputs, and it is largest where the raw network misses ₄₅q₁₅ most.
+3. **With the correction, the extra weight on ages 0–4 does not help.**
+   Its purpose, reproducing ₅q₀, is served exactly by the correction.
+   For $c_{\text{age}} \ge$ `{python} PS["c_age"]`,
+   $w_{\mathrm{child}}$ = `{python} f"{PS['alpha']:g}"` raises the corrected
+   $e_0$ error of Model 2 by
+   `{python} f"{alpha_cost['mdmx_two'][big_c].min():+.2f}"` to
+   `{python} f"{alpha_cost['mdmx_two'][big_c].max():+.2f}"` years compared
+   with $w_{\mathrm{child}}$ = `{python} f"{a_lo:g}"` (without the correction:
+   `{python} f"{alpha_cost_raw['mdmx_two'][big_c].min():+.2f}"` to
+   `{python} f"{alpha_cost_raw['mdmx_two'][big_c].max():+.2f}"`), and that
+   of Model 1 by `{python} f"{alpha_cost['mdmx_one'][big_c].min():+.2f}"`
+   to `{python} f"{alpha_cost['mdmx_one'][big_c].max():+.2f}"` years.
+
+## Step 8 — choosing the settings honestly: nested cross-validation {#sec-c10-nested}
+
+If $c_{\text{age}}$ and $w_{\mathrm{child}}$ were chosen as the best point of Step 7
+and that point's error quoted, the test folds would have helped choose the
+model that is then judged on them.  A **nested cross-validation** avoids
+this (`mdmx.svdcomp.nested_cross_validate_core_model`).  For each of the
+`{python} PS["n_folds"]` outer folds:
+
+1. the population families of the nine *training* folds are dealt into
+   `{python} PS["nested_inner_folds"]` inner folds;
+2. every candidate $(c_{\text{age}}, w_{\mathrm{child}})$ in
+   `{python} PS["nested_c_age_grid"]` × `{python} PS["nested_alpha_grid"]`
+   is cross-validated over those inner folds, on training rows only, and
+   scored by the mean (over both sexes) absolute error of $e_0$ of its
+   corrected predictions;
+3. the best candidate is trained on all training rows of the outer fold
+   and predicts the held-out fold.
+
+The grid and the number of inner folds are kept small (four candidates,
+three inner folds: about 260 networks); the sweep of Step 7 shows that the omitted
+values of $c_{\text{age}}$ would not change the picture.  The sex-specific
+variant used in Step 9 is not tuned separately: in each outer fold it uses
+the setting chosen for the corresponding two-sex model, a choice that was
+also made without the test fold.
+
+```{python}
+#| label: c10-nested
+#| code-summary: "Nested cross-validation of Models 1 and 2, and the sex-specific variant (cached; the longest step)"
+GRID = [{"c_age": int(c), "alpha": float(a)} for c in PS["nested_c_age_grid"] for a in PS["nested_alpha_grid"]]
+nested_params = {**cv_params, "nested_c_age_grid": PS["nested_c_age_grid"],
+                 "nested_alpha_grid": PS["nested_alpha_grid"],
+                 "nested_inner_folds": PS["nested_inner_folds"], "nested_inner_seed": PS["nested_inner_seed"]}
+
+
+def _nested():
+    out = {"Z_hat": {}, "runs": [], "inner": [], "fold_settings": {}}
+    for key in ("one", "two"):
+        res = sc.nested_cross_validate_core_model(
+            sc.features(ind, INPUTS[key]), Z, inputs=INPUTS[key], folds=FOLDS, groups=family,
+            settings=SETTINGS, grid=GRID, n_inner=PS["nested_inner_folds"],
+            inner_seed=PS["nested_inner_seed"], seed=PS["seed"], basis=train_bases)
+        out["Z_hat"][f"mdmx_{key}"] = res["Z_hat"].astype(np.float32)
+        out["Z_hat"][f"mdmxraw_{key}"] = res["Z_raw"].astype(np.float32)
+        out["runs"].append(res["runs"].assign(model=f"mdmx_{key}", sex="both"))
+        out["inner"].append(res["inner"].assign(model=f"mdmx_{key}"))
+        out["fold_settings"][key] = res["fold_settings"]
+        own = sc.cross_validate_own_sex(ind, Z, indicator_names=OWN_INPUTS[key], folds=FOLDS,
+                                        groups=family, settings=SETTINGS, seed=PS["seed"],
+                                        basis=train_bases, fold_settings=res["fold_settings"])
+        out["Z_hat"][f"own_{key}"] = own["Z_hat"].astype(np.float32)
+        out["runs"].append(own["runs"].assign(model=f"own_{key}"))
+    out["runs"] = pd.concat(out["runs"], ignore_index=True)
+    out["inner"] = pd.concat(out["inner"], ignore_index=True)
+    return out
+
+
+nested = artifacts.stage("svdcomp_nested", _nested, inputs=["tensor", "tucker", "populations"],
+                         params={**nested_params, **BASIS_PARAMS},
+                         code=[_nested, train_bases, sc, mnn, tz, smoothing],
+                         desc="Nested CV: out-of-fold schedules of Models 1-2 and the sex-specific variant "
+                              "with c_age and alpha chosen inside each training set")
+oof.update({k: v.astype(float) for k, v in nested["Z_hat"].items()})
+inner = nested["inner"]
+choices = inner[inner.chosen].pivot_table(index="fold", columns="model", values=["c_age", "alpha"])
+print("Settings chosen in each outer fold:")
+print(choices.astype(float).round(1))
+all_runs = pd.concat([cv["runs"], nested["runs"]], ignore_index=True)
+# Every network of the cross-validations: the outer folds, the inner folds of
+# the nested CV and the sweep (four rows of the sweep per network: two
+# variants, two sexes).
+n_sweep_nets = len(sweep) // 4 * PS["n_folds"]          # one cross-validation per four rows
+at_cap = (int((all_runs["epochs_run"] >= PS["max_epochs"]).sum()) + int(inner["at_cap"].sum())
+          + int(sweep["at_cap"].sum()) // 4)
+n_networks = len(all_runs) + int(inner["networks"].sum()) + n_sweep_nets
+failures = int(all_runs["not_converged"].sum()) + int(inner["not_converged"].sum())
+max_iter_used = int(all_runs["enforce_iterations"].max())
+print(f"Networks of the cross-validations: {n_networks}; at the epoch cap: {at_cap}; corrections not "
+      f"converged (outer and inner): {failures}; most correction iterations: {max_iter_used}")
+latex.report("svdCVRunsAtCap", at_cap,
+             desc="Networks of the cross-validations (outer, inner and sweep) that reached the epoch cap (should be 0)")
+latex.report("svdCVNetworks", n_networks, desc="Networks trained in the cross-validations (outer, inner and sweep)")
+latex.report("svdEnforceFailures", failures,
+             desc="Out-of-fold predictions whose correction did not converge (should be 0)")
+latex.report("svdEnforceMaxIter", max_iter_used, desc="Largest number of correction iterations used")
+latex.report("svdNestedInnerFolds", PS["nested_inner_folds"], desc="Inner folds of the nested CV")
+latex.report("svdNestedGridSize", len(GRID), desc="Candidate (c_age, alpha) pairs in the nested CV")
+acc = sc.summarise_accuracy(oof, Z, A, AGE_GROUPS, AB_STARTS)
+```
+
+`{python} "Every network was stopped by early stopping, not by the epoch cap, and every correction converged." if at_cap == 0 and failures == 0 else f"{at_cap} networks reached the epoch cap and {failures} corrections did not converge; see the output above."`
+
+The final models, saved for the app, need one setting each.  They are
+chosen by the same rule applied to all the data: the candidate of the
+nested grid with the smallest corrected $e_0$ error in the plain 10-fold
+cross-validation of Step 7.  Their out-of-fold accuracy is the nested
+estimate below, which already includes the uncertainty of choosing.
+
+```{python}
+#| label: c10-final-models
+#| code-summary: "Choose the final settings and fit the final models on all observed country-years (cached)"
+final_choice = {}
+for key in ("one", "two"):
+    d = corr[(corr.method == f"mdmx_{key}") & corr.c_age.isin(PS["nested_c_age_grid"])
+             & corr.alpha.isin(PS["nested_alpha_grid"])]
+    best = d.loc[d["e0_mae"].idxmin()]
+    final_choice[key] = {"c_age": int(best["c_age"]), "alpha": float(best["alpha"])}
+    tag = "One" if key == "one" else "Two"
+    agree = int(((choices[("c_age", f"mdmx_{key}")] == best["c_age"])
+                 & (choices[("alpha", f"mdmx_{key}")] == best["alpha"])).sum())
+    print(f"Model {1 if key == 'one' else 2}: final c_age = {final_choice[key]['c_age']}, "
+          f"alpha = {final_choice[key]['alpha']:g} (chosen in {agree} of {PS['n_folds']} outer folds)")
+    latex.report(f"svdChosen{tag}CAge", final_choice[key]["c_age"], desc=f"c_age of the final Model {tag}")
+    latex.report(f"svdChosen{tag}Alpha", final_choice[key]["alpha"], text=f"{final_choice[key]['alpha']:g}",
+                 desc=f"alpha of the final Model {tag}")
+    latex.report(f"svdChosen{tag}Agree", agree, desc=f"Outer folds whose nested choice equals the final setting, Model {tag}")
+
+
+def _final(key):
+    model = sc.fit_core_model(sc.features(ind, INPUTS[key]), Z, inputs=INPUTS[key], U_sex=U_sex,
+                              U_age=U_age, settings=sc.model_settings(PS, **final_choice[key]),
+                              seed=PS["seed"], groups=family)
+    model["description"] = (f"MDMx summary-indicator Model {'1' if key == 'one' else '2'} (the article's prediction from summary indicators): "
+                            "logit of the inputs -> standardised truncated core weights -> smallest "
+                            "change that reproduces the inputs -> logit(qx) schedules of both sexes; "
+                            "see mdmx.svdcomp")
+    return model
+
+
+def _final_one():
+    return _final("one")
+
+
+def _final_two():
+    return _final("two")
+
+
+model1 = artifacts.stage("svdcomp_model1", _final_one, inputs=["tensor", "tucker", "populations"],
+                         params={**SETTINGS, **final_choice["one"], "seed": PS["seed"]},
+                         code=[_final, _final_one, sc, mnn],
+                         desc="MDMx Model 1 (5q0 of both sexes -> schedule): weights, scalers, basis, correction")
+model2 = artifacts.stage("svdcomp_model2", _final_two, inputs=["tensor", "tucker", "populations"],
+                         params={**SETTINGS, **final_choice["two"], "seed": PS["seed"]},
+                         code=[_final, _final_two, sc, mnn],
+                         desc="MDMx Model 2 (5q0, 45q15 of both sexes -> schedule): weights, scalers, basis, correction")
+for tag, m in (("One", model1), ("Two", model2)):
+    h = m["history"]
+    print(f"Model {1 if tag == 'One' else 2}: best epoch {h['best_epoch']} of {h['epochs_run']} "
+          f"(training rows {h['n_train']:,}, validation rows {h['n_val']:,})")
+    latex.report(f"svd{tag}BestEpoch", h["best_epoch"],
+                 desc=f"Best epoch of the final Model {1 if tag == 'One' else 2}")
+```
+
+The table below (`tbl-s10-accuracy`, in the companion only) gives the
+out-of-fold accuracy of the two models by sex: the mean absolute error of
+$e_0$ and the root-mean-square error of $\operatorname{logit}(q_x)$ in five
+age groups.  The first rows are the headline (nested cross-validation);
+the last rows give the fixed settings of Step 6 as a sensitivity check.
+All predictions reproduce their inputs exactly.
+
+```{python}
+#| label: tbl-s10-accuracy
+#| tbl-cap: "Out-of-fold accuracy of MDMx Models 1 and 2 (nested cross-validation blocked by population family), with the fixed settings of Step 2 as a sensitivity check."
+#| code-summary: "Table: out-of-fold accuracy by model and sex"
+GROUP_LABELS = {"rmse_0_0": "0", "rmse_1_4": "1--4", "rmse_5_14": "5--14",
+                "rmse_15_59": "15--59", "rmse_60_109": "60+", "rmse_all": "All"}
+ROW_LABELS = {"mdmx_one": "Model 1 ($_5q_0$)", "mdmx_two": "Model 2 ($_5q_0$, $_{45}q_{15}$)",
+              "paper_one": "Model 1, fixed settings", "paper_two": "Model 2, fixed settings"}
+rows = acc[acc.method.isin(ROW_LABELS)].copy()
+rows["order"] = rows["method"].map({k: i for i, k in enumerate(ROW_LABELS)})
+rows = rows.sort_values(["order", "sex"])
+acc_tab = pd.DataFrame({"Model": rows["method"].map(ROW_LABELS).to_numpy(),
+                        "Sex": rows["sex"].str.title().to_numpy(),
+                        "$e_0$ MAE": rows["e0_mae"].to_numpy()})
+for col, lab in GROUP_LABELS.items():
+    acc_tab[lab] = rows[col].to_numpy()
+latex.save_table(
+    acc_tab, "tbl-s10-accuracy",
+    "Out-of-fold accuracy of the MDMx summary-indicator models.  Each country-year is predicted "
+    f"by a model trained on the other {PS['n_folds'] - 1} of {PS['n_folds']} folds, which are "
+    "formed from whole population families; every predicted schedule reproduces its inputs "
+    "exactly.  Models~1 and~2: $c_{\\text{age}}$ and $w_{\\mathrm{child}}$ chosen by nested cross-validation "
+    "inside each training set.  Fixed settings: $c_{\\text{age}} = "
+    f"{PS['c_age']}$, $w_{{\\mathrm{{child}}}} = {PS['alpha']:g}$.  $e_0$ MAE: mean absolute error of life "
+    "expectancy at birth (years).  Other columns: root-mean-square error of $\\operatorname{logit}({}_1q_x)$ over "
+    "the single-year ages in each age group.",
+    short_caption="Out-of-fold accuracy of the summary-indicator models",
+    formats={"$e_0$ MAE": "{:.2f}", **{lab: "{:.3f}" for lab in GROUP_LABELS.values()}},
+    column_format="llrrrrrrr", escape_cells=False, group_rows=[2, 4, 6])
+for key, tag in (("mdmx_one", "One"), ("mdmx_two", "Two")):
+    name = f"Model {1 if tag == 'One' else 2}"
+    for sex, sx in zip(SEXES, "FM", strict=True):
+        r = acc[(acc.method == key) & (acc.sex == sex)].iloc[0]
+        latex.report(f"svd{tag}Ezero{sx}", float(r["e0_mae"]), digits=2,
+                     desc=f"Out-of-fold e0 MAE (years), MDMx {name} (nested CV), {sex}")
+        latex.report(f"svd{tag}EzeroBias{sx}", float(r["e0_bias"]), digits=2, signed=True,
+                     desc=f"Out-of-fold mean e0 error (years), MDMx {name} (nested CV), {sex}")
+        latex.report(f"svd{tag}Rmse{sx}", float(r["rmse_all"]), digits=3,
+                     desc=f"Out-of-fold RMSE of logit(qx), all ages, MDMx {name} (nested CV), {sex}")
+        latex.report(f"svd{tag}RmseAdult{sx}", float(r["rmse_15_59"]), digits=3,
+                     desc=f"Out-of-fold RMSE of logit(qx), ages 15-59, MDMx {name} (nested CV), {sex}")
+    if tag == "One":
+        for sex, sx in zip(SEXES, "FM", strict=True):
+            r = acc[(acc.method == key) & (acc.sex == sex)].iloc[0]
+            latex.report(f"svdOneQfortyfiveMae{sx}", float(r["q45_mae"]), digits=3,
+                         desc=f"Out-of-fold MAE of the 45q15 implied by Model 1 (not an input), {sex}")
+acc_tab.round(3)
+```
+
+The two **diagnostic figures** show the out-of-fold behaviour of each model
+(nested cross-validation, corrected predictions): the training curve of
+the final model (top left; validation loss below the training loss simply
+means the held-out families are, on average, easier to fit), the
+reproduction of the input ₅q₀ (exact by construction), the predicted
+against the observed $e_0$, the error by single year of age, the
+single-year errors at ages 0–4, the $e_0$ error against the level of
+$e_0$, and three example country-years at low, median and high child
+mortality.
+
+```{python}
+#| code-summary: "Plotting helper for the diagnostic figures"
+def diagnostic_figure(model, Z_hat, title):
+    """3 × 3 out-of-fold diagnostics of one model (Z_hat: its out-of-fold schedules)."""
+    colours = [plotting.COLORS["female"], plotting.COLORS["male"]]
+    ind_hat = sc.indicators(Z_hat, A)
+    e0_obs, e0_hat = sc.e0_by_sex(Z, A), sc.e0_by_sex(Z_hat, A)
+    err = (Z_hat - Z).reshape(-1, 2, A)
+    fig, axes = plt.subplots(3, 3, figsize=(13, 11.5))
+    curve = model["history"]["curve"]
+    ax = axes[0, 0]
+    ax.plot(curve["epoch"], curve["train_loss"], lw=1, label="Training")
+    ax.plot(curve["epoch"], curve["val_loss"], lw=1, label="Validation")
+    ax.axvline(model["history"]["best_epoch"], color="grey", lw=0.8, ls="--")
+    ax.set_yscale("log"); ax.set_xlabel("Epoch"); ax.set_ylabel("Loss")
+    ax.set_title("Final model: training curve"); ax.legend()
+    ax = axes[0, 1]
+    for s, sx in enumerate("FM"):
+        ax.scatter(ind[f"5q0_{sx}"], ind_hat[f"5q0_{sx}"], s=3, alpha=0.25, color=colours[s],
+                   label=SEXES[s].title())
+    lim = [ind[["5q0_F", "5q0_M"]].min().min() * 0.8, ind[["5q0_F", "5q0_M"]].max().max() * 1.2]
+    ax.plot(lim, lim, "k--", lw=0.7); ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xlabel(r"Input $_5q_0$"); ax.set_ylabel(r"$_5q_0$ of predicted schedule")
+    ax.set_title(r"$_5q_0$ reproduction"); ax.legend()
+    ax = axes[0, 2]
+    for s in range(2):
+        ax.scatter(e0_obs[:, s], e0_hat[:, s], s=3, alpha=0.25, color=colours[s], label=SEXES[s].title())
+    lim = [e0_obs.min() - 2, e0_obs.max() + 2]
+    ax.plot(lim, lim, "k--", lw=0.7)
+    ax.set_xlabel("Observed $e_0$"); ax.set_ylabel("Predicted $e_0$"); ax.set_title("$e_0$"); ax.legend()
+    ax = axes[1, 0]
+    for s in range(2):
+        ax.plot(ages, np.sqrt(np.mean(err[:, s] ** 2, axis=0)), color=colours[s], lw=1.4,
+                label=SEXES[s].title())
+    ax.set_xlabel("Age"); ax.set_ylabel(r"RMSE, logit$(q_x)$"); ax.set_title("Error by age"); ax.legend()
+    ax = axes[1, 1]
+    q_err = lifetable.expit(Z_hat.reshape(-1, 2, A)) - lifetable.expit(Z.reshape(-1, 2, A))
+    for s, shift in ((0, -0.18), (1, 0.18)):
+        ax.boxplot([q_err[:, s, a] for a in range(5)], positions=np.arange(5) + shift, widths=0.3,
+                   showfliers=False, patch_artist=True,
+                   boxprops={"facecolor": colours[s], "alpha": 0.5}, medianprops={"color": "black"})
+    ax.axhline(0, color="black", lw=0.5, ls="--")
+    ax.set_xticks(range(5), [f"$q_{a}$" for a in range(5)])
+    ax.set_ylabel("Predicted − observed $q_x$"); ax.set_title("Single-year errors, ages 0–4")
+    ax = axes[1, 2]
+    for s in range(2):
+        d = e0_hat[:, s] - e0_obs[:, s]
+        ax.scatter(e0_obs[:, s], d, s=3, alpha=0.2, color=colours[s])
+        bins = np.linspace(e0_obs.min(), e0_obs.max(), 15)
+        idx = np.digitize(e0_obs[:, s], bins)
+        centres = [(e0_obs[idx == i, s].mean(), d[idx == i].mean()) for i in np.unique(idx)
+                   if (idx == i).sum() >= 10]
+        ax.plot(*zip(*centres, strict=True), color=colours[s], lw=2, label=f"{SEXES[s].title()}, binned mean")
+    ax.axhline(0, color="black", lw=0.5)
+    ax.set_xlabel("Observed $e_0$"); ax.set_ylabel("Predicted − observed $e_0$")
+    ax.set_title("$e_0$ error by level"); ax.legend()
+    q5_avg = ind[["5q0_F", "5q0_M"]].mean(axis=1).to_numpy()
+    order = np.argsort(q5_avg)
+    for col, pct in enumerate((5, 50, 95)):
+        ax = axes[2, col]
+        i = order[int(len(order) * pct / 100)]
+        for s in range(2):
+            ax.plot(ages, Z[i, s * A:(s + 1) * A], ".", ms=2.5, color=colours[s], alpha=0.6)
+            ax.plot(ages, Z_hat[i, s * A:(s + 1) * A], color=colours[s], lw=1.3, label=SEXES[s].title())
+        rmse = np.sqrt(np.mean((Z_hat[i] - Z[i]) ** 2))
+        name = T["pop_names"][cell[i, 0]]
+        ax.set_title(f"{name} {year_of_row[i]}: $_5q_0$ = {q5_avg[i]:.3f}, RMSE {rmse:.2f}", fontsize=9)
+        ax.set_xlabel("Age"); ax.set_ylabel(r"logit$(q_x)$")
+    axes[2, 0].legend()
+    fig.suptitle(title, y=1.0)
+    fig.tight_layout()
+    return fig
+```
+
+```{python}
+#| label: fig-s10-model1-diag
+#| fig-cap: "Model 1 (input: 5q0 of both sexes), out-of-fold diagnostics (nested cross-validation by population family; predictions corrected to reproduce the input 5q0 exactly). Top left: training and validation loss of the final model (dashed: best epoch). All other panels show out-of-fold predictions — each country-year predicted by a model that never saw its population family: reproduction of the input 5q0; predicted against observed e0; RMSE of logit(q_x) by age; single-year errors in q_x at ages 0–4; e0 error against observed e0; and three example country-years (points: observed; lines: predicted) at the 5th, 50th and 95th percentiles of 5q0."
+fig = diagnostic_figure(model1, oof["mdmx_one"], "Model 1: $_5q_0$ of both sexes (out of fold)")
+plotting.save_figure(fig, "fig-s10-model1-diag")
+plt.show()
+```
+
+```{python}
+#| label: fig-s10-model2-diag
+#| fig-cap: "Model 2 (inputs: 5q0 and 45q15 of both sexes), out-of-fold diagnostics; panels as in the Model 1 figure. Predictions reproduce both inputs exactly. Adding adult mortality mainly reduces the errors at working and older ages and the e0 error."
+fig = diagnostic_figure(model2, oof["mdmx_two"], "Model 2: $_5q_0$ and $_{45}q_{15}$ of both sexes (out of fold)")
+plotting.save_figure(fig, "fig-s10-model2-diag")
+plt.show()
+```
+
+```{python}
+#| label: fig-s10-model2-45q15
+#| fig-cap: "Adult mortality 45q15 of the out-of-fold predicted schedules against the observed value. Left: Model 1, where 45q15 is not an input and is implied by child mortality alone. Right: Model 2, where it is an input and is reproduced exactly; for contrast, its raw network predictions (before the correction) are shown in grey."
+fig, axes = plt.subplots(1, 2, figsize=(11, 4.8), sharex=True, sharey=True)
+ind_raw = sc.indicators(oof["mdmxraw_two"], A)
+for s, sx in enumerate("FM"):
+    axes[1].scatter(ind[f"45q15_{sx}"], ind_raw[f"45q15_{sx}"], s=3, alpha=0.2,
+                    color=plotting.COLORS["grey"], label="Before correction" if s == 0 else None)
+for ax, key, title in ((axes[0], "mdmx_one", "Model 1 (not an input)"),
+                       (axes[1], "mdmx_two", "Model 2 (an input)")):
+    ind_hat = sc.indicators(oof[key], A)
+    for s, sx in enumerate("FM"):
+        ax.scatter(ind[f"45q15_{sx}"], ind_hat[f"45q15_{sx}"], s=3, alpha=0.25,
+                   color=plotting.COLORS[SEXES[s]], label=SEXES[s].title())
+    ax.plot([0, 0.85], [0, 0.85], "k--", lw=0.7)
+    ax.set_xlabel(r"Observed $_{45}q_{15}$"); ax.set_title(title)
+axes[0].set_ylabel(r"$_{45}q_{15}$ of predicted schedule"); axes[0].legend(); axes[1].legend()
+plotting.save_figure(fig, "fig-s10-model2-45q15")
+plt.show()
+```
+
+The errors are not spread evenly over the populations.  The cell below
+ranks the populations by the mean absolute error of men's $e_0$ under
+Model 1 and compares the worst with the benchmarks' worst and with
+Model 2.
+
+```{python}
+#| label: c10-by-population
+#| code-summary: "Errors of e0 by population: the worst for men under Model 1, the benchmarks and Model 2"
+names = dict(zip(register["code"], register["name"]))
+e0_obs = sc.e0_by_sex(Z, A)
+
+
+def by_population(key):
+    """Mean |error of e0| by population, (populations × sexes) DataFrame."""
+    err = np.abs(sc.e0_by_sex(oof[key], A) - e0_obs)
+    return pd.DataFrame(err, columns=["female", "male"]).groupby(pop_of_row).mean()
+
+
+n_worst = PS["worst_populations"]
+bp = {k: by_population(k) for k in ("mdmx_one", "logquad_one", "svdcomp_one", "mdmx_two")}
+worst = bp["mdmx_one"]["male"].nlargest(n_worst).index
+overlap = {k: len(set(worst) & set(bp[k]["male"].nlargest(n_worst).index)) for k in ("logquad_one", "svdcomp_one")}
+overall = bp["mdmx_one"].stack().nlargest(3)
+print(f"Men, the {n_worst} largest mean errors of e0 under Model 1 (and Model 2):")
+print(pd.DataFrame({"Model 1": bp["mdmx_one"].loc[worst, "male"], "Model 2": bp["mdmx_two"].loc[worst, "male"]})
+      .rename(index=names).round(2))
+print(f"Of these, also among the {n_worst} worst for men of Log-Quad and SVD-Comp (5q0 alone):", overlap)
+print("Largest mean errors under Model 1, either sex:", overall.round(2).to_dict())
+latex.report("svdWorstMenN", n_worst, desc="Populations named as the largest male e0 errors of Model 1")
+worst_names = [names[p] for p in worst]
+latex.report("svdWorstMenOne", ", ".join(worst_names[:-1]) + " and " + worst_names[-1],
+             desc="Populations with the largest mean male e0 errors of Model 1, largest first")
+latex.report("svdWorstMenOverlapLq", overlap["logquad_one"],
+             desc="Of those, also among Log-Quad's largest (5q0 alone), men")
+latex.report("svdWorstMenOverlapSc", overlap["svdcomp_one"],
+             desc="Of those, also among SVD-Comp's largest (5q0 alone), men")
+latex.report("svdWorstMenOneMae", float(bp["mdmx_one"].loc[worst, "male"].mean()), digits=2,
+             desc="Mean over those populations of the mean male e0 error, Model 1 (years)")
+latex.report("svdWorstMenTwoMae", float(bp["mdmx_two"].loc[worst, "male"].mean()), digits=2,
+             desc="The same with Model 2 (years)")
+```
+
+```{python}
+#| label: fig-s10-comparison
+#| fig-cap: "Out-of-fold RMSE of logit(q_x) by single year of age: Model 1 (dashed) and Model 2 (solid), females (left) and males (right); nested cross-validation, corrected predictions."
+fig, axes = plt.subplots(1, 2, figsize=(11, 4.3), sharey=True)
+for s, ax in enumerate(axes):
+    colour = plotting.COLORS[SEXES[s]]
+    for key, ls, lab in (("mdmx_one", "--", r"Model 1 ($_5q_0$)"),
+                         ("mdmx_two", "-", r"Model 2 ($_5q_0$, $_{45}q_{15}$)")):
+        e = (oof[key] - Z)[:, s * A:(s + 1) * A]
+        ax.plot(ages, np.sqrt(np.mean(e ** 2, axis=0)), ls=ls, color=colour, lw=1.4, label=lab)
+    ax.set_title(SEXES[s].title()); ax.set_xlabel("Age")
+axes[0].set_ylabel(r"RMSE, logit$(q_x)$"); axes[0].legend()
+plotting.save_figure(fig, "fig-s10-comparison")
+plt.show()
+```
+
+```{python}
+#| label: c10-model-gain
+#| code-summary: "How much does adult mortality help, and where?"
+one = acc[acc.method == "mdmx_one"].set_index("sex")
+two = acc[acc.method == "mdmx_two"].set_index("sex")
+cols_gain = [*GROUP_LABELS, "e0_mae"]
+print("Ratio of Model 1 to Model 2 out-of-fold error (>1: Model 2 better):")
+print((one[cols_gain] / two[cols_gain]).rename(columns=GROUP_LABELS).round(2))
+e0_cut = 100 * (1 - two["e0_mae"] / one["e0_mae"])
+ratio_young = (one[["rmse_0_0", "rmse_1_4"]] / two[["rmse_0_0", "rmse_1_4"]])
+```
+
+Adding adult mortality reduces the out-of-fold error in $e_0$ by
+`{python} f"{e0_cut['female']:.0f}"`% for females and
+`{python} f"{e0_cut['male']:.0f}"`% for males, and among the age groups
+the error falls most at ages 15–59 (RMSE
+`{python} f"{one.loc['female', 'rmse_15_59']:.3f}"` →
+`{python} f"{two.loc['female', 'rmse_15_59']:.3f}"` for females,
+`{python} f"{one.loc['male', 'rmse_15_59']:.3f}"` →
+`{python} f"{two.loc['male', 'rmse_15_59']:.3f}"` for males), as expected.
+At ages 0–4, which ₅q₀ already pins down, the two models are
+within `{python} f"{100 * np.abs(ratio_young - 1).to_numpy().max():.0f}"`%
+of each other.  On average Model 1 predicts $e_0$
+`{python} f"{one['e0_bias'].min():+.2f}"` to
+`{python} f"{one['e0_bias'].max():+.2f}"` years off and Model 2
+`{python} f"{two['e0_bias'].min():+.2f}"` to
+`{python} f"{two['e0_bias'].max():+.2f}"` years (mean signed error,
+females and males).
+
+## Step 9 — benchmarks: Log-Quad and SVD-Comp on the same folds {#sec-c10-benchmarks}
+
+Comparing MDMx fairly with Log-Quad and SVD-Comp needs three things: the
+benchmarks must be **fitted to the same training data**, evaluated on the
+**same held-out country-years**, and given the **same information**.
+
+* **Log-Quad** (@Wilmoth2012; `mdmx.logquad`) models the log death rate
+  in each five-year age group as a quadratic in $\log {}_5q_0$ plus an
+  adult-mortality term $v_x k$.  It is re-estimated on each fold's training
+  schedules: $a_x, b_x, c_x$ by least squares age group by age group, and
+  $v_x$ as the leading singular vector of the residuals at ages 5–89.
+  With ₅q₀ only, $k = 0$; with ₄₅q₁₅, $k$ is solved so that the predicted
+  ₄₅q₁₅ equals the input exactly.  ₅q₀ is always reproduced exactly.
+* **SVD-Comp** [@Clark2019; `mdmx.svdcomp.fit_svdcomp_classic`] takes the
+  SVD of each sex's logit(q_x) matrix, keeps four components, and predicts
+  their weights by regressions on eight polynomial terms in ₅q₀ and
+  ₄₅q₁₅; with ₅q₀ only, ₄₅q₁₅ is first predicted from ₅q₀.  It too is
+  re-estimated on each fold's training schedules, and, as published, it
+  reproduces its inputs only approximately.
+
+Using the published coefficients instead would be unfair to MDMx in the
+opposite direction: both were fitted to HMD life tables that include every
+population we test on.  Re-estimation is possible because the model forms
+are fully specified; the re-implementations were checked during
+development against the originals:
+the SVD-Comp prediction code reproduces the R package `svdComp5q0` to
+$10^{-14}$ when given its packaged coefficients, and Log-Quad fitted to all
+observed HMD schedules recovers the published coefficients closely.
+`tests/test_svdcomp.py` checks that each benchmark recovers data generated
+by its own model.
+
+**The information difference.**  Log-Quad and SVD-Comp predict each sex
+from that sex's indicators only.  MDMx Models 1 and 2 use *both* sexes'
+indicators — Model 1 sees the male ₅q₀ when predicting females.  That is a
+legitimate feature of a joint model, but it makes a straight comparison
+unfair to the benchmarks.  We therefore also report a **sex-specific MDMx
+variant**: one network per sex whose only inputs are that sex's indicators,
+whose loss covers only that sex's schedule, and whose predictions are
+corrected to reproduce those inputs.  The table also shows MDMx at the
+fixed settings of Step 6.
+
+All methods are compared on two scales: $e_0$, and the RMSE of
+$\operatorname{logit}({}_nq_x)$ over the standard abridged age groups (0,
+1–4, 5–9, …, 105–109).  The abridged scale is the one on which Log-Quad is
+defined, so it does not penalise Log-Quad for spreading each group's rate
+evenly over single years; the single-year models are aggregated to the
+same groups.
+
+```{python}
+#| label: tbl-s10-comparison
+#| tbl-cap: "Out-of-fold comparison of MDMx with Log-Quad and SVD-Comp, all re-estimated on the same training folds."
+#| code-summary: "Table: out-of-fold comparison with the benchmarks"
+METHODS = [("mdmx", "MDMx (both sexes' inputs)"), ("own", "MDMx (own-sex inputs)"),
+           ("paper", "MDMx, fixed settings"), ("logquad", "Log-Quad"), ("svdcomp", "SVD-Comp")]
+INPUT_LABELS = {"one": "$_5q_0$", "two": "$_5q_0$, $_{45}q_{15}$"}
+comp_rows = []
+for key in ("one", "two"):
+    for method, label in METHODS:
+        r = acc[acc.method == f"{method}_{key}"].set_index("sex")
+        comp_rows.append({"Inputs": INPUT_LABELS[key], "Method": label,
+                          "$e_0$ MAE, F": r.loc["female", "e0_mae"], "$e_0$ MAE, M": r.loc["male", "e0_mae"],
+                          "RMSE, F": r.loc["female", "rmse_abridged"], "RMSE, M": r.loc["male", "rmse_abridged"]})
+comp_tab = pd.DataFrame(comp_rows)
+latex.save_table(
+    comp_tab, "tbl-s10-comparison",
+    "Out-of-fold comparison with Log-Quad \\citep{Wilmoth2012} and SVD-Comp \\citep{Clark2019}.  "
+    "Every method is re-estimated on the same training folds (blocked by population family) and "
+    "evaluated on the same held-out country-years.  $e_0$ MAE: mean absolute error of life "
+    "expectancy at birth (years).  RMSE: root-mean-square error of $\\logit({}_nq_x)$ over the "
+    "abridged age groups 0, 1--4, 5--9, \\ldots, 105--109.",
+    short_caption="Comparison with Log-Quad and SVD-Comp",
+    rank=[latex.Rank([c for c in comp_tab.columns if c not in ("Inputs", "Method")], "min", within="Inputs")],
+    rank_note="among the five methods in each column, for each set of inputs",
+    footnote="Log-Quad and SVD-Comp predict each sex from that sex's indicators only; MDMx "
+             "Models~1 and~2 use both sexes' indicators.  The own-sex MDMx variant has one network "
+             "per sex with that sex's indicators as its only inputs.  The first two MDMx rows use "
+             "$c_{\\text{age}}$ and $w_{\\mathrm{child}}$ chosen by nested cross-validation; the third uses the "
+             f"fixed settings $c_{{\\text{{age}}}} = {PS['c_age']}$, $w_{{\\mathrm{{child}}}} = {PS['alpha']:g}$.  All MDMx "
+             "predictions and Log-Quad reproduce their inputs exactly; SVD-Comp does so approximately.",
+    formats={c: "{:.2f}" for c in ("$e_0$ MAE, F", "$e_0$ MAE, M")} | {c: "{:.3f}" for c in ("RMSE, F", "RMSE, M")},
+    column_format="llrrrr", escape_cells=False, group_rows=[len(METHODS)])
+TAGS = {"mdmx": "Mdmx", "own": "Own", "paper": "Fixed", "logquad": "Lq", "svdcomp": "Sc"}
+DESC_NAME = {"paper": "MDMx at the fixed settings"}     # "paper" is the stored key of the fixed settings
+for key, num in (("one", "One"), ("two", "Two")):
+    for method, _ in METHODS:
+        r = acc[acc.method == f"{method}_{key}"].set_index("sex")
+        name = DESC_NAME.get(method, method)
+        for sex, sx in zip(SEXES, "FM", strict=True):
+            if method != "paper":       # the fixed settings' e0 macros were reported in Step 6
+                latex.report(f"svd{TAGS[method]}{num}Ezero{sx}", float(r.loc[sex, "e0_mae"]), digits=2,
+                             desc=f"Out-of-fold e0 MAE, {name}, inputs {key}, {sex}")
+            latex.report(f"svd{TAGS[method]}{num}RmseAb{sx}", float(r.loc[sex, "rmse_abridged"]), digits=3,
+                         desc=f"Out-of-fold RMSE of abridged logit(nqx), {name}, inputs {key}, {sex}")
+comp_tab.round(3)
+```
+
+```{python}
+#| label: fig-s10-benchmark
+#| fig-cap: "Out-of-fold comparison with the benchmarks. Left and centre: RMSE of logit(nq_x) by abridged age group for females and males. Right: distribution of the absolute e0 error (both sexes; boxes: quartiles, whiskers: 5th and 95th percentiles). Top row: 5q0 only; bottom row: 5q0 and 45q15. MDMx: nested cross-validation, predictions corrected to reproduce the inputs."
+STYLE = {"mdmx": (plotting.COLORS["MDMx"], "-"), "own": (plotting.COLORS["MDMx"], "--"),
+         "paper": (plotting.COLORS["MDMx"], ":"),
+         "logquad": (plotting.COLORS["LQ"], "-"), "svdcomp": (plotting.COLORS["SVDComp"], "-")}
+BOX_LABELS = {"mdmx": "MDMx", "own": "MDMx\nown sex", "paper": "MDMx\nfixed", "logquad": "Log-Quad",
+              "svdcomp": "SVD-Comp"}
+obs_ab = sc.abridged_logit_q(Z, A, AB_STARTS)
+mid = [(a + b) / 2 for a, b in zip(AB_STARTS, AB_STARTS[1:] + [A], strict=True)]
+fig, axes = plt.subplots(2, 3, figsize=(13.5, 8), gridspec_kw={"width_ratios": [1, 1, 1.1]})
+e0_obs = sc.e0_by_sex(Z, A)
+for row, key in enumerate(("one", "two")):
+    for s in range(2):
+        ax = axes[row, s]
+        for method, label in METHODS:
+            e = sc.abridged_logit_q(oof[f"{method}_{key}"], A, AB_STARTS)[:, s] - obs_ab[:, s]
+            colour, ls = STYLE[method]
+            ax.plot(mid, np.sqrt(np.mean(e ** 2, axis=0)), ls=ls, marker="o", ms=2.5, color=colour, label=label)
+        ax.set_title(f"{SEXES[s].title()}, inputs {INPUT_LABELS[key]}", fontsize=10)
+        ax.set_xlabel("Age"); ax.set_ylabel(r"RMSE, logit$(_nq_x)$")
+    ax = axes[row, 2]
+    data = [np.abs(sc.e0_by_sex(oof[f"{m}_{key}"], A) - e0_obs).ravel() for m, _ in METHODS]
+    bp = ax.boxplot(data, whis=(5, 95), showfliers=False, patch_artist=True, widths=0.6,
+                    medianprops={"color": "black"})
+    for patch, (m, _) in zip(bp["boxes"], METHODS, strict=True):
+        patch.set_facecolor(STYLE[m][0]); patch.set_alpha(0.5)
+    ax.set_xticks(range(1, len(METHODS) + 1), [BOX_LABELS[m] for m, _ in METHODS], fontsize=8)
+    ax.set_ylabel(r"$|\Delta e_0|$ (years)"); ax.set_title(f"$e_0$ error, inputs {INPUT_LABELS[key]}", fontsize=10)
+axes[0, 0].legend(fontsize=8)
+fig.tight_layout()
+plotting.save_figure(fig, "fig-s10-benchmark")
+plt.show()
+```
+
+```{python}
+#| label: c10-comparison-summary
+#| code-summary: "Summarise the comparison"
+e0_by = acc.pivot_table(index="method", columns="sex", values="e0_mae")
+e0_mean = e0_by.mean(axis=1)                       # mean of the two sexes
+ab_mean = acc.pivot_table(index="method", columns="sex", values="rmse_abridged").mean(axis=1)
+order = [f"{m}_{k}" for k in ("one", "two") for m, _ in METHODS]
+print("Mean (over sexes) out-of-fold e0 MAE and abridged RMSE:")
+print(pd.DataFrame({"e0_mae": e0_mean, "rmse_abridged": ab_mean}).loc[order].round(3))
+for key, num in (("one", "One"), ("two", "Two")):
+    for bench, btag in (("logquad", "Lq"), ("svdcomp", "Sc")):
+        latex.report(f"svdRatio{num}{btag}", float(e0_mean[f"mdmx_{key}"] / e0_mean[f"{bench}_{key}"]), digits=2,
+                     desc=f"MDMx e0 MAE / {bench} e0 MAE (mean of sexes), inputs {key}")
+best_two = min(("mdmx_two", "own_two", "logquad_two", "svdcomp_two"), key=lambda m: e0_mean[m])
+best_two_ab = min(("mdmx_two", "own_two", "logquad_two", "svdcomp_two"), key=lambda m: ab_mean[m])
+NAMES = {"mdmx_two": "MDMx Model 2", "own_two": "the sex-specific MDMx variant",
+         "logquad_two": "Log-Quad", "svdcomp_two": "SVD-Comp"}
+
+# Family bootstrap of the difference in e0 MAE (MDMx minus benchmark): the
+# 41 population families are resampled with replacement, so that all years
+# of a family enter or leave together.
+labels, fam_index = np.unique(family, return_inverse=True)
+fam_size = np.bincount(fam_index)
+counts = np.random.default_rng(PS["bootstrap_seed"]).multinomial(
+    len(labels), np.full(len(labels), 1 / len(labels)), size=PS["bootstrap_reps"])     # (reps, families)
+abs_err = {m: np.abs(sc.e0_by_sex(oof[m], A) - sc.e0_by_sex(Z, A)).mean(axis=1) for m in oof}
+boot_rows = []
+for key, num in (("one", "One"), ("two", "Two")):
+    for bench, btag in (("logquad", "Lq"), ("svdcomp", "Sc")):
+        d = abs_err[f"mdmx_{key}"] - abs_err[f"{bench}_{key}"]               # per country-year
+        fam_sum = np.bincount(fam_index, weights=d)
+        reps = (counts @ fam_sum) / (counts @ fam_size)
+        lo, hi = np.percentile(reps, [2.5, 97.5])
+        boot_rows.append({"inputs": key, "benchmark": bench, "difference": d.mean(), "lo": lo, "hi": hi})
+        latex.report(f"svdDiff{num}{btag}", float(d.mean()), digits=3, signed=True,
+                     desc=f"MDMx minus {bench} out-of-fold e0 MAE (years, mean of sexes), inputs {key}")
+        latex.report(f"svdDiff{num}{btag}Lo", float(lo), digits=3, signed=True,
+                     desc=f"Lower 95% family-bootstrap limit of that difference, inputs {key}")
+        latex.report(f"svdDiff{num}{btag}Hi", float(hi), digits=3, signed=True,
+                     desc=f"Upper 95% family-bootstrap limit of that difference, inputs {key}")
+boot = pd.DataFrame(boot_rows).set_index(["inputs", "benchmark"])
+print("MDMx minus benchmark, out-of-fold e0 MAE (years), with 95% family-bootstrap intervals:")
+print(boot.round(3))
+
+
+def compare(key, bench):
+    """'0.03 years smaller (95% interval …)' — a sentence fragment from the bootstrap."""
+    r = boot.loc[(key, bench)]
+    word = "smaller" if r["difference"] < 0 else "larger"
+    return (f"{abs(r['difference']):.2f} years {word} (95% interval {r['lo']:+.2f} to "
+            f"{r['hi']:+.2f})")
+```
+
+With ₅q₀ alone the methods are close: the mean (over sexes) $e_0$ error is
+`{python} f"{e0_mean['mdmx_one']:.2f}"` years for MDMx Model 1,
+`{python} f"{e0_mean['own_one']:.2f}"` for the sex-specific variant,
+`{python} f"{e0_mean['logquad_one']:.2f}"` for Log-Quad and
+`{python} f"{e0_mean['svdcomp_one']:.2f}"` for SVD-Comp, and the abridged
+RMSE ranges from
+`{python} f"{ab_mean[[f'{m}_one' for m in ('mdmx', 'own', 'logquad', 'svdcomp')]].min():.3f}"`
+to
+`{python} f"{ab_mean[[f'{m}_one' for m in ('mdmx', 'own', 'logquad', 'svdcomp')]].max():.3f}"`.
+One indicator, not the model, limits the accuracy.
+
+Relative to Log-Quad, MDMx Model 1's mean $e_0$ error is
+`{python} compare("one", "logquad")`, and relative to SVD-Comp
+`{python} compare("one", "svdcomp")` — intervals from a bootstrap that
+resamples whole population families.
+
+With ₅q₀ and ₄₅q₁₅ the $e_0$ errors are
+`{python} f"{e0_mean['mdmx_two']:.2f}"` years (MDMx Model 2),
+`{python} f"{e0_mean['own_two']:.2f}"` (sex-specific MDMx),
+`{python} f"{e0_mean['logquad_two']:.2f}"` (Log-Quad) and
+`{python} f"{e0_mean['svdcomp_two']:.2f}"` (SVD-Comp): MDMx Model 2's
+error is `{python} compare("two", "logquad")` than Log-Quad's and
+`{python} compare("two", "svdcomp")` than SVD-Comp's.  The smallest $e_0$
+error is that of `{python} NAMES[best_two]` and the smallest abridged
+RMSE that of `{python} NAMES[best_two_ab]`.  Without the correction
+(Step 6) the network's schedules have about twice the benchmarks' error;
+reproducing the inputs exactly, as Log-Quad does by construction, together
+with settings chosen by nested cross-validation, is what makes MDMx
+competitive.  Using both sexes' indicators gives MDMx no advantage over
+the sex-specific variant.
+
+On accuracy, then, MDMx is comparable to the established methods: with
+₄₅q₁₅ its error is a few hundredths of a year below both Log-Quad's and
+SVD-Comp's, and with ₅q₀ alone it cannot be told from either.  Its distinctive advantages are of *structure*:
+one model predicts both sexes coherently in one shared basis, every
+prediction reproduces its inputs, and further inputs can be added by
+widening the network's input layer.
+
+## Step 10 — the bases within each fold
+
+The sex and age bases $\mathbf{S}$ and $\mathbf{A}$ of chapter 04 come
+from every observed schedule, those of any held-out fold included.  A
+cross-validation in those bases has a small leak: the bases have "seen"
+the test populations, whereas Log-Quad and SVD-Comp are estimated on the
+training folds alone.  Every cross-validation of this chapter therefore
+re-estimates the bases from the training rows of each fit — the SVD of
+those schedules, then the same smoothing and re-orthonormalisation as in
+chapter 04, with the age rank held at its value on all the data.  The
+check below shows what the leak would be worth: the plain
+cross-validation of Models 1 and 2 at their final settings, with the
+fold bases and with the bases from all the data.
+
+```{python}
+#| label: c10-basis-cv
+#| code-summary: "Re-estimate the bases within each fold and cross-validate again (cached)"
+def _fold_bases():
+    return {k: train_bases(FOLDS != k) for k in range(PS["n_folds"])}
+
+
+def _basis_cv():
+    bases = _fold_bases()
+    c_max = max(final_choice[k]["c_age"] for k in final_choice)
+    angles, rows = [], []
+    for k, (_, U_a) in bases.items():
+        # Largest principal angle between the leading age components
+        # estimated with and without fold k (0 = the same subspace).
+        cosines = np.linalg.svd(U_age[:, :c_max].T @ U_a[:, :c_max], compute_uv=False)
+        angles.append({"fold": k, "max_angle_deg": float(np.degrees(np.arccos(np.clip(cosines.min(), -1, 1))))})
+    for key in ("one", "two"):
+        settings = sc.model_settings(PS, **final_choice[key])
+        for variant, basis in (("fold basis", train_bases), ("full-data basis", None)):
+            res = sc.cross_validate_core_model(
+                sc.features(ind, INPUTS[key]), Z, inputs=INPUTS[key], folds=FOLDS, groups=family,
+                settings=settings, seed=PS["seed"], basis=basis,
+                U_sex=None if basis else U_sex, U_age=None if basis else U_age)
+            rows.append(sc.summarise_accuracy({f"mdmx_{key}": res["Z_hat"]}, Z, A, AGE_GROUPS, AB_STARTS)
+                        .assign(variant=variant))
+    return {"accuracy": pd.concat(rows, ignore_index=True), "angles": pd.DataFrame(angles)}
+
+
+basis_cv = artifacts.stage("svdcomp_basis_cv", _basis_cv, inputs=["tensor", "tucker", "populations"],
+                           params={**cv_params, **BASIS_PARAMS, "final_choice": final_choice},
+                           code=[_basis_cv, _fold_bases, train_bases, sc, mnn, tz, smoothing],
+                           desc="Out-of-fold accuracy of Models 1-2 (final settings) with bases from all data "
+                                "or re-estimated in each fold")
+cols = ["e0_mae", "rmse_all", "rmse_abridged"]
+both = basis_cv["accuracy"].pivot_table(index=["method", "sex"], columns="variant", values=cols)
+change = pd.DataFrame({c: both[(c, "fold basis")] - both[(c, "full-data basis")] for c in cols})
+# Principal angles for the fixed c_age as well as for the largest c_age
+# used (the stage stored only the latter); the fold bases are cheap to rebuild.
+fold_bases = _fold_bases()
+c_used = max(final_choice[k]["c_age"] for k in final_choice)
+angle_by_c = {c: max(float(np.degrees(np.arccos(np.clip(
+                  np.linalg.svd(U_age[:, :c].T @ U_a[:, :c], compute_uv=False).min(), -1, 1))))
+                  for _, U_a in fold_bases.values())
+              for c in sorted({PS["c_age"], c_used})}
+if not np.isclose(angle_by_c[c_used], basis_cv["angles"]["max_angle_deg"].max()):
+    raise RuntimeError("re-computed principal angles differ from the stored ones")
+max_angle = angle_by_c[PS["c_age"]]
+print("Largest principal angle between the full-data and fold age bases, by number of components:",
+      {c: round(a, 1) for c, a in angle_by_c.items()})
+print("Change in out-of-fold accuracy, fold bases minus full-data bases:")
+print(change.round(3))
+latex.report("svdBasisFoldMaxChange", float(change["e0_mae"].abs().max()), digits=3,
+             desc="Largest change in out-of-fold e0 MAE between the fold bases and the full-data bases")
+latex.report("svdBasisFoldMinChange", float(change["e0_mae"].min()), digits=3,
+             desc="Smallest change in out-of-fold e0 MAE, fold bases minus full-data bases "
+                  "(above zero: the full-data bases lower the error in every model and sex)")
+latex.report("svdBasisCUsed", c_used, desc="Largest c_age of the final models (for the principal angle)")
+latex.report("svdBasisFoldMaxAngle", max_angle, digits=1,
+             desc="Largest principal angle (degrees), full-data vs within-fold age bases, first c_age components")
+latex.report("svdBasisFoldMaxAngleUsed", angle_by_c[c_used], digits=0,
+             desc="Largest principal angle (degrees), full-data vs within-fold age bases, largest c_age used")
+```
+
+Re-estimating the bases inside each fold changes the first
+`{python} PS["c_age"]` age components very little (the subspace they span
+rotates by at most `{python} f"{max_angle:.1f}"` degrees); the first
+`{python} c_used` move more (up to `{python} f"{angle_by_c[c_used]:.0f}"`
+degrees — the higher components are less well determined), yet the
+out-of-fold accuracy changes by at most
+`{python} f"{change['e0_mae'].abs().max():.2f}"` years of $e_0$, because
+the network and the correction adapt to whichever basis they are given.
+The change is small, but it is of the order of the differences between
+MDMx and the benchmarks in Step 9, and with the full-data bases it would
+favour MDMx; that is why every cross-validation uses the fold bases.
+
+## The final models, for the app
+
+The final networks are trained on all `{python} f"{n_obs:,}"` observed
+country-years with the settings chosen in Step 8 (Model 1:
+$c_{\text{age}}$ = `{python} final_choice["one"]["c_age"]`, $w_{\mathrm{child}}$ =
+`{python} f"{final_choice['one']['alpha']:g}"`; Model 2:
+$c_{\text{age}}$ = `{python} final_choice["two"]["c_age"]`, $w_{\mathrm{child}}$ =
+`{python} f"{final_choice['two']['alpha']:g}"`), with the same
+early-stopping rule.  Each is saved as a self-contained artefact —
+`svdcomp_model1` and `svdcomp_model2` — holding only arrays, numbers and
+strings, so that the Shiny app (or any other program) can reproduce the
+predictions exactly without this code.  Its structure is documented in the
+`mdmx.svdcomp` module docstring:
+
+| key | contents |
+|---|---|
+| `inputs` | input names in order; the network input is the logit of each, and these are the indicators the prediction reproduces |
+| `x_scaler` | mean and scale of the logit inputs |
+| `network` | layer sizes and the weight matrices and bias vectors |
+| `core_scaler` | mean and scale of the core weights: core = output × scale + mean |
+| `U_sex`, `U_age` | the sex basis ($2 \times 2$) and the first $c_{\text{age}}$ age components ($110 \times c_{\text{age}}$) |
+| `enforce` | tolerance and iteration limit of the correction |
+| `ages`, `loss_sexes`, `settings`, `history`, `description` | ages, settings and training curve |
+
+A prediction is `mdmx.svdcomp.predict_schedules(model, X)`: the network's
+core weights $\mathbf{g}_0$ = out ⊙ σ + μ for the standardised logit
+inputs, the correction of Step 4, and $\hat{\mathbf{z}} = (\mathbf{S}
+\otimes \mathbf{A}_c)\,\mathbf{g}^\star$; it raises an error if the
+correction does not converge.  For example, for ₅q₀ = 0.05 (females) and
+0.06 (males):
+
+```{python}
+#| label: c10-example
+#| code-summary: "Using a saved model"
+x = lifetable.logit(np.array([[0.05, 0.06]]))
+z = sc.predict_schedules(model1, x).reshape(2, A)
+print("Predicted e0 (female, male):", np.round(lifetable.e0_from_logit(z), 2))
+print("5q0 of the predicted schedule (female, male):",
+      np.round(lifetable.nqx(lifetable.expit(z), 0, 5), 10))
+```
+
+```{python}
+#| label: c10-end
+#| code-summary: "Write this chapter's numbers and close"
+latex.write_numbers()
+provenance.end_chapter();
+```

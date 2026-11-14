@@ -1,0 +1,5 @@
+# Quarto applies these variables to every render of companion/, however it is started (mdmx
+# render, quarto render or preview in this folder, an editor's Render button), and they win over
+# the shell's.  Without it a direct render would use the book's outputs and store: the frozen
+# results/ and work/artifacts/.
+MDMX_PROJECT=companion

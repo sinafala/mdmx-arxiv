@@ -1,0 +1,304 @@
+---
+title: "The mortality tensor"
+subtitle: "Assembling M, the observed mask, and the record of every change"
+---
+
+::: {.callout-note appearance="simple"}
+## Paper correspondence
+Paper §2.2 ("The quantity modelled": the life table, the logit transform, the age range and
+the floor) and §2.5 ("The tensor and its completion").  Produces `tbl-s4-tensor-dims`,
+`fig-s3-obs-mask`, `tbl-s1-country-summary` and `tbl-s3-missing-year-audit`, all in the
+companion only, and the data change ledger `results/ledger/data-changes.csv`.
+:::
+
+```{python}
+#| label: d6-setup
+#| code-summary: "Chapter setup"
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from mdmx import artifacts, data, latex, lifetable, paths, plotting, provenance
+from mdmx.config import params
+
+provenance.start_chapter("d6-tensor")
+plotting.use_style()
+P = params()
+pooled = artifacts.load("lt_pooled")
+labels = artifacts.load("event_labels")
+pops = artifacts.load("populations")
+cur = artifacts.load("lt_curated")
+raw = artifacts.load("hmd_raw")
+names = dict(zip(pops["code"], pops["name"]))
+```
+
+## From long tables to a four-way array
+
+The tensor $\mathcal{M} \in \mathbb{R}^{S \times A \times C \times T}$ holds
+$\operatorname{logit}(q_x)$ for every sex $s$ (female, male), single-year
+age $a$ (0–109), population $c$ and calendar year $t$.  The
+year axis runs over every calendar year in which at least one population
+has data.  Before the logit, $q_x$ is clipped to
+$[q_{\min}, 1-q_{\min}]$ with $q_{\min} = 10^{-8}$ so that every
+value is finite.  After pooling, the floor is needed only in exceptional
+years of very small populations (which are not part of the baseline); no
+observed baseline cell is at the floor.
+
+Not every population has data in every year.  Three $C \times T$ masks
+record what each cell holds:
+
+* `present` — a female and a male life table exist;
+* `observed` — present **and** not exceptional: the paper's observed mask $O$ (§2.5), the
+  cells the decomposition is fitted to;
+* `exceptional` — present **and** exceptional: the set $\mathcal{E}$ used
+  by the disruption model.
+
+Cells that are not observed are left **empty** (`NaN`) here.  How the
+decomposition treats them — it fills them iteratively with its own
+reconstruction — is the subject of chapter 04.
+
+```{python}
+#| label: d6-build
+#| code-summary: "Build the tensor and masks (cached)"
+def _tensor():
+    return data.build_tensor(pooled["lt"], labels, q_min=P.data.q_min,
+                             min_observed_years=P.data.min_observed_years, populations=pops)
+
+tensor = artifacts.stage("tensor", _tensor, inputs=["lt_pooled", "event_labels", "populations"],
+                         params=P.section("data"), code=[_tensor, data.build_tensor, lifetable.logit],
+                         desc="logit(qx) tensor (S,A,C,T) with present/observed/exceptional masks")
+M, observed, exceptional, present = (tensor[k] for k in ("M", "observed", "exceptional", "present"))
+S, A, C, T = M.shape
+years = tensor["years"]
+print(f"Tensor shape (S, A, C, T) = {M.shape}  →  {M.size:,} cells")
+print(f"Country-years: present {present.sum():,}, observed {observed.sum():,}, "
+      f"exceptional {exceptional.sum():,}, empty {(~present).sum():,}")
+print(f"Cells floored at q_min: {tensor['n_floored']:,} "
+      f"(observed: {int((np.isclose(M, lifetable.logit(0.0, P.data.q_min)) & observed).sum())})")
+print(f"Populations dropped by the minimum-years rule: {tensor['dropped_pops'] or 'none'}")
+
+for key, value, desc in [
+    ("dataS", S, "Sexes"), ("dataA", A, "Ages"), ("dataC", C, "Populations in the tensor"),
+    ("dataT", T, "Years in the tensor"), ("dataNCells", M.size, "Cells in the tensor"),
+    ("dataNPresent", int(present.sum()), "Country-years with data"),
+    ("dataNObserved", int(observed.sum()), "Observed (non-exceptional) country-years"),
+    ("dataNExceptionalTensor", int(exceptional.sum()), "Exceptional country-years in the tensor"),
+    ("dataNFloored", tensor["n_floored"], "Cells floored at q_min (all in exceptional years)"),
+]:
+    latex.report(key, int(value), desc=desc)
+latex.report("dataObservedShare", observed.mean(), digits=3,
+             desc="Share of country-year cells that are observed")
+latex.report("dataTensorFirstYear", int(years[0]), text=str(int(years[0])), desc="First tensor year")
+latex.report("dataTensorLastYear", int(years[-1]), text=str(int(years[-1])), desc="Last tensor year")
+latex.report("dataMeanYearsPerPop", observed.sum(axis=1).mean(), digits=0,
+             desc="Mean observed years per population")
+latex.report("dataMinObservedYears", int(P.data.min_observed_years),
+             desc="Fewest observed years a population needs to enter the tensor")
+latex.report("dataAzero", P.data.a0, text=f"{P.data.a0:g}", desc="a0, the fraction of the first year lived by infants who die")
+```
+
+The paper's life expectancy (Eq. 1, §2.2) uses the life-table conventions of `mdmx.lifetable` (a
+fixed $a_0$ for $L_0$, and survivors to exact age 110 not followed further).  Over the curated life
+tables it is compared below with the HMD's own $e_0$.
+
+```{python}
+#| label: d6-e0-check
+#| code-summary: "The paper's e0 against the HMD's own, over the curated life tables"
+lt_cur = cur["lt"]
+qx = lt_cur.pivot_table(index=["pop", "sex", "year"], columns="age", values="qx", observed=True)
+e0_hmd = lt_cur[lt_cur["age"] == 0].set_index(["pop", "sex", "year"])["ex"].reindex(qx.index)
+diff = pd.Series(lifetable.e0_from_qx(qx.to_numpy()), index=qx.index) - e0_hmd
+print(f"e0 (paper) − e0 (HMD), {len(diff):,} life tables: median {diff.median():+.4f} y, "
+      f"IQR {diff.quantile(0.25):+.4f} to {diff.quantile(0.75):+.4f}, largest |difference| {diff.abs().max():.3f} y")
+print("Largest differences:\n", diff.abs().sort_values(ascending=False).head(5).round(3).to_string())
+latex.report("dataEzeroDiffMedian", float(diff.median()), digits=3,
+             desc="Median of the article's e0 minus the HMD's own, curated life tables (years)")
+latex.report("dataEzeroDiffLarge", int((diff.abs() > 0.01).sum()),
+             desc="Curated life tables whose e0 differs from the HMD's own by more than 0.01 years")
+latex.report("dataEzeroDiffMax", float(diff.abs().max()), digits=2,
+             desc="Largest absolute difference between the article's e0 and the HMD's own (years)")
+latex.report("dataEzeroDiffMedianAbs", float(diff.abs().median()), digits=3,
+             desc="Median absolute difference between the article's e0 and the HMD's own, curated life tables (years)")
+# The large differences have two sources: the conventions (a fixed a0, no years lived beyond 110), which
+# put the article's e0 a little above the HMD's in some tables, and survival to 110 that the life table
+# does not follow further, which puts it below where that survival is high.
+l110 = pd.Series(np.prod(1 - qx.to_numpy(), axis=1), index=qx.index)
+large = diff[diff.abs() > 0.01]
+for sign, tag in ((1, "Above"), (-1, "Below")):
+    part = large[np.sign(large) == sign]
+    idx = part.index.to_frame(index=False)
+    latex.report(f"dataEzeroDiff{tag}", len(part),
+                 desc=f"Curated life tables whose article e0 is {tag.lower()} the HMD's by more than 0.01 years")
+    latex.report(f"dataEzeroDiff{tag}Pops", int(idx["pop"].nunique()) if len(part) else 0,
+                 desc=f"Populations of those tables ({tag.lower()})")
+    latex.report(f"dataEzeroDiff{tag}Max", float(part.abs().max()) if len(part) else 0.0, digits=3,
+                 desc=f"Largest |difference| of those tables ({tag.lower()}, years)")
+    latex.report(f"dataEzeroDiff{tag}LtenMax", float(l110.reindex(part.index).max()) if len(part) else 0.0,
+                 digits=5, desc=f"Largest survival to exact age 110 in those tables ({tag.lower()})")
+    latex.report(f"dataEzeroDiff{tag}LtenMin", float(l110.reindex(part.index).min()) if len(part) else 0.0,
+                 digits=5, desc=f"Smallest survival to exact age 110 in those tables ({tag.lower()})")
+    print(f"{tag}: {len(part)} tables, {idx['pop'].nunique()} populations "
+          f"({', '.join(sorted(idx['pop'].unique()))}); sexes {idx['sex'].astype(str).value_counts().to_dict()}; "
+          f"years {idx['year'].min()}–{idx['year'].max()}; |diff| ≤ {part.abs().max():.3f}; "
+          f"l110 {l110.reindex(part.index).min():.2e}–{l110.reindex(part.index).max():.2e}")
+```
+
+## Dimensions
+
+```{python}
+#| label: tbl-s4-tensor-dims
+#| code-summary: "Table: tensor dimensions"
+dims = pd.DataFrame({
+    "Dimension": ["Sex ($S$)", "Age ($A$)", "Population ($C$)", "Year ($T$)"],
+    "Size": [S, A, C, T],
+    "Description": ["Female, male", f"Single-year ages 0--{A - 1}", "HMD populations",
+                    f"{years[0]}--{years[-1]}"],
+})
+latex.save_table(dims, "tbl-s4-tensor-dims",
+                 f"Dimensions of the HMD mortality tensor: {latex.fmt_int(M.size)} cells, of which "
+                 f"{observed.mean():.3f} are observed (non-exceptional) country-years.",
+                 column_format="lrl", escape_cells=False)
+dims
+```
+
+## Population summary
+
+```{python}
+#| label: tbl-s1-country-summary
+#| code-summary: "Table: one row per population"
+lt_raw = raw["lt"]
+e0_hmd = lt_raw[(lt_raw["age"] == 0)].groupby(["pop", "year"])["ex"].mean()
+rows = []
+for i, pop in enumerate(tensor["pops"]):
+    hmd_years = lt_raw.loc[lt_raw["pop"] == pop, "year"]
+    e0p = e0_hmd.loc[pop]
+    rows.append({
+        "Code": pop, "Population": names[pop],
+        "Years": f"{hmd_years.min()}--{hmd_years.max()}",
+        "HMD": int(hmd_years.nunique()),
+        "Curated": int(present[i].sum()),
+        "Observed": int(observed[i].sum()),
+        r"$e_0$ range": f"{e0p.min():.1f}--{e0p.max():.1f}",
+        r"Median $e_0$": float(e0p.median()),
+    })
+summary = pd.DataFrame(rows).sort_values(["Years", "Code"]).reset_index(drop=True)
+latex.save_table(
+    summary, "tbl-s1-country-summary",
+    "HMD populations in the tensor.  \\emph{HMD}: country-years published; \\emph{Curated}: "
+    "after the curation rules; \\emph{Observed}: curated and not exceptional, i.e.\\ the "
+    "country-years the decomposition is fitted to.  $e_0$ is the HMD's published value, "
+    "averaged over the sexes.",
+    short_caption="HMD populations in the tensor",
+    formats={r"Median $e_0$": "{:.1f}"}, column_format="llcrrrcr", long=True, wrap={"Population": "3.4cm"})
+summary
+```
+
+## The observed mask
+
+```{python}
+#| label: fig-s3-obs-mask
+#| fig-cap: "The observed mask. Dark: observed (non-exceptional) country-years used to fit the decomposition; red: exceptional country-years (data exist but are set aside for the disruption model); light grey: no data."
+#| fig-height: 7
+order = np.argsort([np.flatnonzero(r)[0] for r in present])
+grid = np.where(observed, 1, np.where(exceptional, 2, 0))[order]
+cmap = plt.matplotlib.colors.ListedColormap(["#f0f0f0", "#2b2b2b", plotting.COLORS["war"]])
+fig, ax = plt.subplots(figsize=(10, 7))
+ax.imshow(grid, aspect="auto", interpolation="nearest", cmap=cmap, vmin=0, vmax=2,
+          extent=(years[0] - 0.5, years[-1] + 0.5, C - 0.5, -0.5))
+ax.set_yticks(range(C), [names[p] for p in tensor["pops"][order]], fontsize=7)
+ax.set_xlabel("Year"); ax.grid(False)
+plotting.save_figure(fig, "fig-s3-obs-mask")
+plt.show()
+```
+
+## Where are the empty cells?
+
+Of the $C \times T$ country-year cells, most are empty simply because a
+population's series had not started.  The table accounts for every
+unobserved cell.
+
+```{python}
+#| label: tbl-s3-missing-year-audit
+#| code-summary: "Table: classification of the unobserved country-year cells"
+excl = cur["exclusions"]
+excl = excl[excl["pop"].isin(tensor["pops"])]
+excluded_keys = set(zip(excl["pop"], excl["year"]))
+cats = {"Outside the population's HMD series": 0,
+        "Exceptional (masked for the disruption model)": 0,
+        "Removed in curation": 0,
+        "Gap inside the HMD series (not published)": 0}
+for i, pop in enumerate(tensor["pops"]):
+    hmd = lt_raw.loc[lt_raw["pop"] == pop, "year"]
+    first, last = hmd.min(), hmd.max()
+    for j, y in enumerate(years):
+        if observed[i, j]:
+            continue
+        if exceptional[i, j]:
+            cats["Exceptional (masked for the disruption model)"] += 1
+        elif (pop, y) in excluded_keys:
+            cats["Removed in curation"] += 1
+        elif y < first or y > last:
+            cats["Outside the population's HMD series"] += 1
+        else:
+            cats["Gap inside the HMD series (not published)"] += 1
+audit = pd.DataFrame({"Category": list(cats), "Country-years": list(cats.values())})
+audit["Share (\\%)"] = 100 * audit["Country-years"] / audit["Country-years"].sum()
+total = int(audit["Country-years"].sum())
+assert total == int((~observed).sum()), "every unobserved cell must be classified exactly once"
+latex.save_table(audit, "tbl-s3-missing-year-audit",
+                 f"Classification of the {latex.fmt_int(total)} unobserved country-year cells "
+                 f"($O_{{c,t}} = 0$) of the tensor.",
+                 formats={"Share (\\%)": "{:.1f}"}, column_format="lrr")
+latex.report("dataNUnobserved", total, desc="Unobserved country-year cells")
+audit
+```
+
+## The change ledger
+
+Every change made to the published HMD data on the way to the tensor is
+listed in one file, `results/ledger/data-changes.csv`, with one row per
+change: the step, the rule, the population, sex and years affected, and
+the details.  It is generated from the records the pipeline keeps as it
+works — the curation exclusions (chapter d3), the event labels (d4), the
+pooling blocks (d5) and the floor applied here — so it is complete by
+construction.
+
+```{python}
+#| label: d6-ledger
+#| code-summary: "Assemble and write the change ledger"
+ledger = []
+for r in cur["exclusions"].itertuples(index=False):
+    ledger.append({"step": "d3 curation", "rule": r.rule, "pop": r.pop, "sex": "both",
+                   "first_year": r.year, "last_year": r.year, "detail": r.detail})
+exc = labels[labels["label"] > 0]
+for r in exc.itertuples(index=False):
+    ledger.append({"step": "d4 exceptional", "rule": f"masked: {r.type}", "pop": r.pop, "sex": "both",
+                   "first_year": r.year, "last_year": r.year,
+                   "detail": f"event {r.event_id} (all matches: {r.all_events})"})
+for r in pooled["blocks"].itertuples(index=False):
+    ledger.append({"step": "d5 pooling", "rule": "valley pooling", "pop": r.pop, "sex": r.sex,
+                   "first_year": r.first, "last_year": r.last,
+                   "detail": f"{r.n_years} years pooled at {r.n_pool_ages} ages; years {r.years}; "
+                             f"zeros removed {r.valley_zeros_before}; max |Δlogit q| {r.max_abs_dlogit_valley:.2f}"})
+floor_logit = lifetable.logit(0.0, P.data.q_min)
+s_i, a_i, c_i, t_i = np.where(np.isclose(M, floor_logit))
+floored = pd.DataFrame({"pop": tensor["pops"][c_i], "sex": tensor["sexes"][s_i],
+                        "year": years[t_i], "age": tensor["ages"][a_i]})
+for (pop, sex, year), g in floored.groupby(["pop", "sex", "year"]):
+    ledger.append({"step": "d6 tensor", "rule": "q_x floored at q_min", "pop": pop, "sex": sex,
+                   "first_year": year, "last_year": year,
+                   "detail": f"{len(g)} ages: {' '.join(map(str, g['age']))}"})
+ledger = pd.DataFrame(ledger)
+paths.ensure(paths.results() / "ledger")
+ledger_path = paths.results() / "ledger" / "data-changes.csv"
+ledger.to_csv(ledger_path, index=False)
+provenance.record_output("ledger", ledger_path, label="data-changes", extra={"n_rows": len(ledger)})
+print(ledger.groupby(["step", "rule"]).size().to_string())
+```
+
+```{python}
+#| label: d6-end
+#| code-summary: "Write this chapter's numbers and close"
+latex.write_numbers()
+provenance.end_chapter();
+```

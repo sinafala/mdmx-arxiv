@@ -1,0 +1,69 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# MDMx — reproducibility companion to
+#   Clark, S. J. (2026). Multi-dimensional Mortality (MDMx): One Tensor
+#   Decomposition for Model Life Tables, Fitting, Summary-Indicator Prediction,
+#   and Forecasting. arXiv:2603.20518.
+#
+# This file defines the `mdmx` Python package (code in src/mdmx/) and the
+# environment needed to run the Quarto book (book/), build the article (article/)
+# and run the Shiny app (app/).  The exact, locked versions of every package
+# live in uv.lock; install them with `uv sync`.
+# ══════════════════════════════════════════════════════════════════════════════
+
+[project]
+name = "mdmx"
+version = "3.0.0.dev0"
+description = "Multi-dimensional Mortality (MDMx): Tucker-tensor model life tables, fitting, summary-indicator prediction and forecasting — reproducibility companion"
+readme = "README.md"
+authors = [{ name = "Samuel J. Clark" }]
+license = "PolyForm-Noncommercial-1.0.0"
+license-files = ["LICENSE.md", "NOTICE", "LICENSES/*"]
+requires-python = ">=3.12"
+
+# Core analysis dependencies — everything the book and paper need.
+dependencies = [
+    "numpy>=2.1",
+    "scipy>=1.14",
+    "pandas>=2.2",
+    "pyarrow>=17",          # Parquet storage for every tabular artefact
+    "duckdb>=1.1",          # SQL engine over Parquet (no database file needed)
+    "matplotlib>=3.9",
+    "scikit-learn>=1.5",    # PCA, Gaussian mixtures, Ward clustering
+    "statsmodels>=0.14",    # LOWESS
+    "threadpoolctl>=3.5",   # one OpenMP thread per worker process in parallel mixture fits
+    "jupyter-client>=8",    # Quarto executes .qmd chapters through Jupyter
+    "ipykernel>=6.29",
+    "nbformat>=5.10",
+    "nbclient>=0.10",
+    "tomli>=2; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+# The Shiny app (app/) — installs Shiny for Python.
+app = ["shiny>=1.2"]
+# Developer tools: tests, linting/formatting, LaTeX source cleaning for arXiv.
+dev = ["pytest>=8", "ruff>=0.6", "arxiv-latex-cleaner>=1.0"]
+
+[project.scripts]
+# `uv run mdmx --help` lists every command (render, article, check, …).
+mdmx = "mdmx.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mdmx"]
+
+[tool.pytest.ini_options]
+# app/tests: the Shiny app agrees with mdmx (skipped without the companion's artefact store).
+testpaths = ["tests", "app/tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "NPY"]
+ignore = ["E501"]   # long lines are allowed in comments/docstrings

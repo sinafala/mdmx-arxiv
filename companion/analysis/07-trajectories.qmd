@@ -1,0 +1,1054 @@
+---
+title: "Reconstruction at arbitrary mortality levels"
+subtitle: "The typical schedule plus a regime's deviation, chosen by a hold-out over populations"
+---
+
+::: {.callout-note appearance="simple"}
+## Paper correspondence
+Paper §5 ("Schedules at Any Level of Mortality"): the forward model and its inverse
+(§5.1), the trajectories (§5.2), the hold-out that measures how well the schedules are
+rebuilt (§5.3), and the trajectories of the regimes, their properties and their limits
+(§5.4).  Produces the tables `tbl-s6-recon-accuracy` and `tbl-s6-recon-verification` and the
+figures `fig-s6-example-schedules`, `fig-s6-age-rotation`, `fig-s6-recon-accuracy`,
+`fig-s6-trajectory-scatter`, `fig-s6-cluster-vs-global` and `fig-s6-sex-diff-trajectory`, all
+in the companion only.  Also produces the in-text numbers with prefix `traj`, and the
+artefact `trajectories` that later chapters use
+to generate a schedule for any regime at any e₀.  Parameters:
+`config/params.d/trajectories.toml`.  Code: `mdmx.trajectories`.
+:::
+
+```{python}
+#| label: c07-setup
+#| code-summary: "Chapter setup"
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.lines import Line2D
+
+from mdmx import artifacts, latex, lifetable, plotting, provenance
+from mdmx import clustering as clus
+from mdmx import nn as mnn
+from mdmx import svdcomp as sc
+from mdmx import trajectories as tr
+from mdmx.config import params
+
+provenance.start_chapter("07-trajectories")
+plotting.use_style()
+P = params()
+PT = P.section("trajectories")                 # config/params.d/trajectories.toml
+PF = P.clustering.section("features")          # the typical schedule's LOWESS settings (chapter 06)
+
+clusters_art = artifacts.load("clustering")
+tucker = artifacts.load("tucker")
+T = artifacts.load("tensor")
+populations = artifacts.load("populations")
+
+c_idx, t_idx = clusters_art["c_idx"], clusters_art["t_idx"]
+pops, years = np.asarray(clusters_art["pops"]), np.asarray(clusters_art["years"])
+ages = np.asarray(tucker["ages"])
+e0 = clusters_art["e0_mean"]                    # (n,) sex-average e0 of the observed schedules
+e0_sex = clusters_art["e0"]                     # (n, S)
+labels, K = clusters_art["labels"], int(clusters_art["K"])
+NOISE = [int(k) for k in clusters_art["noise_clusters"]]
+REGIMES = [k for k in range(K) if k not in NOISE]   # the regimes later chapters use
+U_sex, U_age = tucker["U_sex"], tucker["U_age"]
+G_obs = clus.observed_cores(tucker["G_ct"], c_idx, t_idx)       # (n, r1, r2)
+z_obs = np.moveaxis(T["M"][:, :, c_idx, t_idx], -1, 0)           # (n, S, A) observed logit(q_x)
+grid = clusters_art["conditional_mean"]["e0_grid"]
+fidx = clusters_art["features"]["index"]
+family = sc.population_families(pops, populations)[c_idx]
+TYPICAL = {"frac": PF["conditional_frac"], "iterations": PF["conditional_iterations"],
+           "delta_share": PF["conditional_delta"]}
+BRACKET = PT["calibration_bracket"]
+CL = list(plotting.CLUSTER_COLORS)
+SEXES = plotting.SEX_LABELS
+n_obs = len(e0)
+
+
+# Number words for macro names (LaTeX macro names cannot contain digits), as in chapter 06.
+WORDS = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+         "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen"]
+
+
+def cname(k):
+    """Cluster names as in chapter 06 (numbered from 1)."""
+    return f"Cluster {k + 1}"
+```
+
+## What this chapter does
+
+A model life table system must produce a complete schedule of mortality
+at *any* level, including levels not observed in any country-year.  Paper
+§5 does this for a regime $k$ and a target life expectancy $x$.  Life
+expectancy alone does not determine a schedule — infinitely many
+schedules share an e₀ (paper §5.1) — so the regime supplies the shape.
+
+Chapter 06 defines a regime as a **deviation pattern from the typical
+schedule at the same e₀**.  The natural generator is therefore
+
+$$
+\mathcal{G}_k(x) \;=\; \bar{\mathcal{G}}(x) + \mathbf{D}_k(x),
+\qquad
+\mathbf{z}_k(x) \;=\; \mathbf{S}\,\mathcal{G}_k(x)\,\mathbf{A}^\top ,
+$$
+
+the typical effective core at $x$ — the e₀-conditional mean of chapter 06,
+whose schedule is the paper's typical schedule $\bar{\mathcal{M}}(x)$ (Eq. 10) — plus the
+regime's deviation, mapped to logit($q_x$) for both sexes (the paper's trajectory of a
+regime, Eq. 13 in §5.2).  The chapter
+asks how the deviation should depend on $x$, answers by a hold-out over
+populations, and then examines what the resulting trajectories show:
+the sex differential, the change in the age pattern as e₀ rises, and how
+well a schedule's regime and e₀ can be recovered from the schedule.
+
+## Step 1 — the typical schedule and the level calibration
+
+The typical effective core $\bar{\mathcal{G}}(x)$ is chapter 06's
+e₀-conditional mean: a LOWESS of every core entry against the e₀ of the
+observed schedules (span `{python} f"{PF['conditional_frac']}"`), stored on
+a grid of `{python} f"{len(grid)}"` e₀ values from
+`{python} f"{grid[0]:.1f}"` to `{python} f"{grid[-1]:.1f}"`.  Its schedule's
+e₀ is close to $x$ but not equal to it: the mean of the cores at a given
+e₀ is not a core with exactly that e₀, because the life table is not
+linear in logit($q_x$).  `mdmx.trajectories.calibrate_level` therefore
+shifts the **level coordinate** $\mathcal{G}[1,1]$, which moves logit($q_x$)
+up or down at almost every age at once, until the schedule's sex-average
+e₀ equals $x$; the coordinates that carry the shape are left alone.  The
+shift is found by bisection, and the step stops with an error rather than
+returning an uncalibrated schedule if the target cannot be bracketed.
+
+```{python}
+#| label: c07-typical
+#| code-summary: "The typical schedule: its e0 before and after calibration"
+typical_only = tr.build_model(grid, clusters_art["conditional_mean"]["core"],
+                              np.zeros((0, len(grid), len(fidx))), np.zeros((0, 2)), [], fidx, U_sex,
+                              U_age, "typical")
+xs_all = np.arange(np.ceil(grid[0]), grid[-1] + 1e-9, PT["curve_step"])
+typ_gap = tr.uncalibrated_e0_gap(typical_only, None, xs_all)
+calibrated_e0 = tr.sex_e0(tr.generate(typical_only, None, xs_all, bracket=BRACKET)).mean(axis=-1)
+print(f"Typical schedule, e0 = {xs_all[0]:.0f} … {xs_all[-1]:.1f}: e0 before calibration minus target "
+      f"from {typ_gap.min():+.2f} to {typ_gap.max():+.2f} years (mean {typ_gap.mean():+.2f}); "
+      f"after calibration the largest error is {np.abs(calibrated_e0 - xs_all).max():.1e} years")
+latex.report("trajTypicalGapMin", float(typ_gap.min()), digits=2, signed=True,
+             desc="Smallest e0 gap of the uncalibrated typical schedule (years)")
+latex.report("trajTypicalGapMax", float(typ_gap.max()), digits=2, signed=True,
+             desc="Largest e0 gap of the uncalibrated typical schedule (years)")
+```
+
+Before calibration the typical schedule's e₀ is between
+`{python} f"{typ_gap.min():+.2f}"` and `{python} f"{typ_gap.max():+.2f}"`
+years from the target, `{python} "above" if typ_gap.mean() > 0 else "below"`
+it on average (`{python} f"{typ_gap.mean():+.2f}"`): a schedule averaged in
+logit($q_x$) does not have the average e₀ of the schedules it averages.
+After calibration the e₀ is exact.
+
+## Step 2 — the deviation, chosen by a hold-out over populations
+
+How should a regime's deviation depend on the level of mortality?  The
+candidates:
+
+* **typical** — no deviation: every regime gets the typical schedule (the
+  baseline: the typical schedule of all populations, paper Eq. 10);
+* **constant** — the regime's mean deviation at every e₀ (the definition of
+  a regime in chapter 06);
+* **LOWESS** — a LOWESS of the regime members' features against e₀, so that
+  the deviation changes with the level of mortality (a per-regime
+  trajectory in level-free form), with span
+  `{python} ", ".join(f"{f:g}" for f in PT["lowess_fracs"])` of the
+  regime's members;
+* **neural** — one small network for all regimes from the regime and e₀ to
+  the features (`mdmx.nn`; settings in the parameter file), trained with
+  early stopping on whole held-out families.
+
+Each of the last three is tried on chapter 06's feature positions alone
+and **with the sex contrast of the level column** added
+(`mdmx.trajectories.deviation_positions`).  Chapter 06 builds the regimes
+without the level column, so on its features alone a regime keeps its
+shape but takes the typical overall sex differential; the sex contrast of
+the level column — how far apart male and female mortality sit overall —
+lets it keep its own: without it, the female advantage of the Central-Eastern European regime
+comes out too small (Step 3 measures by how much).  Adding the sex contrast to chapter 06's
+clustering features instead turned the regimes into eras, so it enters
+through the deviation.  Outside a regime's central e₀ range (its *support*: the
+`{python} f"{100 * PT['support_quantiles'][0]:.0f}"`–`{python} f"{100 * PT['support_quantiles'][1]:.0f}"`
+% range of its members) a deviation is held at its value at the boundary.
+
+The candidates are compared on schedules the fits have not seen.  Whole
+population families — a population with its HMD parts, because the years
+of one population are not independent — are dealt into
+`{python} f"{PT['n_folds']}"` folds (`svdcomp.assign_folds`).  For each fold,
+the typical schedule and every candidate are estimated from the other
+folds; each held-out country-year's schedule is then generated from its
+regime at its observed e₀, calibrated to that e₀, and compared with the
+observed schedule: the **RMSE of logit($q_x$)** over both sexes and ages
+0–109 (`mdmx.trajectories.holdout_scores`).  The rule, fixed before the
+run: **the candidate with the lowest pooled held-out RMSE over the
+non-noise regimes is used**.  The deviations are estimated from the
+non-noise regimes only, as in the model the chapter keeps; the noise
+cluster is scored in a separate run (without the neural candidate) for
+information.  The regime labels come from chapter 06's clustering of all
+data, so the hold-out asks how well a schedule is rebuilt *given* its
+regime — as in an application where the user chooses the regime.  The
+LOWESS span is the best of its grid on the same folds, which favours the
+LOWESS slightly.
+
+```{python}
+#| label: c07-holdout
+#| code-summary: "The hold-out over population families (cached; a few minutes)"
+def cand_name(kind, frac=None, sex=False):
+    """Hold-out name of a candidate, e.g. 'lowess 0.8 + sex level'."""
+    base = f"lowess {frac:g}" if kind == "lowess" else kind
+    return base + (" + sex level" if sex else "")
+
+
+if sorted(PT["sex_level_options"]) != [False, True]:
+    raise ValueError("sex_level_options must be [false, true]: the chapter compares each deviation with and "
+                     "without the sex level.")
+CANDIDATES = {"typical": {"kind": "typical"}}
+for sex in PT["sex_level_options"]:
+    CANDIDATES[cand_name("constant", sex=sex)] = {"kind": "constant", "sex_level": sex}
+    for f in PT["lowess_fracs"]:
+        CANDIDATES[cand_name("lowess", f, sex)] = {"kind": "lowess", "frac": f, "sex_level": sex}
+    CANDIDATES[cand_name("neural", sex=sex)] = {"kind": "neural", "sex_level": sex, **PT["neural"]}
+folds = sc.assign_folds(family, PT["n_folds"], PT["fold_seed"])
+HOLDOUT = {"feature_index": fidx, "grid": grid, "typical": TYPICAL, "U_sex": U_sex, "U_age": U_age,
+           "bracket": BRACKET, "support_quantiles": PT["support_quantiles"]}
+
+
+def _holdout():
+    main_runs = tr.holdout_scores(G_obs, z_obs, e0, labels, family, folds, REGIMES, CANDIDATES, **HOLDOUT)
+    noise_cands = {n_: s_ for n_, s_ in CANDIDATES.items() if s_["kind"] != "neural"}
+    noise_runs = (tr.holdout_scores(G_obs, z_obs, e0, labels, family, folds, NOISE, noise_cands, **HOLDOUT)
+                  if NOISE else pd.DataFrame(columns=main_runs.columns))
+    return {"main": main_runs, "noise": noise_runs}
+
+
+holdout = artifacts.stage(
+    "trajectories_holdout", _holdout, inputs=["clustering", "tucker", "tensor", "populations"],
+    params={"candidates": CANDIDATES, "folds": {"n": PT["n_folds"], "seed": PT["fold_seed"]},
+            "typical": TYPICAL, "bracket": BRACKET, "support": PT["support_quantiles"]},
+    code=[_holdout, cand_name, tr, clus, sc.assign_folds, sc.population_families, mnn, lifetable],
+    desc="Schedules of held-out population families rebuilt from regime and e0, for each candidate deviation")
+main = holdout["main"]
+pooled = main.groupby("candidate", sort=False)["mse"].mean().pow(0.5)
+by_regime = main.pivot_table(index="candidate", columns="regime", values="mse", aggfunc="mean").pow(0.5)
+noise_rmse = holdout["noise"].groupby("candidate")["mse"].mean().pow(0.5)
+gap_mae = main.groupby("candidate")["e0_gap"].apply(lambda g: g.abs().mean())
+BEST = str(pooled.idxmin())
+CHOSEN = CANDIDATES[BEST]
+SEX = bool(CHOSEN.get("sex_level", False))
+
+
+def best_of(kind, sex):
+    """The best-scoring candidate of a kind (over spans for the LOWESS), with or without the sex level."""
+    names_ = [n_ for n_, s_ in CANDIDATES.items() if s_["kind"] == kind and s_.get("sex_level", False) == sex]
+    return str(pooled[names_].idxmin())
+
+
+print(pd.DataFrame({"pooled RMSE": pooled, "|e0 gap| before calibration": gap_mae}).round(4).to_string())
+print(f"\nChosen: {BEST}")
+```
+
+```{python}
+#| label: c07-choice
+#| code-summary: "How much the chosen deviation gains, with a bootstrap over families"
+mse_wide = main.pivot_table(index="row", columns="candidate", values="mse")
+fam_rows = family[mse_wide.index.to_numpy()]
+# The chosen candidate against: the typical schedule; the constant and neural deviations with the same
+# treatment of the sex level; and itself with the other treatment of the sex level.
+counterpart = cand_name(CHOSEN["kind"], CHOSEN.get("frac"), not SEX) if CHOSEN["kind"] != "typical" else None
+RIVALS = {"typical": "typical", "constant": best_of("constant", SEX), "neural": best_of("neural", SEX),
+          "sexlevel": counterpart}
+compare = {key: tr.paired_rmse_difference(mse_wide[BEST].to_numpy(), mse_wide[other].to_numpy(), fam_rows,
+                                          n_resamples=PT["bootstrap_resamples"], seed=PT["bootstrap_seed"])
+           for key, other in RIVALS.items() if other is not None and other != BEST}
+print(pd.DataFrame(compare).T.round(4).to_string())
+
+
+def pct_gain(other):
+    """Percent by which the chosen candidate's pooled RMSE is below another's."""
+    return 100 * (pooled[other] - pooled[BEST]) / pooled[other]
+
+
+latex.report("trajNFolds", PT["n_folds"], desc="Folds of the hold-out over population families")
+latex.report("trajNFamilies", int(np.unique(family).size), desc="Population families in the hold-out")
+latex.report("trajNScored", int(main["row"].nunique()), desc="Country-years scored in the hold-out (non-noise regimes)")
+latex.report("trajRmseTypical", float(pooled["typical"]), digits=3, desc="Held-out RMSE of logit qx, typical schedule only")
+for sex, tail in ((False, ""), (True, "Sex")):
+    if sex in PT["sex_level_options"]:
+        what = " with the sex level" if sex else ""
+        latex.report(f"trajRmseConstant{tail}", float(pooled[best_of("constant", sex)]), digits=3,
+                     desc=f"Held-out RMSE of logit qx, constant deviation{what}")
+        latex.report(f"trajRmseLowess{tail}", float(pooled[best_of("lowess", sex)]), digits=3,
+                     desc=f"Held-out RMSE of logit qx, e0-dependent (LOWESS) deviation{what}, best span")
+        latex.report(f"trajRmseNeural{tail}", float(pooled[best_of("neural", sex)]), digits=3,
+                     desc=f"Held-out RMSE of logit qx, neural deviation{what}")
+latex.report("trajRmseChosen", float(pooled[BEST]), digits=3, desc="Held-out RMSE of logit qx, chosen deviation")
+if CHOSEN["kind"] == "lowess":
+    latex.report("trajLowessSpan", CHOSEN["frac"], digits=1, desc="LOWESS span of the chosen deviation")
+latex.report("trajGainVsTypical", pct_gain("typical"), digits=1,
+             desc="Percent by which the chosen deviation's held-out RMSE is below the typical schedule's")
+latex.report("trajGainVsConstant", pct_gain(RIVALS["constant"]), digits=1,
+             desc="Percent by which the chosen deviation's held-out RMSE is below that of the constant deviation "
+                  "with the same treatment of the sex level")
+for key, word in (("constant", "Constant"), ("neural", "Neural"), ("sexlevel", "SexLevel")):
+    if key in compare:
+        c_ = compare[key]
+        latex.report(f"trajDiff{word}", float(c_["difference"]), digits=4, signed=True,
+                     desc=f"Held-out pooled RMSE of the chosen deviation minus that of its {key} rival")
+        latex.report(f"trajDiff{word}Low", float(c_["lower"]), digits=4, signed=True,
+                     desc=f"Lower end of the 95% family-bootstrap interval of trajDiff{word}")
+        latex.report(f"trajDiff{word}High", float(c_["upper"]), digits=4, signed=True,
+                     desc=f"Upper end of the 95% family-bootstrap interval of trajDiff{word}")
+        latex.report(f"trajFamiliesBetter{word}", 100 * c_["share_better"], digits=0,
+                     desc=f"Percent of population families rebuilt better by the chosen deviation than by its {key} rival")
+```
+
+```{python}
+#| label: tbl-s6-recon-accuracy
+#| code-summary: "Table: held-out accuracy by candidate and regime"
+def label_of(name):
+    spec = CANDIDATES[name]
+    base = {"typical": "Typical schedule only", "constant": "Constant deviation",
+            "neural": "Neural network"}.get(spec["kind"], f"LOWESS in $e_0$, span {spec.get('frac', 0):g}")
+    return base + (", with sex level" if spec.get("sex_level") else "")
+
+
+noise_col = f"{cname(NOISE[0])} (noise)" if NOISE else "Noise"
+acc = pd.DataFrame({"Deviation": [label_of(c) for c in CANDIDATES],
+                    "All": [pooled[c] for c in CANDIDATES],
+                    **{cname(k): [by_regime.loc[c, k] for c in CANDIDATES] for k in REGIMES},
+                    noise_col: [noise_rmse.get(c, np.nan) for c in CANDIDATES],
+                    r"$|\Delta e_0|$": [gap_mae[c] for c in CANDIDATES]})
+acc_tex = acc.copy()
+best_row = list(CANDIDATES).index(BEST)
+acc_tex.loc[best_row, "Deviation"] = f"{acc_tex.loc[best_row, 'Deviation']} (chosen)"
+# The table standard: the regimes under one spanner, the long names of the deviations wrapped.
+acc_tex = acc_tex.rename(columns={**{cname(k): f"Regime: {cname(k).removeprefix('Cluster ')}" for k in REGIMES},
+                                  noise_col: f"Regime: {noise_col.removeprefix('Cluster ').replace(' (', chr(10) + '(')}"})
+latex.save_table(
+    acc_tex, "tbl-s6-recon-accuracy",
+    "Accuracy of rebuilt schedules on held-out population families: root-mean-square difference "
+    "between the generated and the observed $\\operatorname{logit}({}_1q_x)$ (both sexes, ages 0--109), by deviation and "
+    f"regime, over {PT['n_folds']} folds of whole families.  Each schedule is generated from its regime "
+    "at its observed $e_0$ and calibrated to that $e_0$.  \\emph{With sex level}: the deviation also "
+    "shifts the sex contrast of the level column.  \\emph{All}: pooled over the non-noise regimes, "
+    "which decides the choice; the noise cluster is scored in a separate run, without the neural "
+    "network (--).  $|\\Delta e_0|$: mean absolute difference, before calibration, between the "
+    "generated schedule's $e_0$ and the target (years).",
+    short_caption="Accuracy of rebuilt schedules (hold-out)", escape_cells=False, spanners=": ",
+    wrap={"Deviation": "4.4cm"},
+    formats={c: (lambda v: "--" if pd.isna(v) else f"{v:.3f}") for c in acc_tex.columns if c != "Deviation"},
+    rank=[latex.Rank([c for c in acc_tex.columns if c not in ("Deviation", r"$|\Delta e_0|$")], "min")],
+    rank_note="among the deviations in each RMSE column")
+acc.round(4)
+```
+
+What the regimes add.  The same hold-out with the typology at
+`{python} P.section("checks")["k_alt"]` clusters, the smallest number fitted,
+for the chosen deviation and for the typical schedule alone, on the same
+country-years (the noise cluster's are left out of both, as above); its settings are in
+`config/params.d/checks.toml`.
+```{python}
+#| label: c07-k-alt
+#| code-summary: "The hold-out with the typology at K = 2 (cached)"
+CK = P.section("checks")
+K_ALT = int(CK["k_alt"])
+gmm_fits = artifacts.load("clustering_gmm")["fits"]
+if not np.array_equal(gmm_fits[str(K)]["labels"], labels):
+    raise ValueError("the stored mixture at the reproducible K does not reproduce the typology's labels: rows differ")
+# The noise cluster's country-years are out of the alternative typology too, so both score the same rows.
+labels_alt = np.where(np.isin(labels, NOISE), -1, gmm_fits[str(K_ALT)]["labels"])
+REGIMES_ALT = sorted(int(k) for k in np.unique(labels_alt) if k >= 0)
+CANDS_ALT = {"typical": CANDIDATES["typical"], BEST: CHOSEN}
+
+
+def _holdout_alt():
+    return tr.holdout_scores(G_obs, z_obs, e0, labels_alt, family, folds, REGIMES_ALT, CANDS_ALT, **HOLDOUT)
+
+
+hold_alt = artifacts.stage(
+    f"trajectories_holdout_k{K_ALT}", _holdout_alt,
+    inputs=["clustering_gmm", "clustering", "tucker", "tensor", "populations"],
+    params={"k_alt": K_ALT, "candidates": CANDS_ALT, "folds": {"n": PT["n_folds"], "seed": PT["fold_seed"]},
+            "typical": TYPICAL, "bracket": BRACKET, "support": PT["support_quantiles"]},
+    code=[_holdout_alt, tr, clus, sc.assign_folds, sc.population_families, lifetable],
+    desc=f"Held-out schedules rebuilt with the typology at K = {K_ALT}")
+pooled_alt = hold_alt.groupby("candidate", sort=False)["mse"].mean().pow(0.5)
+if abs(pooled_alt["typical"] - pooled["typical"]) > 1e-9:
+    raise ValueError("the typical schedule scores differently on the alternative typology's rows")
+latex.report("trajKAlt", K_ALT, desc="The alternative number of clusters of the check")
+latex.report("trajRmseKAltChosen", pooled_alt[BEST], digits=3,
+             desc=f"Pooled held-out RMSE of logit(qx), chosen deviation, typology at K = {K_ALT}")
+latex.report("trajGainKAltVsTypical", 100 * (1 - pooled_alt[BEST] / pooled["typical"]), digits=1,
+             desc=f"Per cent below the typical schedule alone, typology at K = {K_ALT} (as trajGainVsTypical)")
+print(f"Pooled held-out RMSE: typical {pooled['typical']:.4f}; chosen deviation at K = {K} {pooled[BEST]:.4f}, "
+      f"at K = {K_ALT} {pooled_alt[BEST]:.4f}")
+```
+
+Each held-out country-year above is rebuilt with the regime the clustering gave it, and the
+clustering saw that year's own schedule: the gain over the typical schedule is how much the
+regimes describe, given the regime.  When the regime is not known it must be guessed without the
+schedule.  Here each held-out country-year is given the regime of the nearest country-year of the
+other folds in e₀ and calendar year (each standardised by its standard deviation;
+`mdmx.trajectories.nearest_regimes`), and the chosen deviation is scored again on the same rows.
+
+```{python}
+#| label: c07-blind
+#| code-summary: "The hold-out with the regime guessed from e₀ and the year (cached)"
+YEAR_ROW = years[t_idx].astype(int)
+BLIND = tr.nearest_regimes(e0, YEAR_ROW, labels, folds, REGIMES)
+CANDS_BLIND = {BEST: CHOSEN}
+
+
+def _holdout_blind():
+    return tr.holdout_scores(G_obs, z_obs, e0, labels, family, folds, REGIMES, CANDS_BLIND,
+                             generate_labels=BLIND, **HOLDOUT)
+
+
+hold_blind = artifacts.stage(
+    "trajectories_holdout_blind", _holdout_blind, inputs=["clustering", "tucker", "tensor", "populations"],
+    params={"candidates": CANDS_BLIND, "folds": {"n": PT["n_folds"], "seed": PT["fold_seed"]},
+            "typical": TYPICAL, "bracket": BRACKET, "support": PT["support_quantiles"]},
+    code=[_holdout_blind, tr, clus, sc.assign_folds, sc.population_families, lifetable],
+    desc="Held-out schedules rebuilt with the regime of the nearest country-year of the other folds")
+if set(hold_blind["row"]) != set(main.loc[main["candidate"] == BEST, "row"]):
+    raise ValueError("the label-blind hold-out scores other rows than the main one")
+rmse_blind = float(np.sqrt(hold_blind["mse"].mean()))
+scored_rows = hold_blind["row"].to_numpy()
+latex.report("trajRmseBlind", rmse_blind, digits=3,
+             desc="Pooled held-out RMSE of logit(qx), chosen deviation, regime of the nearest country-year of the "
+                  "other folds in e0 and calendar year")
+latex.report("trajGainBlindVsTypical", 100 * (1 - rmse_blind / pooled["typical"]), digits=1, signed=True,
+             desc="Per cent below the typical schedule alone, with the regime guessed from e0 and the year")
+latex.report("trajBlindMatch", 100 * float(np.mean(BLIND[scored_rows] == labels[scored_rows])), digits=0,
+             desc="Share (%) of the scored country-years whose guessed regime is the clustering's")
+print(f"Regime guessed from e0 and year: pooled RMSE {rmse_blind:.4f} (typical {pooled['typical']:.4f}, "
+      f"given the regime {pooled[BEST]:.4f}); guessed regime = the clustering's in "
+      f"{100 * np.mean(BLIND[scored_rows] == labels[scored_rows]):.0f} % of the rows")
+```
+
+With the regime guessed from e₀ and the year (the clustering's in
+`{python} f"{100 * np.mean(BLIND[scored_rows] == labels[scored_rows]):.0f}"` % of the scored
+country-years), the chosen deviation's held-out RMSE is `{python} f"{rmse_blind:.3f}"`,
+`{python} f"{100 * (1 - rmse_blind / pooled['typical']):.1f}"` % below the typical schedule's
+`{python} f"{pooled['typical']:.3f}"` (given the regime: `{python} f"{pct_gain('typical'):.1f}"` %).
+
+```{python}
+#| label: fig-s6-recon-accuracy
+#| fig-cap: "Accuracy of rebuilt schedules on held-out population families. Left: pooled RMSE of logit(q_x) of each candidate deviation over the non-noise regimes — without (circles) and with (squares) the sex contrast of the level column; the chosen one highlighted. Right: the same by band of e₀ for the typical schedule, the constant deviation with the same treatment of the sex level as the chosen one, and the chosen deviation."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.6), gridspec_kw={"width_ratios": [1, 1.3]})
+rows_ = [c for c in CANDIDATES if c == "typical" or not CANDIDATES[c].get("sex_level")]
+ypos = np.arange(len(rows_))[::-1]
+for y_, c in zip(ypos, rows_, strict=True):
+    spec = CANDIDATES[c]
+    ax1.plot(pooled[c], y_, "o", color=plotting.COLORS["grey"], ms=6)
+    if spec["kind"] != "typical" and True in PT["sex_level_options"]:
+        c_sex = cand_name(spec["kind"], spec.get("frac"), True)
+        ax1.plot(pooled[c_sex], y_, "s", color=plotting.COLORS["model"], ms=6)
+        if c_sex == BEST:
+            ax1.plot(pooled[c_sex], y_, "s", color=plotting.COLORS["highlight"], ms=10, zorder=0)
+    if c == BEST:
+        ax1.plot(pooled[c], y_, "o", color=plotting.COLORS["highlight"], ms=10, zorder=0)
+ax1.set_yticks(ypos, [label_of(c).replace("$e_0$", "e₀") for c in rows_])
+ax1.set_xlabel("Held-out RMSE of logit$(q_x)$")
+ax1.grid(axis="y", visible=False)
+ax1.legend(handles=[Line2D([], [], marker="o", ls="", color=plotting.COLORS["grey"], label="Feature positions"),
+                    Line2D([], [], marker="s", ls="", color=plotting.COLORS["model"], label="… with sex level")],
+           fontsize=8, loc="lower right")
+width = PT["accuracy_band"]
+band = np.floor(e0[main["row"].to_numpy()] / width) * width
+for name, color, style in (("typical", plotting.COLORS["grey"], "o--"),
+                           (RIVALS["constant"], plotting.COLORS["observed"], "s-"),
+                           (BEST, plotting.COLORS["model"], "o-")):
+    part = main.assign(band=band)[main["candidate"] == name]
+    rm = part.groupby("band")["mse"].mean().pow(0.5)
+    ax2.plot(rm.index + width / 2, rm.to_numpy(), style, color=color, lw=1.8, ms=4,
+             label=label_of(name).replace("$e_0$", "e₀"))
+ax2.set_xlabel(f"$e_0$ of the held-out schedule ({width:g}-year bands)")
+ax2.set_ylabel("Held-out RMSE of logit$(q_x)$")
+ax2.legend(fontsize=8)
+fig.tight_layout()
+plotting.save_figure(fig, "fig-s6-recon-accuracy")
+plt.show()
+```
+
+```{python}
+#| label: c07-choice-text
+#| output: asis
+#| code-summary: "Text: what the hold-out shows"
+all_better = all(pooled[c] < pooled["typical"] for c in CANDIDATES if c != "typical")
+print(("Every candidate deviation rebuilds held-out schedules better than the typical schedule alone"
+       if all_better else "Not every candidate deviation beats the typical schedule alone")
+      + f" (pooled RMSE {pooled['typical']:.3f}).  On chapter 06's feature positions, a constant deviation "
+      f"reaches {pooled[best_of('constant', False)]:.3f}, the best LOWESS {pooled[best_of('lowess', False)]:.3f} "
+      f"and the neural network {pooled[best_of('neural', False)]:.3f}", end="")
+if True in PT["sex_level_options"]:
+    print(f"; with the sex level added, {pooled[best_of('constant', True)]:.3f}, "
+          f"{pooled[best_of('lowess', True)]:.3f} and {pooled[best_of('neural', True)]:.3f}", end="")
+chosen_words = ({"typical": "the typical schedule alone", "constant": "the constant deviation",
+                 "neural": "the neural network"}.get(CHOSEN["kind"], f"the e₀-dependent deviation (LOWESS, span "
+                                                       f"{CHOSEN.get('frac', 0):g})")
+                + (" with the sex level" if SEX else ""))
+print(f".  By the rule fixed in advance the chapter uses **{chosen_words}**, "
+      f"{pct_gain('typical'):.1f}% below the typical schedule.")
+for key, what in (("constant", "the constant deviation" + (" with the sex level" if SEX else "")),
+                  ("sexlevel", "the same deviation " + ("without" if SEX else "with") + " the sex level")):
+    if key in compare:
+        c_ = compare[key]
+        clear = c_["upper"] < 0 and c_["share_better"] > 0.5
+        print(f"  Against {what} the pooled RMSE is {-c_['difference']:.4f} lower (95% interval over families "
+              f"{-c_['upper']:.4f} to {-c_['lower']:.4f}; {100 * c_['share_better']:.0f}% of families rebuilt "
+              f"better): {'a small but clear gain' if clear else 'a difference within the uncertainty'}.", end="")
+print("\n")
+if CHOSEN["kind"] != "neural" and "neural" in compare:
+    n_vs = compare["neural"]
+    tie = n_vs["lower"] < 0 < n_vs["upper"]
+    print(f"The neural network {'is about as accurate but does not beat' if tie else 'does not beat'} the "
+          f"chosen deviation (difference {n_vs['difference']:+.4f}, 95% interval over families "
+          f"{n_vs['lower']:+.4f} to {n_vs['upper']:+.4f}).  "
+          "It would have been kept only if it won, so it is not used.", end="")
+elif CHOSEN["kind"] == "neural":
+    print("The neural network is the best candidate and is used.", end="")
+noise_best = str(noise_rmse.idxmin()) if len(noise_rmse) else None
+if noise_best == "typical":
+    print(f"  For the noise cluster no deviation helps: the typical schedule alone rebuilds its schedules best "
+          f"(RMSE {noise_rmse['typical']:.3f}) — another reason to leave it out.\n")
+elif noise_best is not None:
+    print(f"  For the noise cluster the best candidate reaches an RMSE of {noise_rmse[noise_best]:.3f} "
+          f"(typical schedule {noise_rmse['typical']:.3f}); it stays out of the model as decided in chapter 06.\n")
+else:
+    print("\n")
+```
+
+## Step 3 — the model
+
+The chosen deviation is estimated once more, on all country-years of the
+non-noise regimes, around chapter 06's typical schedule.  The result, the
+artefact `trajectories`, holds everything a later chapter needs to
+generate a schedule: the e₀ grid, the typical core, each regime's deviation
+on the grid, the regimes' supports and the bases (see the end of the
+chapter).
+
+```{python}
+#| label: c07-model
+#| code-summary: "The model on all data (cached artefact `trajectories`)"
+def _model():
+    positions = tr.deviation_positions(fidx, U_sex.shape[1], sex_level=SEX)
+    typical_core = clusters_art["conditional_mean"]["core"]
+    # Residuals from the typical schedule's LOWESS values at the data, as in the hold-out (chapter 06's
+    # grid curve is that LOWESS interpolated; the two differ by at most 0.02).
+    typical_at, _ = clus.conditional_mean(e0, G_obs, grid=grid, **TYPICAL)
+    R_all = clus.cores_to_features(G_obs, positions) - clus.cores_to_features(typical_at, positions)
+    dev, support = tr.estimate_deviation(R_all, e0, labels, family, REGIMES, grid, CHOSEN,
+                                         iterations=PF["conditional_iterations"],
+                                         delta_share=PF["conditional_delta"],
+                                         support_quantiles=PT["support_quantiles"])
+    model = tr.build_model(grid, typical_core, dev, support, REGIMES, positions, U_sex, U_age, CHOSEN["kind"])
+    return {**model, "candidate": BEST, "holdout_rmse": pooled.to_frame("rmse").reset_index()}
+
+
+model = artifacts.stage(
+    "trajectories", _model, inputs=["clustering", "tucker", "populations", "trajectories_holdout"],
+    params={"chosen": CHOSEN, "support": PT["support_quantiles"], "typical": TYPICAL},
+    code=[_model, tr, clus, mnn],
+    desc="Typical schedule plus regime deviations: generates a schedule for any regime at any e0")
+support = {k: model["support"][i] for i, k in enumerate(REGIMES)}
+latex.report("trajSupportLowerPct", 100 * PT["support_quantiles"][0], digits=0,
+             desc="Quantile (percent) of the members' e0 at the lower end of a regime's support")
+latex.report("trajSupportUpperPct", 100 * PT["support_quantiles"][1], digits=0,
+             desc="Quantile (percent) of the members' e0 at the upper end of a regime's support")
+for k in REGIMES:
+    latex.report(f"trajSupportLow{WORDS[k]}", float(support[k][0]), digits=1,
+                 desc=f"Lower end of the e0 support of {cname(k).lower()}")
+    latex.report(f"trajSupportHigh{WORDS[k]}", float(support[k][1]), digits=1,
+                 desc=f"Upper end of the e0 support of {cname(k).lower()}")
+```
+
+For each regime, the generated schedules at its members' own e₀ — before
+calibration, how far their e₀ is from the target; after it, their female
+and male e₀ — against the members' observed female and male e₀ (both
+averaged over the members).  This is an in-sample check: the deviations
+were estimated from these members; the out-of-sample evidence is the
+hold-out of Step 2.
+
+```{python}
+#| label: tbl-s6-recon-verification
+#| code-summary: "Table: generated against observed, at each member's own e0"
+rows = []
+for k in REGIMES:
+    m = np.flatnonzero(labels == k)
+    e0_fm = tr.sex_e0(tr.generate(model, k, e0[m], bracket=BRACKET))           # (n_k, S)
+    gap_k = tr.uncalibrated_e0_gap(model, k, e0[m])
+    rows.append({"Cluster": k + 1, "Country-years": int(m.size),
+                 r"Support ($e_0$)": f"{support[k][0]:.1f}--{support[k][1]:.1f}",
+                 r"Mean $|\Delta e_0|$ before calibration": float(np.abs(gap_k).mean()),
+                 r"Female $e_0$": float(e0_fm[:, 0].mean()), r"Male $e_0$": float(e0_fm[:, 1].mean()),
+                 r"Observed female $e_0$": float(e0_sex[m, 0].mean()),
+                 r"Observed male $e_0$": float(e0_sex[m, 1].mean())})
+verify = pd.DataFrame(rows)
+verify["gap error"] = ((verify[r"Female $e_0$"] - verify[r"Male $e_0$"])
+                       - (verify[r"Observed female $e_0$"] - verify[r"Observed male $e_0$"]))
+
+# The same, for the chosen deviation estimated with the other treatment of the sex level (how much it matters).
+other_pos = tr.deviation_positions(fidx, U_sex.shape[1], sex_level=not SEX)
+typical_at_data, _ = clus.conditional_mean(e0, G_obs, grid=grid, **TYPICAL)
+R_other = clus.cores_to_features(G_obs, other_pos) - clus.cores_to_features(typical_at_data, other_pos)
+dev_o, sup_o = tr.estimate_deviation(R_other, e0, labels, family, REGIMES, grid, CHOSEN,
+                                     iterations=PF["conditional_iterations"], delta_share=PF["conditional_delta"],
+                                     support_quantiles=PT["support_quantiles"])
+other_model = tr.build_model(grid, model["typical"], dev_o, sup_o, REGIMES, other_pos, U_sex, U_age, CHOSEN["kind"])
+gap_error_other = {}
+for k in REGIMES:
+    m = np.flatnonzero(labels == k)
+    e0_fm = tr.sex_e0(tr.generate(other_model, k, e0[m], bracket=BRACKET))
+    gap_error_other[k] = float((e0_fm[:, 0] - e0_fm[:, 1]).mean() - (e0_sex[m, 0] - e0_sex[m, 1]).mean())
+print("Sex-gap error (generated − observed, years) with the chosen positions:",
+      dict(zip(verify["Cluster"], verify["gap error"].round(2))), "; with the other treatment of the sex level:",
+      {k + 1: round(v, 2) for k, v in gap_error_other.items()})
+VERIFY_HEAD = {"Cluster": "Regime", "Country-years": "Country-\nyears", r"Support ($e_0$)": "Support\n($e_0$)",
+               r"Mean $|\Delta e_0|$ before calibration": "Mean $|\\Delta e_0|$\nbefore calibration",
+               "Female $e_0$": "Generated $e_0$: Female", "Male $e_0$": "Generated $e_0$: Male",
+               "Observed female $e_0$": "Observed $e_0$: Female", "Observed male $e_0$": "Observed $e_0$: Male"}
+verify_tex = verify.drop(columns="gap error").rename(columns=VERIFY_HEAD)
+latex.save_table(
+    verify_tex, "tbl-s6-recon-verification",
+    "The generated schedules of each regime at its members' own $e_0$, against the members' observed "
+    "schedules (means over the members).  \\emph{Support}: the "
+    f"{100 * PT['support_quantiles'][0]:.0f}--{100 * PT['support_quantiles'][1]:.0f}\\% range of the members' "
+    "$e_0$, outside which the deviation is held constant.  $|\\Delta e_0|$: the distance between the $e_0$ "
+    "of the uncalibrated schedule (typical core plus deviation) and the target, in years; after "
+    "calibration the sex-average $e_0$ equals the target, so the generated and observed female and male "
+    "$e_0$ differ only through the sex differential.",
+    short_caption="Generated against observed schedules, by regime", escape_cells=False, spanners=": ",
+    formats={c: "{:.2f}" for c in verify_tex.columns if c not in ("Regime", "Country-\nyears", "Support\n($e_0$)")})
+latex.report("trajVerifyGapMax", float(verify[r"Mean $|\Delta e_0|$ before calibration"].max()), digits=2,
+             desc="Largest mean |e0 gap| before calibration of a regime's generated schedules (years)")
+latex.report("trajSexGapErrorMax", float(verify["gap error"].abs().max()), digits=2,
+             desc="Largest error of a regime's mean generated female-minus-male e0 gap, in-sample (years)")
+latex.report("trajSexGapErrorOtherMax", float(max(abs(v) for v in gap_error_other.values())), digits=2,
+             desc="The same with the other treatment of the sex level (in-sample, years)")
+verify.round(2)
+```
+
+
+## Step 4 — the trajectories
+
+Each curve below is a calibrated generated schedule followed along e₀:
+the typical schedule over the whole range, each regime's schedule over its
+support.
+
+```{python}
+#| label: c07-curves
+#| code-summary: "Generated schedules along e0 for the typical schedule and each regime"
+def curve_x(lo, hi):
+    return np.arange(np.ceil(lo / PT["curve_step"]) * PT["curve_step"], hi + 1e-9, PT["curve_step"])
+
+
+q_lo, q_hi = np.quantile(e0, PT["curve_quantiles"])
+x_typ = curve_x(max(grid[0], q_lo), min(grid[-1], q_hi))
+z_typ = tr.generate(model, None, x_typ, bracket=BRACKET)                        # (q, S, A)
+x_reg = {k: curve_x(*support[k]) for k in REGIMES}
+z_reg = {k: tr.generate(model, k, x_reg[k], bracket=BRACKET) for k in REGIMES}
+```
+
+```{python}
+#| label: fig-s6-trajectory-scatter
+#| fig-cap: "Trajectories through the sex–age schedule. Each panel shows logit(q_x) at one age against e₀: the observed country-years (grey), the typical schedule (black) and each regime's schedule over its support (coloured). Top: females; bottom: males."
+sel = PT["scatter_ages"]
+fig, axes = plt.subplots(2, len(sel), figsize=(14, 5.6), sharex=True)
+for s in range(2):
+    for j, a in enumerate(sel):
+        ax = axes[s, j]
+        ax.scatter(e0, z_obs[:, s, a], s=2, color=plotting.COLORS["grey"], alpha=0.25, lw=0, rasterized=True)
+        ax.plot(x_typ, z_typ[:, s, a], color="black", lw=1.8)
+        for k in REGIMES:
+            ax.plot(x_reg[k], z_reg[k][:, s, a], color=CL[k], lw=1.4)
+        ax.set_title(f"{SEXES[s]}, age {a}", fontsize=9)
+        if s == 1:
+            ax.set_xlabel("$e_0$")
+    axes[s, 0].set_ylabel("logit$(q_x)$")
+fig.legend(handles=[Line2D([], [], color="black", lw=1.8, label="Typical")]
+           + [Line2D([], [], color=CL[k], lw=1.4, label=cname(k)) for k in REGIMES],
+           loc="lower center", ncol=len(REGIMES) + 1, bbox_to_anchor=(0.5, 1.0), fontsize=8)
+fig.tight_layout()
+plotting.save_figure(fig, "fig-s6-trajectory-scatter")
+plt.show()
+```
+
+```{python}
+#| label: fig-s6-example-schedules
+#| fig-cap: "Generated schedules of each regime at selected e₀ within its support, logit(q_x) by age. Top: females; bottom: males. Chapter 06's fig-s5-centroid-overlay shows the (uncalibrated) typical schedule at a range of e₀."
+targets = PT["example_e0"]
+shades = plt.cm.Blues(np.linspace(0.4, 1.0, len(targets)))
+fig, axes = plt.subplots(2, len(REGIMES), figsize=(12, 5.6), sharex=True, sharey=True, squeeze=False)
+for j, k in enumerate(REGIMES):
+    inside = [x for x in targets if tr.in_support(model, k, x)[0]]
+    z_k = tr.generate(model, k, np.array(inside), bracket=BRACKET) if inside else np.zeros((0, 2, len(ages)))
+    for s in range(2):
+        ax = axes[s, j]
+        for i, x in enumerate(inside):
+            ax.plot(ages, z_k[i, s], color=shades[targets.index(x)], lw=1.4, label=f"$e_0$ = {x:g}")
+        ax.set_title(f"{cname(k)} — {SEXES[s].lower()}", fontsize=9)
+        if s == 1:
+            ax.set_xlabel("Age")
+    axes[0, j].legend(fontsize=7, loc="lower right")
+for s in range(2):
+    axes[s, 0].set_ylabel("logit$(q_x)$")
+fig.tight_layout()
+plotting.save_figure(fig, "fig-s6-example-schedules")
+plt.show()
+```
+
+```{python}
+#| label: fig-s6-cluster-vs-global
+#| fig-cap: "How each regime's schedule differs from the typical schedule at the same e₀: generated minus typical logit(q_x), after both are calibrated to the target. Dashed where the target lies outside the regime's support. Top: females; bottom: males."
+cmp = PT["compare_e0"]
+fig, axes = plt.subplots(2, len(cmp), figsize=(11, 5.6), sharex=True, sharey=True, squeeze=False)
+for j, x in enumerate(cmp):
+    z_t = tr.generate(model, None, x, bracket=BRACKET)[0]
+    for k in REGIMES:
+        diff = tr.generate(model, k, x, bracket=BRACKET)[0] - z_t
+        style = "-" if tr.in_support(model, k, x)[0] else "--"
+        for s in range(2):
+            axes[s, j].plot(ages, diff[s], style, color=CL[k], lw=1.4, label=cname(k) if s == 0 else None)
+    for s in range(2):
+        axes[s, j].axhline(0, color="black", lw=0.5)
+        axes[s, j].set_title(f"{SEXES[s]}, $e_0$ = {x:g}", fontsize=9)
+    axes[1, j].set_xlabel("Age")
+for s in range(2):
+    axes[s, 0].set_ylabel("Difference in logit$(q_x)$")
+axes[0, 0].legend(fontsize=8)
+fig.tight_layout()
+plotting.save_figure(fig, "fig-s6-cluster-vs-global")
+plt.show()
+```
+
+```{python}
+#| label: c07-dev-change
+#| code-summary: "How much each regime's deviation changes across its support"
+dev_change = {}
+for k in REGIMES:
+    lo_x, hi_x = support[k]
+    z_lo = tr.generate(model, k, lo_x, bracket=BRACKET)[0] - tr.generate(model, None, lo_x, bracket=BRACKET)[0]
+    z_hi = tr.generate(model, k, hi_x, bracket=BRACKET)[0] - tr.generate(model, None, hi_x, bracket=BRACKET)[0]
+    dev_change[k] = float(np.sqrt(np.mean((z_hi - z_lo) ** 2)))
+print({cname(k): round(v, 3) for k, v in dev_change.items()},
+      "RMS change (logit) of the deviation between the ends of the support")
+k_most = max(dev_change, key=dev_change.get)
+dev_text = (f"With the chosen deviation these departures are not the same at every level of mortality: between "
+            f"the two ends of a regime's support its deviation changes by a root-mean-square "
+            f"{min(dev_change.values()):.2f}–{max(dev_change.values()):.2f} logit units ({cname(k_most)} the most)."
+            if CHOSEN["kind"] in ("lowess", "neural") else
+            "With the chosen (constant) deviation these departures are the same at every level of mortality.")
+sex_intro = ("each regime adds its own: its deviation includes the sex contrast of the level column, so the "
+             "overall difference between female and male mortality is the regime's, not the typical one."
+             if SEX else
+             "each regime adds its own sex differential *by age* but not overall: its deviation leaves out the "
+             "sex contrast of the level column (Step 2), so the overall difference between female and male "
+             "mortality is the typical one.")
+```
+
+The regimes' schedules depart from the typical one by their chapter-06
+deviation patterns.  `{python} dev_text`
+
+## Step 5 — the sex differential along the trajectories
+
+The female and male schedules are generated together, so the sex
+differential along a trajectory comes from the data, not from an
+assumption: the typical schedule carries the sex differential observed at
+each level of mortality, and `{python} sex_intro`
+
+```{python}
+#| label: fig-s6-sex-diff-trajectory
+#| fig-cap: "The sex differential along the trajectories. Left: female minus male e₀ of the generated schedule against its sex-average e₀. Right: the ratio of female to male e₀. Black: typical schedule; coloured: each regime over its support; grey points: observed country-years."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4))
+gap_obs, ratio_obs = e0_sex[:, 0] - e0_sex[:, 1], e0_sex[:, 0] / e0_sex[:, 1]
+ax1.scatter(e0, gap_obs, s=2, color=plotting.COLORS["grey"], alpha=0.25, lw=0, rasterized=True)
+ax2.scatter(e0, ratio_obs, s=2, color=plotting.COLORS["grey"], alpha=0.25, lw=0, rasterized=True)
+e0_typ = tr.sex_e0(z_typ)
+ax1.plot(x_typ, e0_typ[:, 0] - e0_typ[:, 1], color="black", lw=1.8, label="Typical")
+ax2.plot(x_typ, e0_typ[:, 0] / e0_typ[:, 1], color="black", lw=1.8)
+for k in REGIMES:
+    e0_k = tr.sex_e0(z_reg[k])
+    ax1.plot(x_reg[k], e0_k[:, 0] - e0_k[:, 1], color=CL[k], lw=1.4, label=cname(k))
+    ax2.plot(x_reg[k], e0_k[:, 0] / e0_k[:, 1], color=CL[k], lw=1.4)
+ax1.set_ylabel("Female − male $e_0$ (years)")
+ax2.set_ylabel("Female / male $e_0$")
+for ax in (ax1, ax2):
+    ax.set_xlabel("Sex-average $e_0$")
+ax1.legend(fontsize=8)
+fig.tight_layout()
+plotting.save_figure(fig, "fig-s6-sex-diff-trajectory")
+plt.show()
+
+gap_typ = e0_typ[:, 0] - e0_typ[:, 1]
+i_max = int(np.argmax(gap_typ))
+latex.report("trajSexGapMax", float(gap_typ[i_max]), digits=1, desc="Largest female-minus-male e0 gap along the typical schedule (years)")
+latex.report("trajSexGapMaxAt", float(x_typ[i_max]), digits=0, desc="Sex-average e0 at which the typical gap is largest")
+latex.report("trajSexGapLow", float(gap_typ[0]), digits=1, desc="Typical female-minus-male gap at the low end of the range (years)")
+latex.report("trajSexGapHigh", float(gap_typ[-1]), digits=1, desc="Typical female-minus-male gap at the high end of the range (years)")
+latex.report("trajSexGapLowAt", float(x_typ[0]), digits=0, desc="Low end of the typical trajectory's range (e0)")
+latex.report("trajSexGapHighAt", float(x_typ[-1]), digits=0, desc="High end of the typical trajectory's range (e0)")
+
+# How far each regime's sex gap departs from the typical one at the same e0, over its support.
+gap_excess = {}
+for k in REGIMES:
+    e0_k = tr.sex_e0(z_reg[k])
+    typ_at = np.interp(x_reg[k], x_typ, gap_typ)
+    gap_excess[k] = float(np.mean(e0_k[:, 0] - e0_k[:, 1] - typ_at))
+k_wide, k_narrow = max(gap_excess, key=gap_excess.get), min(gap_excess, key=gap_excess.get)
+# The paper words these two as "larger" and "smaller" than the typical gap, so it quotes them unsigned.
+if not gap_excess[k_wide] > 0 > gap_excess[k_narrow]:
+    raise ValueError(f"The regimes' sex gaps no longer straddle the typical one: {cname(k_wide)} "
+                     f"{gap_excess[k_wide]:+.2f}, {cname(k_narrow)} {gap_excess[k_narrow]:+.2f} years.")
+print(f"Widest sex gap relative to the typical one: {cname(k_wide)} ({gap_excess[k_wide]:+.2f} y); "
+      f"narrowest: {cname(k_narrow)} ({gap_excess[k_narrow]:+.2f} y)")
+latex.report("trajSexGapExcessWide", gap_excess[k_wide], digits=1,
+             desc=f"Mean excess of {cname(k_wide).lower()}'s female-minus-male e0 gap over the typical one "
+                  "at the same e0, over its support (years; the largest)")
+latex.report("trajSexGapExcessNarrow", -gap_excess[k_narrow], digits=1,
+             desc=f"Mean shortfall of {cname(k_narrow).lower()}'s female-minus-male e0 gap from the typical one "
+                  "at the same e0, over its support (years; the largest)")
+
+# The observed gap by band of e0 without the populations whose female advantage is unusually large.
+regions = P.clustering.section("regions")
+region_of = {p_: r_ for r_, members in regions.items() for p_ in members}
+left_out = np.isin([region_of[p_] for p_ in pops[c_idx]], PT["sex_gap_check_regions"])
+b_lo, b_hi, b_w = PT["sex_gap_bands"]
+band_gap = pd.Series(gap_obs[~left_out]).groupby(pd.cut(e0[~left_out], np.arange(b_lo, b_hi + 1e-9, b_w)),
+                                                 observed=True).mean()
+i_band = int(np.argmax(band_gap.to_numpy()))
+latex.report("trajSexGapCheckLow", float(band_gap.iloc[0]), digits=1,
+             desc="Observed female-minus-male gap in the lowest e0 band, without the excluded regions (years)")
+latex.report("trajSexGapCheckMax", float(band_gap.iloc[i_band]), digits=1,
+             desc="Largest observed band gap without the excluded regions (years)")
+latex.report("trajSexGapCheckHigh", float(band_gap.iloc[-1]), digits=1,
+             desc="Observed gap in the highest e0 band, without the excluded regions (years)")
+print("Observed gap by e0 band without", PT["sex_gap_check_regions"], ":", band_gap.round(1).to_dict())
+narrows = gap_typ[-1] < gap_typ[i_max] - PT["sex_gap_narrowing"]
+check_narrows = band_gap.iloc[-1] < band_gap.iloc[i_band] - PT["sex_gap_narrowing"] and i_band > 0
+sex_text = (f"Along the typical schedule the female advantage is {gap_typ[0]:.1f} years at e₀ = {x_typ[0]:.0f}, "
+            f"largest ({gap_typ[i_max]:.1f} years) at e₀ ≈ {x_typ[i_max]:.0f}, and {gap_typ[-1]:.1f} years at "
+            f"e₀ = {x_typ[-1]:.0f}" + (": it widens during the mortality transition and narrows again at the "
+            "lowest mortality, as the literature documents." if narrows else ".")
+            + (f"  This is not merely a matter of which populations are observed at each level: " if check_narrows
+               else "  Part of this shape comes from which populations are observed at each level: ")
+            + f"without the populations of {' and '.join(PT['sex_gap_check_regions'])}, whose female advantage "
+            f"is unusually large, the observed gap is {band_gap.iloc[0]:.1f} years at e₀ "
+            f"{band_gap.index[0].left:g}–{band_gap.index[0].right:g}, {band_gap.iloc[i_band]:.1f} at "
+            f"{band_gap.index[i_band].left:g}–{band_gap.index[i_band].right:g} and {band_gap.iloc[-1]:.1f} at "
+            f"{band_gap.index[-1].left:g}–{band_gap.index[-1].right:g}."
+            + f"  The regimes differ here: over its support, {cname(k_wide)}'s female advantage is on average "
+            f"{gap_excess[k_wide]:+.1f} years from the typical one at the same e₀, {cname(k_narrow)}'s "
+            f"{gap_excess[k_narrow]:+.1f} years.")
+sex_text += (f"  At their members' own e₀ the generated female-minus-male gap of every regime is within "
+             f"{verify['gap error'].abs().max():.1f} years of the observed one (in-sample; "
+             f"{max(abs(v) for v in gap_error_other.values()):.1f} years " + ("without" if SEX else "with")
+             + " the sex level).")
+if "sexlevel" in compare:
+    # Effect of adding the sex level on the held-out RMSE (the comparison is chosen minus its counterpart).
+    effect = compare["sexlevel"]["difference"] * (1 if SEX else -1)
+    sex_text += (f"  Out of sample, adding the sex level {'lowers' if effect < 0 else 'raises'} the held-out RMSE "
+                 f"by {abs(effect):.4f} (Step 2).")
+```
+
+`{python} sex_text`
+
+## Step 6 — does the age pattern of decline rotate?
+
+Paper §5.2 motivates the trajectories by the **rotation** of mortality
+decline — as e₀ rises, gains shift from young to old ages — and §5.4 measures it.
+We examine it
+along the typical schedule in two ways
+(`mdmx.trajectories.age_contributions`): the slope of logit($q_x$)
+per year of e₀ at three levels — the paper's measure — and the **share of a
+gain in e₀ that comes from each age group**, from the exact derivative of
+e₀ with respect to logit($q_x$) times that slope.  Both use central
+differences over ±`{python} f"{PT['rotation_step']:g}"` years of e₀, wide
+enough not to follow the small irregularities of the typical schedule
+(chapter 06's short smoothing span follows the mix of populations observed
+at each level); over such a step the shares are rescaled to add up to one.
+
+```{python}
+#| label: c07-rotation
+#| code-summary: "Slopes of logit(q_x) and age shares of e0 gains along the typical schedule"
+h_rot = PT["rotation_step"]
+lev = np.asarray(PT["rotation_e0"], dtype=float)
+slope, _ = tr.age_contributions(model, None, lev, bracket=BRACKET, h=h_rot)                  # (L, S, A)
+x_rot = curve_x(x_typ[0] + h_rot, x_typ[-1] - h_rot)
+_, share_rot = tr.age_contributions(model, None, x_rot, bracket=BRACKET, h=h_rot, normalise=True)  # (q, S, A)
+starts = PT["age_groups"]
+groups = [(a, b) for a, b in zip(starts, starts[1:] + [len(ages)], strict=True)]
+if PT["young_below"] not in starts or PT["old_from"] not in starts:
+    raise ValueError("young_below and old_from must be first ages of age groups (age_groups).")
+share_grp = np.stack([share_rot[:, :, a:b].sum(axis=(1, 2)) for a, b in groups], axis=1)   # (q, G)
+young = share_grp[:, [b <= PT["young_below"] for a, b in groups]].sum(axis=1)
+old = share_grp[:, [a >= PT["old_from"] for a, b in groups]].sum(axis=1)
+at = [int(np.argmin(np.abs(x_rot - v))) for v in lev]
+print(pd.DataFrame(share_grp[at], index=[f"e0 {v:g}" for v in lev], columns=PT["age_group_labels"]).round(3).to_string())
+a_hi, a_lo = PT["slope_ratio_ages"]
+s_avg = slope.mean(axis=1)                                                               # (L, A) sex average
+ratio = s_avg[:, a_hi] / s_avg[:, a_lo]                                                  # (L,)
+ad_lo, ad_hi = PT["adult_ages"]
+adult = s_avg[:, ad_lo:ad_hi + 1].mean(axis=1) / s_avg[:, a_lo]                          # (L,)
+print(f"Slope at age {a_hi} relative to age {a_lo}, by level:", np.round(ratio, 2).tolist())
+print(f"Mean slope at ages {ad_lo}–{ad_hi} relative to age {a_lo}, by level:", np.round(adult, 2).tolist())
+for i, word in ((0, "Low"), (len(lev) // 2, "Mid"), (len(lev) - 1, "High")):
+    v = f"{lev[i]:g}"
+    latex.report(f"trajShareYoung{word}", 100 * young[at[i]], digits=0,
+                 desc=f"Percent of an e0 gain from ages below {PT['young_below']} at e0 = {v}")
+    latex.report(f"trajShareOld{word}", 100 * old[at[i]], digits=0,
+                 desc=f"Percent of an e0 gain from ages {PT['old_from']} and over at e0 = {v}")
+    latex.report(f"trajSlopeRatio{word}", float(ratio[i]), digits=2,
+                 desc=f"Slope of logit qx at age {a_hi} relative to age {a_lo} along the typical schedule at e0 = {v}")
+    latex.report(f"trajAdultRatio{word}", float(adult[i]), digits=2,
+                 desc=f"Mean slope of logit qx at ages {ad_lo}-{ad_hi} relative to age {a_lo} at e0 = {v}")
+    latex.report(f"trajRotation{word}", lev[i], digits=0, desc=f"{word} e0 level of the rotation analysis")
+latex.report("trajRotationStep", h_rot, digits=1,
+             desc="Half-width (years of e0) of the central differences of the rotation analysis")
+```
+
+```{python}
+#| label: fig-s6-age-rotation
+#| fig-cap: "The age pattern of mortality decline along the typical schedule. Left: change of logit(q_x) per year of e₀ (average of the sexes; central differences, step as in the text) at three levels of e₀ — the paper's measure. Right: the share of a gain in e₀ that comes from each age group, by level of e₀ (both sexes)."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.2))
+shades = plt.cm.Blues(np.linspace(0.45, 1.0, len(lev)))
+for i, v in enumerate(lev):
+    ax1.plot(ages, slope[i].mean(axis=0), color=shades[i], lw=1.8, label=f"$e_0$ = {v:g}")
+ax1.axhline(0, color="black", lw=0.5)
+ax1.set_xlabel("Age")
+ax1.set_ylabel("d logit$(q_x)$ / d$e_0$")
+ax1.legend(fontsize=8)
+grp_colors = plt.cm.viridis(np.linspace(0.05, 0.95, len(groups)))
+ax2.stackplot(x_rot, share_grp.T, colors=grp_colors, labels=PT["age_group_labels"], edgecolor="white", linewidth=0.4)
+ax2.set_xlim(x_rot[0], x_rot[-1])
+ax2.set_ylim(0, 1)
+ax2.set_xlabel("$e_0$")
+ax2.set_ylabel("Share of a gain in $e_0$")
+ax2.legend(title="Ages", fontsize=8, loc="center left", bbox_to_anchor=(1.0, 0.5))
+fig.tight_layout()
+plotting.save_figure(fig, "fig-s6-age-rotation")
+plt.show()
+```
+
+```{python}
+#| label: c07-rotation-text
+#| output: asis
+#| code-summary: "Text: what the rotation analysis shows"
+tol = PT["same_shape_tolerance"]
+levels_txt = ", ".join(f"{v:g}" for v in lev)
+
+
+def direction(change):
+    """How the age pattern of decline moved between two levels, from the change of a slope ratio."""
+    if abs(change) < tol:
+        return "hardly changes"
+    return "moves towards the young ages" if change < 0 else "moves towards the older ages"
+
+
+moves = [f"between e₀ = {lev[i]:g} and {lev[i + 1]:g} the decline {direction(adult[i + 1] - adult[i])}"
+         for i in range(len(lev) - 1)]
+print(f"Measured as the paper does — the slope of logit($q_x$) per year of e₀ — mortality at ages {ad_lo}–{ad_hi} "
+      f"falls {', '.join(f'{r:.2f}' for r in adult)} times as fast as at age {a_lo} at e₀ = {levels_txt} "
+      f"(at age {a_hi}: {', '.join(f'{r:.2f}' for r in ratio)} times): " + "; ".join(moves) + ".", end="")
+rotates = young[at[-1]] < young[at[0]] and old[at[-1]] > old[at[0]]
+young_steps = np.diff(young[at])
+j_big = int(np.argmin(young_steps))
+print(f"  Where the *gains in life expectancy* come from {'does' if rotates else 'does not'} rotate: at "
+      f"e₀ = {levels_txt} the shares from ages below {PT['young_below']} are "
+      f"{', '.join(f'{100 * young[i]:.0f}' for i in at)}% and from ages {PT['old_from']} and over "
+      f"{', '.join(f'{100 * old[i]:.0f}' for i in at)}%", end="")
+steady_old = bool(np.all(np.diff(adult) >= tol))          # the decline moves steadily towards older ages
+if rotates:
+    print(f", most of the shift happening between e₀ = {lev[j_big]:g} and {lev[j_big + 1]:g}.  The rotation is "
+          "therefore supported for the sources of gains in e₀; "
+          + ("the age pattern of the decline itself moves the same way.\n" if steady_old else
+             "the age pattern of the decline itself does not move steadily towards older ages.\n"))
+else:
+    print(".  These trajectories do not support a rotation of the sources of gains in e₀.\n")
+```
+
+## Step 7 — from a schedule back to its regime and e₀
+
+Chapter 09 fits model schedules to data, which needs the inverse of the
+generator (paper §5.1; the results below are in the companion only): the regime and e₀
+whose generated schedule is closest to a
+given schedule (`mdmx.trajectories.invert`: for each regime, a search over
+e₀ for the smallest RMSE of logit($q_x$), then the best regime).  A random
+sample of `{python} f"{PT['invert_sample']}"` observed country-years of the
+non-noise regimes shows how well this recovers their regime and e₀.  It is
+an in-sample check: the model and the regime labels were estimated from
+these same schedules.
+
+```{python}
+#| label: c07-invert
+#| code-summary: "Invert a sample of observed schedules (cached)"
+def _invert():
+    pool = np.flatnonzero(np.isin(labels, REGIMES))
+    rng = np.random.default_rng(PT["invert_seed"])
+    sample = np.sort(rng.choice(pool, size=min(PT["invert_sample"], pool.size), replace=False))
+    rows = []
+    for i in sample:
+        found = tr.invert(z_obs[i], model, bracket=BRACKET, step=PT["invert_step"])
+        rows.append({"row": int(i), "regime": int(labels[i]), "found": found["regime"],
+                     "e0": float(e0[i]), "e0_found": found["e0"], "rmse": found["rmse"]})
+    return pd.DataFrame(rows)
+
+
+inv = artifacts.stage(
+    "trajectories_inversion", _invert, inputs=["clustering", "tucker", "tensor", "trajectories"],
+    params={"sample": PT["invert_sample"], "seed": PT["invert_seed"], "step": PT["invert_step"],
+            "bracket": BRACKET, "regimes": REGIMES},
+    code=[_invert, tr, clus, lifetable],
+    desc="Regime and e0 recovered from a sample of observed schedules")
+pool_all = np.isin(labels, REGIMES)
+agree = float(np.mean(inv["found"] == inv["regime"]))
+chance = float(np.max(np.bincount(labels[pool_all]) / pool_all.sum()))
+e0_err = inv["e0_found"] - inv["e0"]
+print(pd.crosstab(inv["regime"] + 1, inv["found"] + 1, rownames=["labelled"], colnames=["recovered"]))
+print(f"\nRegime recovered for {100 * agree:.0f}% (largest regime's share: {100 * chance:.0f}%); "
+      f"e0 error mean {e0_err.mean():+.2f}, mean absolute {e0_err.abs().mean():.2f} years")
+latex.report("trajInvertAgree", 100 * agree, digits=0, desc="Percent of sampled schedules whose regime is recovered by inversion")
+latex.report("trajInvertChance", 100 * chance, digits=0, desc="Share of the largest regime among non-noise country-years (percent)")
+latex.report("trajInvertEzeroMae", float(e0_err.abs().mean()), digits=2,
+             desc="Mean absolute difference between the e0 of the best-matching generated schedule and the schedule's own e0 (years)")
+```
+
+The regime is recovered for `{python} f"{100 * agree:.0f}"`% of the sampled
+schedules, against `{python} f"{100 * chance:.0f}"`% for always guessing the
+largest regime.  The regimes are summaries of a continuum of deviation
+patterns (chapter 06), so a single schedule's regime can be ambiguous.
+The e₀ of the best-matching generated schedule differs from the schedule's
+own e₀ by `{python} f"{e0_err.abs().mean():.2f}"` years on average: the
+closest schedule in logit($q_x$) is not always the one with the same life
+expectancy.  Whether a fit should match the schedule or fix e₀ to the
+data's is a question for chapter 09.
+
+# The `trajectories` artefact
+
+| Key | Shape / type | Content |
+|---|---|---|
+| `kind`, `candidate` | str | the chosen deviation (`lowess`, …) and its hold-out name |
+| `e0_grid` | (g,) | e₀ grid (chapter 06) |
+| `typical` | (g, r₁, r₂) | typical effective core on the grid |
+| `deviation` | (K′, g, p) | each regime's deviation at its positions, on the grid (constant outside the support) |
+| `support` | (K′, 2) | each regime's e₀ support |
+| `clusters` | (K′,) int | the regimes served (chapter 06 labels; the noise cluster is not among them) |
+| `feature_index` | (p, 2) | (sex component, age column) of each deviation entry: chapter 06's features plus the sex contrast of the level column if the chosen deviation uses it — *not* always `clustering["features"]["index"]` |
+| `U_sex`, `U_age` | (S, r₁), (A, r₂) | the bases |
+| `holdout_rmse` | DataFrame | pooled held-out RMSE of every candidate |
+
+To generate the schedule of regime `k` at e₀ `x` (calibrated to `x`):
+
+```python
+logit_qx = tr.generate(art, k, x, bracket=P.section("trajectories")["calibration_bracket"])[0]   # (S, A)
+```
+
+```{python}
+#| label: c07-end
+#| code-summary: "Write this chapter's numbers and close"
+latex.report("trajNRegimes", len(REGIMES), desc="Regimes served by the reconstruction model")
+latex.write_numbers()
+provenance.end_chapter()
+```

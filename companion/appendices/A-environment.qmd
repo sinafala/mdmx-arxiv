@@ -1,0 +1,23 @@
+---
+title: "Computing environment"
+---
+
+The Python environment is fully specified by `pyproject.toml` and locked by
+`uv.lock`; the R packages by `R/install-packages.R`.  The versions actually
+used to render this copy of the book are:
+
+```{python}
+#| label: appA-env
+#| code-summary: "Record the environment of this render"
+import json, platform, shutil, subprocess
+from mdmx import provenance
+env = provenance.environment()
+print(json.dumps(env, indent=1))
+for tool in ("quarto", "Rscript", "latexmk"):
+    path = shutil.which(tool)
+    if path:
+        out = subprocess.run([path, "--version"], capture_output=True, text=True)
+        print(f"{tool}: {(out.stdout or out.stderr).splitlines()[0] if (out.stdout or out.stderr) else '?'}")
+    else:
+        print(f"{tool}: not found")
+```

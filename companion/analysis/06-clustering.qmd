@@ -1,0 +1,1851 @@
+---
+title: "A typology of mortality age patterns"
+subtitle: "Level-free deviation patterns, Gaussian mixtures, and level epochs"
+---
+
+::: {.callout-note appearance="simple"}
+## Paper correspondence
+Paper §4 ("A Typology of Mortality Age Patterns"): the method (§4.1–4.3) and the
+typology of the HMD populations (§4.4).  Produces `fig-s5-profiles` (§4.4).  `fig-s5-bic`,
+`fig-s5-stability`, the table `tbl-s5-cluster-summary`, `fig-s5-time-heatmap`,
+`fig-s5-trajectories`, `fig-s5-epoch-trajectories`, `fig-s5-calendar`, `fig-s5-components`,
+`fig-s5-grand-mean`, `fig-s5-dendrogram`, `fig-s5-centroid-overlay`, `fig-s5-spaghetti-a`,
+`fig-s5-spaghetti-b`, `fig-s5-geography`, `fig-s5-region-summary` and `fig-s5-time-structure`
+are in the companion only.  Also produces the in-text numbers with prefix `clus` and the
+artefact `clustering` used by the trajectory, exceptional-mortality and fitting chapters.
+Parameters: `config/params.d/clustering.toml`.
+Code: `mdmx.clustering`.
+:::
+
+```{python}
+#| label: c06-setup
+#| code-summary: "Chapter setup"
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.colors import ListedColormap
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+from scipy.cluster.hierarchy import dendrogram
+from sklearn.metrics import adjusted_rand_score
+
+from mdmx import artifacts, data, latex, lifetable, plotting, provenance
+from mdmx import clustering as clus
+from mdmx import svdcomp as sc
+from mdmx import tensor as tz
+from mdmx.config import params
+
+provenance.start_chapter("06-clustering")
+plotting.use_style()
+P = params()
+PF = P.clustering.section("features")      # columns, conditional mean, PCA
+PG = P.clustering.section("gmm")           # mixture settings
+PSt = P.clustering.section("stability")    # the choice of K and the resampling check
+# Cache keys: each stage is keyed on the settings it uses (the number of worker processes changes
+# only the run time; the thresholds are applied after the fits).
+REPRO_KEY = {"seeds": PSt["seeds"]}
+BOOT_KEY = {k: PSt[k] for k in ("bootstrap_resamples", "bootstrap_seed")}
+PE = P.clustering.section("epochs")        # epoch classification
+PX = P.clustering.section("diagnostics")   # noise checks
+PD = P.clustering.section("display")       # figure settings only
+PS = P.clustering.section("supplementary")  # last section
+REGIONS = P.clustering.section("regions")  # region of every population
+
+T = artifacts.load("tensor")
+tucker = artifacts.load("tucker")
+hmd = artifacts.load("hmd_raw")
+
+if not np.array_equal(T["observed"], tucker["observed"]):
+    raise ValueError("The tensor and the decomposition disagree about which country-years are observed.")
+pops, years, ages = tucker["pops"], tucker["years"], tucker["ages"]
+U_sex, U_age = tucker["U_sex"], tucker["U_age"]
+r1, r2 = U_sex.shape[1], U_age.shape[1]
+C, Tn = tucker["observed"].shape
+NAME = data.population_names()                 # code → display name (population register)
+names = np.array([NAME[p] for p in pops])
+EPOCH_COLORS = list(plotting.EPOCH_COLORS)
+SEXES = plotting.SEX_LABELS
+# Number words for macro names (LaTeX macro names cannot contain digits).
+WORDS = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+         "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen"]
+```
+
+## What this chapter does
+
+The decomposition of chapter 04 represents every observed schedule by its
+effective core $\mathcal{G}_{c,t}$, a $2 \times r_2$ matrix of coordinates in
+the shared sex and age bases.  Paper §4 uses these coordinates to sort
+country-years into a **typology of mortality age patterns**; each type is
+called a **regime**, here and in the chapters that use it.  A regime is a
+**deviation pattern relative to the typical schedule at the same life
+expectancy**: two country-years belong to the same cluster when their
+schedules depart in the same way from the schedule that is typical for
+their e₀.  Level is removed twice over: the level coordinate (the first age
+column of $\mathcal{G}_{c,t}$) is dropped, and from every remaining
+coordinate we subtract its average at the country-year's e₀.
+
+**Part A** chooses which part of the effective core carries the shape
+signal, builds the level-free features, fits Gaussian mixtures for
+$K = 2, \ldots, 15$, chooses the largest $K$ whose partition is reproducible
+(reporting BIC and how the clusters fare when populations are resampled),
+cross-checks with Ward's method, and describes the clusters — their deviation patterns, members, relation to
+level, time and place, and whether any of them merely collects noisy
+schedules of small populations.  **Part B** classifies how the *level*
+changes within each country (it does not use the clustering features).
+The artefact saved at the end lets later chapters build a schedule for
+any cluster at any e₀.
+
+# Part A — Level-free clusters
+
+## Step 1 — the unit of clustering
+
+The objects clustered are **country-years**: each observed pair $(c, t)$
+with $O_{c,t} = 1$ is one data point (paper §4.1).  Country-years without
+data, and exceptional years set aside for the disruption model, are not
+clustered.  `mdmx.clustering.observed_index` lists them in a fixed order (by
+population, then year); every per-observation array in this chapter uses
+that order.  Each country-year's life expectancy at birth is computed from
+its **observed** schedule with the project's single life-table function and
+averaged over the sexes; it is checked against the HMD's published e₀ and
+against the e₀ of the schedule implied by the effective core.
+
+```{python}
+#| label: c06-unit
+#| code-summary: "Observed country-years and the e0 of their observed schedules"
+c_idx, t_idx = clus.observed_index(tucker["observed"])
+n_obs = len(c_idx)
+obs_year = years[t_idx]
+e0_sex = clus.observed_e0(T["M"], c_idx, t_idx)       # (n_obs, 2): female, male
+e0 = e0_sex.mean(axis=1)                               # sex average, used throughout
+
+lt = hmd["lt"]
+hmd_e0 = lt[lt["age"] == 0].pivot_table(index=["pop", "year"], columns="sex", values="ex")
+hmd_avg = hmd_e0.reindex(pd.MultiIndex.from_arrays([pops[c_idx], obs_year]))[["female", "male"]]
+if hmd_avg.isna().any().any():
+    raise ValueError("Some observed country-years have no published HMD e0.")
+d_hmd = np.abs(e0 - hmd_avg.mean(axis=1).to_numpy())
+
+G_obs = clus.observed_cores(tucker["G_ct"], c_idx, t_idx)          # (n_obs, r1, r2)
+M_obs = T["M"][:, :, c_idx, t_idx]                                  # (S, A, n_obs) observed logit q
+M_proj = tz.schedules_from_cores(np.moveaxis(G_obs, 0, -1), U_sex, U_age)   # implied by the cores
+d_proj = np.abs(e0 - lifetable.e0_from_logit(np.moveaxis(M_proj, 1, -1)).mean(axis=0))
+
+print(f"Observed country-years clustered: {n_obs:,} in {len(np.unique(c_idx))} populations")
+print(f"e0 (mean of sexes): {e0.min():.1f} to {e0.max():.1f} years")
+print(f"|e0 − HMD published e0|: median {np.median(d_hmd):.3f}, max {d_hmd.max():.2f} years")
+print(f"|e0 − e0 of the projected schedule|: median {np.median(d_proj):.3f}, max {d_proj.max():.2f} years")
+latex.report("clusNObs", n_obs, desc="Observed country-years clustered")
+latex.report("clusNPops", int(len(np.unique(c_idx))), desc="Populations with observed country-years")
+latex.report("clusEzeroMin", float(e0.min()), digits=1, desc="Lowest e0 (observed schedule, sex mean) among clustered country-years")
+latex.report("clusEzeroMax", float(e0.max()), digits=1, desc="Highest e0 (observed schedule, sex mean) among clustered country-years")
+```
+
+The e₀ used here agrees with the HMD's own figures to within a few
+hundredths of a year for almost every country-year; the largest differences
+are in pooled years of small populations, where the tensor deliberately
+differs from the published table (chapter d5).
+
+## Step 2 — the smooth, low-order part of the effective core
+
+The schedule implied by an effective core is a sum of terms, one per entry
+of $\mathcal{G}_{c,t}$ (paper §4.1): the
+first age column multiplies $\mathbf{a}_1$, which is close to the average
+logit($q_x$) schedule, and so carries the **level**; the later columns
+carry the **shape**.  Not all shape columns are equally useful.  The age
+basis has $r_2$ = `{python} f"{r2}"` columns because the decomposition must
+reproduce every observed schedule almost exactly (chapter 04), including the
+year-to-year jitter of single-year rates in small populations.  That
+jitter lives in the high-order columns.  Clustering on them groups
+country-years by how noisy their data are, not by how their mortality
+differs.
+
+We therefore keep only the first $c_{\text{feat}}$ age columns, with $c_{\text{feat}}$ the smallest
+number of age components that together capture a share
+τ = `{python} f"{PF['column_share']}"` of the sum of squares of the observed
+schedules — the τ rule that chapter 04 uses for $r_2$, at a
+less demanding threshold (`mdmx.clustering.column_energy_share`,
+`choose_n_columns`).  Two further measures, computed for every column,
+show whether the rule separates signal from noise:
+
+* the **roughness of the basis function** $\mathbf{a}_j$ — the sum of its
+  squared second differences over ages 2–109 (`basis_roughness`): smooth
+  age patterns have values near zero;
+* the **year-to-year noise ratio** of each core entry (`year_to_year_noise`):
+  the mean squared change between consecutive observed years of a
+  population, divided by twice the entry's overall variance.  An entry
+  that moves smoothly over time scores near 0; one whose values are
+  independent from year to year scores near 1.
+
+```{python}
+#| label: c06-columns
+#| code-summary: "Choose the number of age columns k, with the evidence"
+energy = clus.column_energy_share(G_obs, M_obs)                # (r2,)
+k_cols = clus.choose_n_columns(energy, PF["column_share"])
+rough_basis = clus.basis_roughness(U_age)                       # (r2,)
+noise_ratio = clus.year_to_year_noise(G_obs, c_idx, t_idx)      # (r1, r2)
+evidence = pd.DataFrame({
+    "column": np.arange(1, r2 + 1), "cumulative share": np.cumsum(energy),
+    "basis roughness": rough_basis, "noise, sex average": noise_ratio[0],
+    "noise, sex difference": noise_ratio[1]})
+print(f"k = {k_cols}: columns 1–{k_cols} capture {np.cumsum(energy)[k_cols - 1]:.6f} of the sum of squares "
+      f"(τ = {PF['column_share']}); column {k_cols + 1} would add {energy[k_cols]:.6f}")
+print(evidence.head(k_cols + 6).round(4).to_string(index=False))
+inside, after = slice(1, k_cols), slice(k_cols, k_cols + 5)
+latex.report("clusColumnShare", 100 * PF["column_share"], digits=1, desc="Threshold tau (percent) for the number of age columns k")
+latex.report("clusNColumns", int(k_cols), desc="Number of age columns k of the effective core used (level column included)")
+latex.report("clusRoughInside", float(rough_basis[inside].max()), digits=3,
+             desc="Largest basis roughness among age columns 2..k")
+latex.report("clusRoughAfter", float(rough_basis[after].min()), digits=2,
+             desc="Smallest basis roughness among age columns c_feat+1..c_feat+5")
+latex.report("clusNoiseInside", float(noise_ratio[0, :k_cols].max()), digits=2,
+             desc="Largest year-to-year noise ratio, sex-average entries of columns 1..k")
+latex.report("clusNoiseAfter", float(noise_ratio[0, after].mean()), digits=2,
+             desc="Mean year-to-year noise ratio, sex-average entries of columns c_feat+1..c_feat+5")
+```
+
+```{python}
+#| label: fig-s5-components
+#| fig-cap: "Choosing the part of the effective core used for clustering. Left: cumulative share of the sum of squares of the observed schedules captured by the first k age columns; the dashed line is τ. Centre: roughness of each age basis function (log scale). Right: year-to-year noise ratio of each core entry (0 = smooth over time, 1 = independent from year to year), for the sex-average and sex-difference components. The shaded band marks the columns used (2…k)."
+show_cols = np.arange(1, min(r2, 20) + 1)
+fig, axes = plt.subplots(1, 3, figsize=(12, 3.8))
+axes[0].plot(show_cols, np.cumsum(energy)[show_cols - 1], "o-", ms=4, color=plotting.COLORS["model"])
+axes[0].axhline(PF["column_share"], ls="--", color="grey", lw=0.8)
+axes[0].set_ylabel("Cumulative share")
+axes[1].semilogy(show_cols[1:], rough_basis[show_cols[1:] - 1], "o-", ms=4, color=plotting.COLORS["model"])
+axes[1].set_ylabel("Roughness of $\\mathbf{a}_j$")
+axes[2].plot(show_cols, noise_ratio[0, show_cols - 1], "o-", ms=4, color=plotting.COLORS["observed"], label="Sex average ($\\mathbf{s}_1$)")
+axes[2].plot(show_cols, noise_ratio[1, show_cols - 1], "s--", ms=4, color=plotting.COLORS["grey"], label="Sex difference ($\\mathbf{s}_2$)")
+axes[2].set_ylabel("Year-to-year noise ratio")
+axes[2].legend()
+for ax in axes:
+    ax.axvspan(1.5, k_cols + 0.5, color=plotting.COLORS["highlight"], alpha=0.2, lw=0)
+    ax.set_xlabel("Age column $j$")
+plotting.save_figure(fig, "fig-s5-components")
+plt.show()
+```
+
+The rule gives $c_{\text{feat}}$ = `{python} f"{k_cols}"`, and the two other measures
+break at the same place.  The basis functions of columns
+2–`{python} f"{k_cols}"` are smooth (roughness at most
+`{python} f"{rough_basis[inside].max():.3f}"`), while those from column
+`{python} f"{k_cols + 1}"` on are at least
+`{python} f"{rough_basis[after].min():.2f}"` — tens to thousands of times
+rougher.  The sex-average entries of columns 1–`{python} f"{k_cols}"`
+change smoothly over time (noise ratio at most
+`{python} f"{noise_ratio[0, :k_cols].max():.2f}"`), while those of the next
+five columns average `{python} f"{noise_ratio[0, after].mean():.2f}"`.
+The sex-difference entries are noisier throughout — the sex gap of a small
+population is estimated from few deaths — but are kept, because the sex
+pattern is part of what distinguishes mortality regimes; Step 8 checks
+whether this lets noise drive any cluster.
+
+## Step 3 — level-free features
+
+The features are built from the entries of columns
+2–`{python} f"{k_cols}"` of $\mathcal{G}_{c,t}$, for both sex components:
+the level column is dropped.  Dropping the level column is not enough to
+make the remaining coordinates independent of level, because the *shape*
+of the schedule changes systematically as mortality falls (the "rotation"
+of the age pattern of decline; paper §4.1).  So, for each entry $m$, we
+estimate its **e₀-conditional mean** $\mu_m(e_0)$ — a LOWESS curve of the
+entry against e₀ fitted across all observed country-years, with a span of
+`{python} f"{PF['conditional_frac']}"` of the points and
+`{python} f"{PF['conditional_iterations']}"` robustifying iterations
+(`mdmx.clustering.conditional_mean`) — and subtract it:
+
+$$
+f_{c,t,m} \;=\; \mathcal{G}_{c,t}[i_m, j_m] \;-\; \mu_m\!\left(e_{0,c,t}\right),
+\qquad j_m \in \{2, \ldots, k\},\; i_m \in \{1, 2\}.
+$$
+
+The feature vector $\mathbf{f}_{c,t}$ (length
+$2(k-1)$ = `{python} f"{2 * (k_cols - 1)}"`) says how this country-year's
+schedule departs from the schedule that is typical at its e₀.  The same
+LOWESS is applied to *every* entry of the effective core, including the
+level column and the columns beyond $c_{\text{feat}}$; this **conditional-mean core**
+$\bar{\mathcal{G}}(e_0)$ is stored on a grid of e₀ values (step
+`{python} f"{PF['e0_grid_step']}"` years) so that later chapters can build
+the typical schedule $\mathbf{S}\bar{\mathcal{G}}(e_0)\mathbf{A}^\top$ at any
+e₀.
+
+```{python}
+#| label: c06-features
+#| code-summary: "Conditional means on e0, residual features, and checks of level independence"
+fidx = clus.feature_index(r1, k_cols)                     # (p, 2): (sex component, age column), 0-based
+F_raw = clus.cores_to_features(G_obs, fidx)              # (n_obs, p) before removing the mean
+e0g = clus.e0_grid(e0, PF["e0_grid_step"])               # e0 grid for storage
+cm = {"frac": PF["conditional_frac"], "iterations": PF["conditional_iterations"],
+      "delta_share": PF["conditional_delta"], "grid": e0g}
+core_fit, core_grid = clus.conditional_mean(e0, G_obs, **cm)   # (n_obs, r1, r2), (g, r1, r2)
+F_fit = clus.cores_to_features(core_fit, fidx)
+F_grid = clus.cores_to_features(core_grid, fidx)
+R = F_raw - F_fit                                         # (n_obs, p): the level-free features
+
+level = G_obs[:, 0, 0]                                    # G[1,1]: sex average × first age column
+r_level = np.corrcoef(level, e0)[0, 1]
+corr_raw = np.array([np.corrcoef(F_raw[:, m], e0)[0, 1] for m in range(R.shape[1])])
+corr_res = np.array([np.corrcoef(R[:, m], e0)[0, 1] for m in range(R.shape[1])])
+rsq_level_dropped = clus.linear_r_squared(e0, clus.age_structure_features(G_obs))   # all columns 2..r2
+rsq_raw = clus.linear_r_squared(e0, F_raw)
+rsq_res = clus.linear_r_squared(e0, R)
+rsq_res_quad = clus.linear_r_squared(e0, np.column_stack([R, R ** 2]))
+band = pd.cut(e0, np.arange(15, 95, 10))
+rms_by_band = pd.Series(np.sqrt(np.sum(R ** 2, axis=1))).groupby(band, observed=True).apply(
+    lambda v: np.sqrt(np.mean(v ** 2)))
+
+# How close is the e0 of the typical schedule at x to x itself?
+typical = tz.schedules_from_cores(np.moveaxis(core_grid, 0, -1), U_sex, U_age)      # (S, A, g)
+e0_typical = lifetable.e0_from_logit(np.moveaxis(typical, 1, -1)).mean(axis=0)
+in_range = (e0g >= e0.min()) & (e0g <= e0.max())
+typical_err = e0_typical[in_range] - e0g[in_range]
+
+print(f"Features: {R.shape[1]} entries = columns 2–{k_cols} × {r1} sex components")
+print(f"R² of e0 on the features:  all columns 2–{r2} {rsq_level_dropped:.3f};  columns 2–{k_cols} "
+      f"before removing the conditional mean {rsq_raw:.3f};  after {rsq_res:.4f} "
+      f"(with squared terms {rsq_res_quad:.3f})")
+print(f"corr(feature, e0): before, largest |r| = {np.abs(corr_raw).max():.2f}; after, largest |r| = {np.abs(corr_res).max():.3f}")
+print("Root-mean-square size of the residual vector by e0 band:")
+print(rms_by_band.round(2).to_string())
+print(f"e0 of the typical schedule at x minus x (observed range): mean {typical_err.mean():+.2f}, "
+      f"range {typical_err.min():+.2f} to {typical_err.max():+.2f} years")
+latex.report("clusFeatureDim", int(R.shape[1]), desc="Number of level-free features 2(k-1)")
+latex.report("clusCondFrac", PF["conditional_frac"], digits=2, desc="LOWESS span of the e0-conditional mean")
+latex.report("clusCorrLevel", float(r_level), digits=2, desc="Correlation of G[1,1] (level) with observed e0")
+latex.report("clusCorrRotation", float(corr_raw[0]), digits=2, desc="Correlation of G[1,2] with e0 before removing the conditional mean")
+latex.report("clusCorrRotationResid", float(corr_res[0]), text=latex.fmt_num(round(float(corr_res[0]), 3) + 0.0, 3),
+             desc="Correlation of the G[1,2] feature with e0 after removing the conditional mean")
+latex.report("clusMaxAbsCorr", float(np.abs(corr_res).max()), digits=3, desc="Largest |correlation| of a level-free feature with e0")
+latex.report("clusRsqLevelDropped", float(rsq_level_dropped), digits=2,
+             desc="R-squared of e0 on all age columns 2..r2 (only the level column dropped)")
+latex.report("clusRsqRaw", float(rsq_raw), digits=2, desc="R-squared of e0 on columns 2..k before removing the conditional mean")
+latex.report("clusRsqFeatures", float(rsq_res), digits=3, desc="R-squared of e0 on the level-free features")
+latex.report("clusRsqFeaturesQuad", float(rsq_res_quad), digits=2, desc="R-squared of e0 on the level-free features and their squares")
+latex.report("clusTypicalEzeroErr", float(np.abs(typical_err).max()), digits=1,
+             desc="Largest |e0 of the typical schedule at x minus x| over the observed range (years)")
+```
+
+```{python}
+#| label: fig-s5-grand-mean
+#| fig-cap: "Removing level. Left: the level coordinate G[1,1] against e₀ of the observed schedule (mean of sexes); this column is dropped. Centre: the first shape coordinate G[1,2] against e₀, with its e₀-conditional mean (LOWESS, line). Right: the corresponding level-free feature — G[1,2] minus its conditional mean — against e₀."
+order_e0 = np.argsort(e0)
+fig, axes = plt.subplots(1, 3, figsize=(12, 3.8))
+panels = [(level, f"$G_{{c,t}}[1,1]$ (level), r = {r_level:.2f}"),
+          (F_raw[:, 0], f"$G_{{c,t}}[1,2]$, r = {corr_raw[0]:.2f}"),
+          (R[:, 0], f"$G_{{c,t}}[1,2] - \\mu(e_0)$, r = {round(corr_res[0], 3) + 0.0:.3f}")]
+for ax, (y, title) in zip(axes, panels, strict=True):
+    ax.scatter(e0, y, s=3, lw=0, alpha=0.3, color=plotting.COLORS["observed"], rasterized=True)
+    ax.set_xlabel("$e_0$ of the observed schedule (years)")
+    ax.set_title(title, fontsize=10)
+axes[1].plot(e0[order_e0], F_fit[order_e0, 0], color=plotting.COLORS["highlight"], lw=2.5)
+axes[2].axhline(0, color=plotting.COLORS["highlight"], lw=2.5)
+plotting.save_figure(fig, "fig-s5-grand-mean")
+plt.show()
+```
+
+The level coordinate is almost a linear function of e₀
+(r = `{python} f"{r_level:.2f}"`; its sign is a convention of the
+decomposition).  The first shape coordinate is far from level-free
+(r = `{python} f"{corr_raw[0]:.2f}"`), and the entries of all age columns
+2–`{python} f"{r2}"`, with only the level column dropped, predict e₀ with
+R² = `{python} f"{rsq_level_dropped:.2f}"`.  After the conditional mean is
+removed, the `{python} f"{R.shape[1]}"` features predict e₀ with
+R² = `{python} f"{rsq_res:.3f}"`, and no feature correlates with e₀ by more
+than |r| = `{python} f"{np.abs(corr_res).max():.3f}"`: the features are free
+of level in their mean.  They are not identically distributed at every
+e₀, however: the root-mean-square size of the residual vector is
+`{python} f"{rms_by_band.max():.1f}"` in the noisiest e₀ band and
+`{python} f"{rms_by_band.iloc[-1]:.1f}"` above e₀ = 75 (table above), so
+allowing squared terms gives R² = `{python} f"{rsq_res_quad:.2f}"`.
+High-mortality schedules vary more around their typical shape.
+
+The typical schedule $\mathbf{S}\bar{\mathcal{G}}(x)\mathbf{A}^\top$ has an e₀
+within `{python} f"{np.abs(typical_err).max():.1f}"` years of $x$ over the
+observed range (mean difference `{python} f"{typical_err.mean():+.2f}"`):
+the mean of logit schedules is not exactly the schedule with the mean e₀,
+because the life table is not linear.  Chapters that need an exact e₀
+should adjust the level coordinate after adding a cluster's deviation.
+
+## Step 4 — principal components
+
+As in paper §4.1, the feature matrix is reduced by principal component
+analysis, keeping the components that explain 99.9% of its variance
+(`mdmx.clustering.pca_fit`; signs fixed so the largest loading of each
+component is positive).
+
+```{python}
+#| label: c06-pca
+#| code-summary: "PCA of the level-free features"
+pca = clus.pca_fit(R, PF["pca_variance"])
+d = pca["d"]
+X = pca["scores"]                                      # (n_obs, d)
+print(f"PCA keeps d = {d} of {R.shape[1]} components "
+      f"({100 * pca['cumulative'][d - 1]:.3f}% of the variance)")
+print("Variance shares:", np.round(pca["explained_variance_ratio"], 3))
+latex.report("clusPcaThreshold", 100 * PF["pca_variance"], digits=1, desc="PCA variance threshold (percent)")
+latex.report("clusPcaDim", int(d), desc="Number of principal components retained (d)")
+```
+
+With only `{python} f"{R.shape[1]}"` features and no nearly collinear
+directions, PCA keeps `{python} f"{d}"` of them.  Because the mixture of
+Step 5 has unrestricted covariance matrices, the rotation itself does not
+change the clusters; the step is kept so that the procedure is the
+paper's.
+
+## Step 5 — Gaussian mixtures and the choice of K
+
+A Gaussian mixture model (paper §4.2) treats the rows of the reduced
+feature matrix as draws from $K$ multivariate normal distributions, each
+with its own mean vector and its own unrestricted ("full") covariance
+matrix.  It is fitted by EM for each $K$ = `{python} f"{PG['k_min']}"`, …,
+`{python} f"{PG['k_max']}"`, with `{python} f"{PG['n_init']}"` EM starts
+from k-means solutions (seed in the parameter file).  The usual choice of
+$K$ minimises
+
+$$
+\mathrm{BIC}(K) = -2\,\ell(\hat\theta_K) + p_K \log n_{\text{obs}},
+\qquad p_K = (K-1) + K d + K\,\tfrac{d(d+1)}{2}
+$$
+
+(`mdmx.clustering.bic_sweep` checks the formula against
+scikit-learn).  Shared ("tied") and diagonal covariance matrices are
+compared in the supplementary section.  Clusters are numbered by
+increasing mean e₀ of their members (`order_clusters`), which makes the
+numbering reproducible.
+
+```{python}
+#| label: c06-gmm
+#| code-summary: "Fit mixtures for K = 2 … 15 and compute BIC (cached)"
+k_values = list(range(PG["k_min"], PG["k_max"] + 1))
+gmm_settings = {k: PG[k] for k in ("covariance_type", "n_init", "max_iter", "tol", "reg_covar", "seed")}
+# The code that turns the data into the features X (Steps 1–4); every stage fitted to X lists it.
+FEATURE_CODE = [clus.observed_index, clus.observed_cores, clus.observed_e0, lifetable.e0_from_logit,
+                clus.column_energy_share, clus.choose_n_columns, clus.feature_index, clus.cores_to_features,
+                clus.e0_grid, clus.conditional_mean, clus.pca_fit, tz.fix_signs]
+
+
+def _ordered(gm):
+    """A fitted mixture with its clusters numbered by increasing mean e0 of their members."""
+    raw = gm.predict(X)
+    order = clus.order_clusters(raw, e0, gm.n_components)               # order[new] = old
+    covariances = gm.covariances_ if PG["covariance_type"] == "tied" else gm.covariances_[order]
+    return {"labels": np.argsort(order)[raw], "posterior": gm.predict_proba(X)[:, order],
+            "weights": gm.weights_[order], "means": gm.means_[order], "covariances": covariances}
+
+
+def _fit_mixtures():
+    table, models = clus.bic_sweep(X, k_values, **gmm_settings)
+    return {"table": table, "fits": {str(k): _ordered(gm) for k, gm in models.items()}}
+
+
+fit = artifacts.stage(
+    "clustering_gmm", _fit_mixtures, inputs=["tucker", "tensor"],
+    params={"features": PF, "gmm": PG},
+    code=[_fit_mixtures, _ordered, *FEATURE_CODE, clus.bic_sweep, clus.fit_gmm, clus.gmm_n_parameters,
+          clus.order_clusters],
+    desc="Gaussian mixtures on the level-free features for every K, with BIC")
+bic_table = fit["table"]
+bic_at = dict(zip(bic_table["K"], bic_table["bic"], strict=True))
+K_bic = int(bic_table.loc[bic_table["bic"].idxmin(), "K"])
+ranked = bic_table.sort_values("bic").reset_index(drop=True)
+k_second = int(ranked.loc[1, "K"])
+bic_margin = float(ranked.loc[1, "bic"] - ranked.loc[0, "bic"])
+print(bic_table.assign(dBIC=bic_table["bic"] - bic_table["bic"].min())
+      [["K", "n_parameters", "log_likelihood", "bic", "dBIC", "converged", "smallest_cluster"]]
+      .round(1).to_string(index=False))
+print(f"\nBIC is lowest at K = {K_bic} (at a bound of the range: {K_bic in (PG['k_min'], PG['k_max'])}); "
+      f"runner-up K = {k_second}, {bic_margin:,.0f} BIC units worse.")
+if not bic_table["converged"].all():
+    print("WARNING: EM did not converge for K =", bic_table.loc[~bic_table["converged"], "K"].tolist())
+
+latex.report("clusKMin", PG["k_min"], desc="Smallest K searched")
+latex.report("clusKMax", PG["k_max"], desc="Largest K searched")
+latex.report("clusNInit", PG["n_init"], desc="EM runs per fit (k-means starts; the best likelihood is kept)")
+latex.report("clusKBic", K_bic, desc="Number of clusters with the lowest BIC")
+latex.report("clusKSecond", k_second, desc="Second-lowest BIC: its K")
+latex.report("clusBicMargin", int(round(bic_margin)), desc="BIC of the second-best K minus the lowest BIC")
+```
+
+```{python}
+#| label: fig-s5-bic
+#| fig-cap: "BIC of the mixtures. Left: BIC and AIC for each K (lower is better); the dotted line marks the BIC minimum. Right: BIC relative to its minimum for the K values nearest it."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 3.8), gridspec_kw={"width_ratios": [1.6, 1]})
+ax1.plot(bic_table["K"], bic_table["bic"] / 1e3, "o-", ms=5, lw=2, color=plotting.COLORS["model"], label="BIC")
+ax1.plot(bic_table["K"], bic_table["aic"] / 1e3, "s--", ms=4, lw=1.5, color=plotting.COLORS["grey"], label="AIC")
+ax1.axvline(K_bic, ls=":", color="black", lw=1)
+ax1.set_xticks(k_values)
+ax1.set_xlabel("Number of mixture components $K$")
+ax1.set_ylabel("Criterion (thousands)")
+ax1.legend()
+near = bic_table[(bic_table["K"] >= K_bic - 4) & (bic_table["K"] <= K_bic + 3)]
+delta_bic = near["bic"] - bic_table["bic"].min()
+ax2.bar(near["K"], delta_bic, width=0.7,
+        color=[plotting.COLORS["highlight"] if k_ == K_bic else plotting.COLORS["grey"] for k_ in near["K"]])
+for k_, v_ in zip(near["K"], delta_bic, strict=True):
+    ax2.annotate(f"{v_:,.0f}", (k_, v_), textcoords="offset points", xytext=(0, 3), ha="center", fontsize=8)
+ax2.set_xticks(near["K"])
+ax2.set_xlabel("$K$")
+ax2.set_ylabel("BIC − minimum BIC")
+plotting.save_figure(fig, "fig-s5-bic")
+plt.show()
+```
+
+BIC alone is not a sufficient guide: a partition is worth
+describing only if the method gives it again, and it is more useful if it
+would also appear in another set of populations.  We check both.
+
+**Reproducibility.**  The likelihood of a mixture has many local maxima,
+and EM started from other k-means solutions can end at a different
+partition of almost the same likelihood.  For every $K$ the mixture is
+refitted from `{python} f"{1 + len(PSt['seeds'])}"` seeds — the chapter's
+and those listed under `seeds` in the parameter file, each with
+`{python} f"{PG['n_init']}"` EM starts — and the partitions are compared in
+pairs with the adjusted Rand index (ARI: 1 = identical, 0 = chance
+agreement).  **The chapter uses the largest $K$ whose refits agree at a mean
+ARI of at least `{python} f"{PSt['reproducibility_ari']}"`, as do the refits
+of every smaller $K$** (`mdmx.clustering.choose_k_reproducible`); its
+partition is that $K$'s fit from the sweep above.
+
+```{python}
+#| label: c06-reproducibility
+#| code-summary: "Refit every K from other seeds and choose K (cached)"
+repro_seeds = [PG["seed"], *PSt["seeds"]]
+
+
+def _reproducibility():
+    table, refits = clus.reproducibility_sweep(
+        X, k_values, repro_seeds, workers=PSt["workers"],
+        **{k_: PG[k_] for k_ in ("covariance_type", "n_init", "max_iter", "tol", "reg_covar")})
+    return {"table": table, "labels": {str(k): lab for k, lab in refits.items()}}
+
+
+repro = artifacts.stage(
+    "clustering_reproducibility", _reproducibility, inputs=["tucker", "tensor"],
+    params={"features": PF, "gmm": PG, "stability": REPRO_KEY},
+    code=[_reproducibility, *FEATURE_CODE, clus.reproducibility_sweep, clus.pairwise_ari, clus._map,
+          clus._fit_predict, clus.fit_gmm],
+    desc="Refits of the mixture for every K from several seeds, and how far they agree")
+repro_table = repro["table"]
+K = clus.choose_k_reproducible(repro_table, PSt["reproducibility_ari"])
+chosen = fit["fits"][str(K)]
+labels = chosen["labels"]
+# The refit from the chapter's own seed (first row) must give, up to the agreement the rule asks
+# of the refits, the chapter's partition; otherwise the agreement measured above would not be
+# the chapter partition's.
+own_refit_ari = adjusted_rand_score(labels, repro["labels"][str(K)][0])
+if own_refit_ari < PSt["reproducibility_ari"]:
+    raise ValueError(f"The refit of K = {K} from the chapter's seed differs from the chapter's fit "
+                     f"(ARI {own_refit_ari:.3f}).")
+ari_at = dict(zip(repro_table["K"], repro_table["ari_mean"], strict=True))
+ari_next = ari_at.get(K + 1)
+sizes = np.bincount(labels, minlength=K)
+uncertain = float(np.mean(chosen["posterior"].max(axis=1) < PD["posterior_cut"]))
+latex.report("clusPosteriorCut", f"{PD['posterior_cut']:g}",
+             desc="Largest posterior probability below which an assignment counts as uncertain")
+print(repro_table.round(3).to_string(index=False))
+print(f"\nChosen K = {K}: the largest K whose refits agree at mean ARI ≥ {PSt['reproducibility_ari']}, "
+      f"as do those of every smaller K (BIC's K = {K_bic}).")
+print(f"The chapter's fit against its refit from the same seed: ARI {own_refit_ari:.3f}")
+print("Cluster sizes:", sizes.tolist())
+print(f"Country-years whose largest posterior probability is below 0.9: {100 * uncertain:.1f}%")
+if K > len(plotting.CLUSTER_COLORS):
+    raise ValueError(f"K = {K} exceeds the {len(plotting.CLUSTER_COLORS)} cluster colours in mdmx.plotting.")
+CL = list(plotting.CLUSTER_COLORS[:K])
+CNAME = [f"Cluster {k + 1}" for k in range(K)]
+
+latex.report("clusK", K, desc="Number of clusters: the largest K whose refits from other seeds agree")
+latex.report("clusReproThreshold", PSt["reproducibility_ari"], digits=2,
+             desc="Smallest mean pairwise ARI between refits for a K to count as reproducible")
+latex.report("clusNReproFits", len(repro_seeds), desc="Refits per K compared for reproducibility")
+latex.report("clusReproAri", float(ari_at[K]), digits=2, desc="Mean pairwise ARI between the refits at the chosen K")
+if ari_next is not None:
+    latex.report("clusReproAriNext", float(ari_next), digits=2,
+                 desc="Mean pairwise ARI between the refits at the chosen K plus one")
+latex.report("clusReproAriBic", float(ari_at[K_bic]), digits=2,
+             desc="Mean pairwise ARI between the refits at BIC's K")
+# The rule keeps K for every threshold above the agreement at K + 1 and up to the lowest agreement up to K.
+_ari_floor = float(min(ari_at[k_] for k_ in k_values if k_ <= K))
+# Printed rounded down: every threshold up to the printed value keeps K (0.977 rounded to 0.98 would not).
+latex.report("clusReproAriFloor", _ari_floor, digits=2, text=f"{np.floor(100 * _ari_floor) / 100:.2f}",
+             desc="Lowest mean pairwise ARI between the refits over K up to the chosen K (rounded down)")
+latex.report("clusBicAboveMin", int(round(bic_at[K] - bic_at[K_bic])),
+             desc="BIC of the chosen K minus the lowest BIC")
+for k in range(K):
+    latex.report(f"clusSize{WORDS[k]}", int(sizes[k]), desc=f"Country-years in cluster {k + 1}")
+latex.report("clusSizes", int(sizes.sum()),
+             text=", ".join(latex.fmt_int(s) for s in sizes[:-1]) + " and " + latex.fmt_int(sizes[-1]),
+             desc="Cluster sizes, in cluster order, as a list")
+latex.report("clusSizeMin", int(sizes.min()), desc="Smallest cluster size")
+latex.report("clusSizeMax", int(sizes.max()), desc="Largest cluster size")
+latex.report("clusShareUncertain", 100 * uncertain, digits=1,
+             desc="Percent of country-years with largest posterior probability below 0.9")
+```
+
+**Resampling of populations.**  Reproducibility is a property of the
+method on these data.  Whether the clusters would also appear in another
+set of populations is a different question.  Following @Hennig2007, we
+resample whole *population families* — a population together with its HMD
+parts, such as the United Kingdom with England & Wales, Scotland and
+Northern Ireland (`svdcomp.population_families`), because the years of one
+population are not independent — with replacement, refit the mixture to
+each of `{python} f"{PSt['bootstrap_resamples']}"` resamples
+(each with the `{python} f"{PG['n_init']}"` EM starts of the chapter's
+partition, so that the check measures the populations and not the
+starting values), and record for
+every cluster its Jaccard similarity with its best match in the refit, on
+the country-years in the resample (`mdmx.clustering.group_bootstrap`,
+`cluster_jaccard`).  A cluster's mean Jaccard is read as in Hennig's
+`fpc::clusterboot`: at least `{python} f"{PSt['jaccard_stable']}"` a stable
+cluster, from `{python} f"{PSt['jaccard_doubtful']}"` a pattern whose
+members are doubtful, below that a cluster not to be trusted.  The check is
+reported for every $K$; it does not choose $K$.
+
+```{python}
+#| label: c06-bootstrap
+#| code-summary: "Resample population families and refit every K (cached)"
+family = sc.population_families(pops, artifacts.load("populations"))[c_idx]   # (n_obs,)
+boot_settings = {k_: PG[k_] for k_ in ("covariance_type", "max_iter", "tol", "reg_covar")}
+
+
+def _bootstrap():
+    return {str(k): clus.group_bootstrap(X, fit["fits"][str(k)]["labels"], family, k,
+                                         n_resamples=PSt["bootstrap_resamples"], seed=PSt["bootstrap_seed"],
+                                         n_init=PG["n_init"], workers=PSt["workers"], **boot_settings)
+            for k in k_values}
+
+
+boot = artifacts.stage(
+    "clustering_bootstrap", _bootstrap, inputs=["tucker", "tensor", "populations", "clustering_gmm"],
+    params={"features": PF, "gmm": PG, "stability": BOOT_KEY},
+    code=[_bootstrap, *FEATURE_CODE, sc.population_families, clus.group_bootstrap, clus.group_resample,
+          clus.cluster_jaccard, clus._map, clus._fit_predict, clus.fit_gmm],
+    desc="Refits of the mixture to resamples of whole population families, for every K")
+
+
+boot_by_k = clus.bootstrap_summary({int(k): res for k, res in boot.items()})
+jac_K, present_K = clus.cluster_stability(boot[str(K)], K)   # (K,) mean Jaccard, resamples holding the cluster
+n_families = int(np.unique(family).size)
+boot_ari_K = float(boot_by_k.set_index("K").loc[K, "ari"])
+print(boot_by_k.merge(repro_table, on="K").round(3).to_string(index=False))
+print(f"\nPopulation families: {n_families}.  At K = {K}, mean Jaccard by cluster: {np.round(jac_K, 2).tolist()} "
+      f"(resamples holding the cluster: {present_K.tolist()} of {PSt['bootstrap_resamples']})")
+
+latex.report("clusNBoot", PSt["bootstrap_resamples"], desc="Resamples of population families")
+latex.report("clusNFamilies", n_families, desc="Population families resampled")
+latex.report("clusJaccardStable", PSt["jaccard_stable"], digits=2, desc="Mean Jaccard of a stable cluster (Hennig)")
+latex.report("clusJaccardDoubtful", PSt["jaccard_doubtful"], digits=2,
+             desc="Mean Jaccard below which a cluster is not to be trusted (Hennig)")
+latex.report("clusNJaccardBelowDoubtful", int(np.sum(jac_K < PSt["jaccard_doubtful"])),
+             desc="Clusters at the chosen K whose mean Jaccard is below the not-to-be-trusted threshold")
+latex.report("clusJaccardMin", float(jac_K.min()), digits=2,
+             desc="Smallest mean Jaccard of a cluster at the chosen K (resampling population families)")
+latex.report("clusJaccardMax", float(jac_K.max()), digits=2,
+             desc="Largest mean Jaccard of a cluster at the chosen K (resampling population families)")
+latex.report("clusBootAri", boot_ari_K, digits=2,
+             desc="Mean ARI between the chosen partition and the refits to resampled population families")
+latex.report("clusKJaccardBest", int(boot_by_k.loc[boot_by_k["jaccard_min"].idxmax(), "K"]),
+             desc="K whose least stable cluster has the largest mean Jaccard (resampling population families)")
+latex.report("clusJaccardBestMin", float(boot_by_k["jaccard_min"].max()), digits=2,
+             desc="Largest, over K, of the smallest mean Jaccard of a cluster")
+```
+
+```{python}
+#| label: fig-s5-stability
+#| fig-cap: "The choice of K. Left: agreement between refits of the mixture from different starting values (adjusted Rand index; mean and smallest over pairs); the chosen K (shaded) is the largest K up to which the mean meets the threshold (dashed). Middle: stability of the clusters when whole population families are resampled — each cluster's mean Jaccard similarity with its best match, for the least stable cluster and averaged over the clusters; dotted lines at Hennig's thresholds for a doubtful and a stable cluster. Right: BIC relative to its minimum."
+fig, axes = plt.subplots(1, 3, figsize=(12, 3.6), sharex=True)
+for ax in axes:
+    ax.axvspan(K - 0.4, K + 0.4, color=plotting.COLORS["highlight"], alpha=0.25, lw=0, zorder=0)
+    ax.set_xticks(k_values)
+    ax.tick_params(axis="x", labelsize=8)
+    ax.set_xlabel("$K$")
+ax = axes[0]
+ax.plot(repro_table["K"], repro_table["ari_mean"], "o-", ms=4, lw=2, color=plotting.COLORS["model"], label="Mean")
+ax.plot(repro_table["K"], repro_table["ari_min"], "o--", ms=3, lw=1.2, color=plotting.COLORS["grey"],
+        label="Smallest pair")
+ax.axhline(PSt["reproducibility_ari"], ls="--", color="black", lw=0.8)
+ax.set_ylim(-0.05, 1.05)
+ax.set_ylabel("ARI between refits")
+ax.legend(fontsize=8, loc="lower left")
+ax = axes[1]
+ax.plot(boot_by_k["K"], boot_by_k["jaccard_mean"], "o-", ms=4, lw=2, color=plotting.COLORS["model"],
+        label="Average over clusters")
+ax.plot(boot_by_k["K"], boot_by_k["jaccard_min"], "o--", ms=3, lw=1.2, color=plotting.COLORS["grey"],
+        label="Least stable cluster")
+for threshold in (PSt["jaccard_doubtful"], PSt["jaccard_stable"]):
+    ax.axhline(threshold, ls=":", color="black", lw=0.8)
+ax.set_ylim(-0.05, 1.05)
+ax.set_ylabel("Mean Jaccard (resampled families)")
+ax.legend(fontsize=8, loc="lower left")
+ax = axes[2]
+ax.plot(bic_table["K"], (bic_table["bic"] - bic_table["bic"].min()) / 1e3, "o-", ms=4, lw=2,
+        color=plotting.COLORS["grey"])
+ax.set_ylabel("BIC − minimum (thousands)")
+fig.tight_layout()
+plotting.save_figure(fig, "fig-s5-stability")
+plt.show()
+```
+
+```{python}
+#| label: c06-k-text
+#| output: asis
+#| code-summary: "Text: what the choice of K and the resampling check show"
+stable_k = boot_by_k.loc[boot_by_k["jaccard_min"] >= PSt["jaccard_stable"], "K"].tolist()
+best_row = boot_by_k.loc[boot_by_k["jaccard_min"].idxmax()]
+n_untrusted = int(np.sum(jac_K < PSt["jaccard_doubtful"]))
+thr = PSt["reproducibility_ari"]
+# Agreement need not fall monotonically with K; say what happens above K + 1 too.
+above = [k for k in k_values if k > K + 1]
+again = [k for k in above if ari_at[k] >= thr]
+rest = [ari_at[k] for k in above if k not in again]
+after = ""
+if ari_next is not None:
+    after = f"; at $K$ = {K + 1} they agree only at {ari_next:.2f}"
+if again:
+    after += (f", $K$ = {' and '.join(str(k) for k in again)} {'reach' if len(again) > 1 else 'reaches'} "
+              f"{thr} again ({', '.join(f'{ari_at[k]:.2f}' for k in again)})")
+if rest:
+    after += f", and no other $K$ does (at most {max(rest):.2f})"
+# The thresholds that give the same K: above the agreement at K + 1, up to the lowest agreement up to K.
+low, high = (ari_next if ari_next is not None else 0.0), min(ari_at[k] for k in k_values if k <= K)
+print(f"BIC is lowest at $K$ = {K_bic}"
+      f"{' (the upper bound of the range)' if K_bic == PG['k_max'] else ''}, but the refits from other "
+      f"starting values agree at a mean ARI of at least {thr} only up to $K$ = {K} ({ari_at[K]:.2f}{after}).  "
+      "A partition that another seed would change is not worth describing, so the rule stops at the first "
+      f"$K$ whose refits disagree; any threshold above {low:.2f} and up to {high:.2f} gives the same $K$.  "
+      f"The chapter therefore uses $K$ = {K} clusters, {bic_at[K] - bic_at[K_bic]:,.0f} BIC units above "
+      f"the minimum.  Cluster sizes range from {sizes.min():,} to {sizes.max():,} country-years, and "
+      f"{100 * uncertain:.0f}% of country-years have a largest posterior probability below 0.9.\n")
+if stable_k:
+    stable_text = (f"Only $K$ = {', '.join(str(k) for k in stable_k)} keep every cluster stable "
+                   f"(mean Jaccard ≥ {PSt['jaccard_stable']}) when whole population families are resampled.")
+else:
+    stable_text = (f"When whole population families are resampled, no $K$ keeps every cluster stable (mean "
+                   f"Jaccard ≥ {PSt['jaccard_stable']}); the best is $K$ = {int(best_row['K'])}, whose least "
+                   f"stable cluster reaches {best_row['jaccard_min']:.2f}.")
+print(f"{stable_text}  At $K$ = {K} the clusters' mean Jaccard similarities range from {jac_K.min():.2f} to "
+      f"{jac_K.max():.2f} ({n_untrusted} of {K} below {PSt['jaccard_doubtful']}), and the refits agree with "
+      f"the chapter's partition at a mean ARI of {boot_ari_K:.2f}, against {ari_at[K]:.2f} for refits to all "
+      "populations from other starting values: most of the instability comes from which populations are in "
+      "the sample — a cluster made up mostly of a few populations cannot form in a resample without them.  "
+      "If anything the check is lenient, because the typical schedule (Step 3) and the PCA are fitted to "
+      "all populations and held fixed; only the mixture is refitted.  The clusters are a reproducible "
+      f"description of these {C} populations — a typology in the spirit of the regional model life tables "
+      "of @CoaleDemeny1966 — not regimes that any set of populations would reproduce.\n")
+```
+
+## Step 6 — Ward's hierarchical clustering as a check
+
+This check, which is in the companion only, compares the mixture with Ward's
+minimum-variance clustering on the same reduced features.  The tree is built on all
+`{python} f"{n_obs:,}"` country-years, cut into $K$ groups, and matched to the
+mixture clusters to maximise agreement (`matched_agreement`); we report the
+share of country-years on which they agree and the adjusted Rand index
+(ARI: 0 for chance, 1 for identical partitions).
+
+```{python}
+#| label: c06-ward
+#| code-summary: "Ward's method on the same features, and its agreement with the mixture"
+Z_ward, ward_raw = clus.ward_clustering(X, K)
+ward_agree, ward_conf, ward_map = clus.matched_agreement(ward_raw, labels, K)
+ward_labels = ward_map[ward_raw]
+ward_ari = adjusted_rand_score(labels, ward_raw)
+print(f"Ward vs mixture: matched agreement {ward_agree:.3f}, ARI {ward_ari:.3f}")
+latex.report("clusWardAgree", 100 * ward_agree, digits=0, desc="Percent of country-years on which Ward and GMM agree (matched labels)")
+latex.report("clusWardARI", float(ward_ari), digits=2, desc="Adjusted Rand index between Ward and GMM partitions")
+```
+
+```{python}
+#| label: fig-s5-dendrogram
+#| fig-cap: "Ward's dendrogram of the reduced level-free features, truncated to its last merges. Branch colours show the mixture cluster holding most country-years below each branch; the bars underneath show the full mixture composition of each truncated leaf. The dashed line is the cut that gives K groups."
+node_counts = clus.node_label_counts(Z_ward, labels, K)
+node_major = node_counts.argmax(axis=1)
+fig, (ax, axb) = plt.subplots(2, 1, figsize=(11, 5.2), sharex=True,
+                              gridspec_kw={"height_ratios": [4, 1], "hspace": 0.05})
+dd = dendrogram(Z_ward, truncate_mode="lastp", p=PD["dendrogram_leaves"], no_labels=True, ax=ax,
+                link_color_func=lambda node: CL[node_major[node]])
+ax.axhline((Z_ward[-K, 2] + Z_ward[-K + 1, 2]) / 2, ls="--", color="black", lw=0.8)
+ax.set_ylabel("Ward linkage distance")
+ax.grid(False)
+leaf_ids = np.asarray(dd["leaves"])
+comp = node_counts[leaf_ids] / node_counts[leaf_ids].sum(axis=1, keepdims=True)
+leaf_x = 5 + 10 * np.arange(len(leaf_ids))            # scipy places leaves at 5, 15, 25, …
+bottom = np.zeros(len(leaf_ids))
+for k in range(K):
+    axb.bar(leaf_x, comp[:, k], bottom=bottom, width=9, color=CL[k], edgecolor="white", linewidth=0.3)
+    bottom += comp[:, k]
+axb.set_ylim(0, 1)
+axb.set_ylabel("Mixture\nshare", fontsize=8)
+axb.set_xlabel(f"Truncated leaves (last {PD['dendrogram_leaves']} merges), ordered as in the tree")
+axb.grid(False)
+fig.legend(handles=[Patch(color=CL[k], label=str(k + 1)) for k in range(K)], loc="upper center",
+           ncol=K, title="Cluster", bbox_to_anchor=(0.5, 1.02), fontsize=8)
+plotting.save_figure(fig, "fig-s5-dendrogram")
+plt.show()
+```
+
+Ward and the mixture agree on `{python} f"{100 * ward_agree:.0f}"`% of
+country-years after matching (ARI `{python} f"{ward_ari:.2f}"`).  The two
+methods answer different questions — Ward minimises Euclidean within-group
+spread, the mixture also models each cluster's own covariance — so their
+agreement is only partial.
+
+## Step 7 — what the clusters are
+
+Each cluster is summarised by its **mean deviation** $\bar{\mathbf{f}}_k$, the
+mean of its members' features (`mdmx.clustering.cluster_means`).  Mapped
+back to core coordinates (`features_to_cores`: the feature entries filled
+in, zeros elsewhere) it is a matrix $\mathbf{D}_k$, and the cluster's
+schedule at any life expectancy $x$ is
+
+$$
+\mathcal{M}_k(x) \;=\; \mathbf{S}\,\bigl[\bar{\mathcal{G}}(x) + \mathbf{D}_k\bigr]\,\mathbf{A}^\top,
+$$
+
+the typical schedule at $x$ plus the cluster's deviation
+$\mathbf{S}\mathbf{D}_k\mathbf{A}^\top$, which is the same at every $x$.
+The members' own schedules, and their e₀, vary widely within a cluster;
+what they share is the deviation.
+
+```{python}
+#| label: c06-centroids
+#| code-summary: "Cluster deviations, and the noise and population-size measures"
+residual_mean = clus.cluster_means(R, labels, K)                              # (K, p)
+residual_core = clus.features_to_cores(residual_mean, fidx, r1, r2)          # (K, r1, r2)
+deviation = tz.schedules_from_cores(np.moveaxis(residual_core, 0, -1), U_sex, U_age)   # (S, A, K)
+member_mean_core = clus.cluster_means(G_obs, labels, K)                       # (K, r1, r2)
+
+# Noise measures (Step 8): roughness of each observed schedule relative to the
+# typical roughness at the same e0, and population size (total HMD exposure).
+rough = clus.roughness(T["M"], c_idx, t_idx, *PX["noise_ages"])
+log_rough = np.log10(rough)
+log_rough_fit, _ = clus.conditional_mean(e0, log_rough, **cm)
+excess_rough = log_rough - log_rough_fit
+exposure = hmd["de"].groupby(["pop", "year"])["exposure"].sum()
+size = exposure.reindex(pd.MultiIndex.from_arrays([pops[c_idx], obs_year])).to_numpy()
+if np.isnan(size).any():
+    raise ValueError("Some observed country-years have no HMD exposures.")
+log_size = np.log10(size)
+small = log_size <= np.quantile(log_size, 0.25)
+noise_tab = clus.noise_diagnostics(labels, K, excess_rough, small,
+                                   roughness_ratio=PX["noise_roughness_ratio"],
+                                   small_share=PX["noise_small_share"])
+noise_clusters = np.flatnonzero(noise_tab["noise"].to_numpy())
+
+# Mean deviation in logit(q_x) by broad age group, for describing the clusters.
+AGE_GROUPS = {"0": (0, 1), "1–14": (1, 15), "15–34": (15, 35), "35–64": (35, 65), "65–89": (65, 90)}
+dev_tab = pd.DataFrame({f"{SEXES[s][0]} {g}": deviation[s, a:b].mean(axis=0)
+                        for s in range(2) for g, (a, b) in AGE_GROUPS.items()},
+                       index=pd.Index(np.arange(1, K + 1), name="Cluster"))
+```
+
+```{python}
+#| label: tbl-s5-cluster-summary
+#| code-summary: "Table: one row per cluster"
+rows = []
+for k in range(K):
+    m = labels == k
+    member_pops = pd.Series(pops[c_idx[m]]).value_counts()
+    rows.append({
+        "Cluster": k + 1,
+        "Country-years": int(m.sum()),
+        "Populations": int(member_pops.size),
+        "Years": f"{obs_year[m].min()}--{obs_year[m].max()}",
+        "Median year": int(np.median(obs_year[m])),
+        r"$e_0$ mean (SD)": f"{e0[m].mean():.1f} ({e0[m].std():.1f})",
+        r"$e_0$ range": f"{e0[m].min():.1f}--{e0[m].max():.1f}",
+        "Roughness ratio": float(noise_tab.loc[k, "roughness_ratio"]),
+        "Jaccard": float(jac_K[k]),
+        "Largest contributors": ", ".join(member_pops.index[:3]),
+    })
+summary = pd.DataFrame(rows)
+# For the article the table is transposed (the table standard: more columns than rows): one column per
+# cluster, the attributes as rows, every cell formatted here.
+summary_tex = pd.DataFrame({
+    f"Cluster {r['Cluster']}": [latex.fmt_int(r["Country-years"]), str(r["Populations"]), r["Years"],
+                                str(r["Median year"]), r["$e_0$ mean (SD)"], r["$e_0$ range"],
+                                f"{r['Roughness ratio']:.2f}", f"{r['Jaccard']:.2f}",
+                                "\\makecell[r]{" + "\\\\".join(latex.latex_escape(c) for c in
+                                                                r["Largest contributors"].split(", ")) + "}"]
+    for r in rows})
+summary_tex.insert(0, "", ["Country-years", "Populations", "Years", "Median year", "$e_0$ mean (SD)", "$e_0$ range",
+                           "Roughness ratio", "Jaccard", "Largest contributors"])
+latex.save_table(
+    summary_tex, "tbl-s5-cluster-summary",
+    "The level-free clusters.  $e_0$ is that of the observed schedule (mean of the sexes).  "
+    "\\emph{Roughness ratio}: median roughness of the members' observed schedules relative to "
+    "typical schedules with the same $e_0$ (1 = typical).  \\emph{Jaccard}: the cluster's mean "
+    "Jaccard similarity with its best match when the mixture is refitted to resamples of whole "
+    f"population families (1 = always recovered; Hennig's reading: at least {PSt['jaccard_stable']} "
+    f"stable, below {PSt['jaccard_doubtful']} not to be trusted).  "
+    "\\emph{Largest contributors}: the three populations with the most country-years in the cluster.",
+    short_caption="The level-free clusters", column_format="l" + "r" * len(rows), escape_cells=False)
+summary
+```
+
+```{python}
+#| label: c06-deviation-table
+#| code-summary: "Mean deviation of each cluster by sex and broad age group (logit units)"
+dev_tab.round(2)
+```
+
+```{python}
+#| label: fig-s5-profiles
+#| fig-cap: "The deviation pattern of each cluster: the difference in logit(q_x) between the cluster's schedule and the typical schedule at the same e₀, for females and males. Positive values mean higher mortality than typical at that age. Clusters flagged as small-population noise clusters (Step 8) are marked."
+n_cols = 5
+n_rows = int(np.ceil(K / n_cols))
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(12, 2.4 * n_rows), sharex=True, sharey=True, squeeze=False)
+for k, ax in enumerate(axes.flat):
+    if k >= K:
+        ax.set_visible(False)
+        continue
+    ax.axhline(0, color="black", lw=0.5)
+    for s, sex in enumerate(("female", "male")):
+        ax.plot(ages, deviation[s, :, k], color=plotting.COLORS[sex], lw=1.5)
+    flag = " — noise" if k in noise_clusters else ""
+    ax.set_title(f"{CNAME[k]} (n = {sizes[k]:,}){flag}", fontsize=9)
+for ax in axes[-1]:
+    ax.set_xlabel("Age")
+for ax in axes[:, 0]:
+    ax.set_ylabel("Deviation, logit")
+# Anchored at the top edge of the figure, above the panel titles for any number of rows
+# (save_figure crops to the drawn content).
+fig.legend(handles=[Line2D([], [], color=plotting.COLORS["female"], label="Female"),
+                    Line2D([], [], color=plotting.COLORS["male"], label="Male")],
+           loc="lower center", ncol=2, bbox_to_anchor=(0.5, 1.0))
+plotting.save_figure(fig, "fig-s5-profiles")
+plt.show()
+```
+
+```{python}
+#| label: fig-s5-centroid-overlay
+#| fig-cap: "The typical schedule at selected values of e₀ — the e₀-conditional mean of the effective core mapped to logit(q_x) — for females (left) and males (right). A cluster's schedule at e₀ = x is this curve plus the cluster's deviation (previous figure)."
+targets = PD["typical_e0"]
+shades = plt.cm.Blues(np.linspace(0.35, 1.0, len(targets)))
+typ_t = tz.schedules_from_cores(np.moveaxis(clus.conditional_core_at(np.array(targets), e0g, core_grid), 0, -1),
+                                U_sex, U_age)                                  # (S, A, n_targets)
+fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), sharey=True)
+for s_, ax in enumerate(axes):
+    for i, x in enumerate(targets):
+        ax.plot(ages, typ_t[s_, :, i], color=shades[i], lw=1.6, label=f"$e_0$ = {x:g}")
+    ax.set_title(SEXES[s_])
+    ax.set_xlabel("Age")
+axes[0].set_ylabel("logit$(q_x)$")
+axes[1].legend(loc="lower right", fontsize=8)
+plotting.save_figure(fig, "fig-s5-centroid-overlay")
+plt.show()
+```
+
+### The clusters in words
+
+The description below is generated from the table of mean deviations: an
+age group is mentioned when a cluster's mean deviation there is at least
+`{python} f"{PD['describe_threshold']}"` in logit units (about 16% higher or
+lower odds of dying than typical at the same e₀).
+
+```{python}
+#| label: c06-describe
+#| output: asis
+#| code-summary: "Describe each cluster from its deviation pattern and members"
+thr = PD["describe_threshold"]
+SEX_WORD = {"F": "female", "M": "male"}
+
+def _groups(cols):
+    """'F 1–14', 'M 0' → 'female 1–14, male 0'."""
+    return ", ".join(f"{SEX_WORD[c_.split()[0]]} {c_.split()[1]}" for c_ in cols)
+
+near_zero = [k for k in range(K) if np.abs(dev_tab.loc[k + 1]).max() < thr]
+latex.report("clusDescribeThreshold", thr, digits=2,
+             desc="Mean deviation (logit) from which an age group is named in a cluster's description")
+if near_zero:
+    which = " and ".join([", ".join(str(k + 1) for k in near_zero[:-1]), str(near_zero[-1] + 1)]) \
+        if len(near_zero) > 1 else str(near_zero[0] + 1)
+    many = len(near_zero) > 1
+    near_text = (f"Cluster{'s' if many else ''} {which} {'have' if many else 'has'} a mean deviation close "
+                 f"to zero in every age group: {'they are' if many else 'it is'} distinguished from the rest by "
+                 "how widely and in which directions the members scatter around the typical schedule, not by "
+                 f"a shift away from it, and {'their' if many else 'its'} schedule at any e₀ is essentially "
+                 "the typical one.")
+else:
+    near_text = "Every cluster departs from the typical schedule in at least one age group."
+for k in range(K):
+    m = labels == k
+    top = ", ".join(NAME[p_] for p_ in pd.Series(pops[c_idx[m]]).value_counts().index[:3])
+    hi = [c_ for c_ in dev_tab.columns if dev_tab.loc[k + 1, c_] >= thr]
+    lo = [c_ for c_ in dev_tab.columns if dev_tab.loc[k + 1, c_] <= -thr]
+    if hi or lo:
+        parts = ([f"higher than typical at {_groups(hi)}"] if hi else []) + \
+                ([f"lower at {_groups(lo)}"] if lo else [])
+        shape = "mortality " + "; ".join(parts)
+    else:
+        shape = f"within ±{thr} of the typical schedule in every age group"
+    flag = " **Flagged as a small-population noise cluster (Step 8).**" if k in noise_clusters else ""
+    print(f"* **Cluster {k + 1}** ({sizes[k]:,} country-years; mean e₀ {e0[m].mean():.1f}; "
+          f"median year {int(np.median(obs_year[m]))}; mostly {top}): {shape}.{flag}")
+print()
+```
+
+`{python} near_text`
+
+### Members
+
+The spaghetti plots show, for each cluster, the deviations of individual
+members from the typical schedule at their own e₀ (a random subset of at
+most `{python} f"{PD['spaghetti_max_lines']}"` members, seed in the parameter
+file; faint lines) and the cluster's mean deviation (thick line).  The
+clusters are split over two figures.
+
+```{python}
+#| label: c06-spaghetti
+#| code-summary: "Spaghetti-plot helper"
+rng = np.random.default_rng(PD["seed"])
+show_members = {}
+for k in range(K):
+    members = np.flatnonzero(labels == k)
+    show_members[k] = np.sort(rng.choice(members, size=min(len(members), PD["spaghetti_max_lines"]),
+                                         replace=False))
+member_dev = tz.schedules_from_cores(np.moveaxis(clus.features_to_cores(R, fidx, r1, r2), 0, -1),
+                                     U_sex, U_age)                          # (S, A, n_obs)
+
+def spaghetti(cluster_ids):
+    """One row per cluster, females left and males right."""
+    fig, axes = plt.subplots(len(cluster_ids), 2, figsize=(11, 1.9 * len(cluster_ids)),
+                             sharex=True, sharey=True, squeeze=False)
+    for row, k in enumerate(cluster_ids):
+        for s in range(2):
+            ax = axes[row, s]
+            ax.axhline(0, color="black", lw=0.5)
+            ax.plot(ages, member_dev[s][:, show_members[k]], color=CL[k], lw=0.4, alpha=0.15)
+            ax.plot(ages, deviation[s, :, k], color="black", lw=1.8)
+            ax.set_title(f"{CNAME[k]} — {SEXES[s].lower()} (n = {sizes[k]:,})", fontsize=9)
+        axes[row, 0].set_ylabel("Deviation")
+    for ax in axes[-1]:
+        ax.set_xlabel("Age")
+    return fig
+
+half = int(np.ceil(K / 2))
+```
+
+```{python}
+#| label: fig-s5-spaghetti-a
+#| fig-cap: "Members of the first half of the clusters: each faint line is one member's deviation (logit(q_x)) from the typical schedule at its e₀; the black line is the cluster's mean deviation."
+fig = spaghetti(list(range(half)))
+plotting.save_figure(fig, "fig-s5-spaghetti-a")
+plt.show()
+```
+
+```{python}
+#| label: fig-s5-spaghetti-b
+#| fig-cap: "Members of the remaining clusters. Conventions as in the previous figure."
+fig = spaghetti(list(range(half, K)))
+plotting.save_figure(fig, "fig-s5-spaghetti-b")
+plt.show()
+```
+
+## Step 8 — level, time, and noise
+
+**Level and time.**  The features have no mean dependence on e₀, but the
+clusters can still differ in e₀ if different groups of populations are
+observed at different levels of mortality — below e₀ = 40 only a handful of
+populations are in the HMD.  The correlation ratio $\eta^2$ (the share of a
+variable's variance explained by cluster membership;
+`mdmx.clustering.eta_squared`) measures this for e₀ and for calendar year;
+the number of clusters present at each level of e₀ shows whether the
+clusters are level strata.
+
+```{python}
+#| label: c06-level
+#| code-summary: "How much of e0 and calendar time the clusters explain"
+eta_e0 = clus.eta_squared(e0, labels)
+eta_year = clus.eta_squared(obs_year.astype(float), labels)
+e0_band = pd.cut(e0, np.arange(15, 95, PD["e0_bin"]))
+per_band = pd.crosstab(e0_band, labels)
+clusters_per_band = (per_band >= PD["band_min_members"]).sum(axis=1)
+well_filled = per_band.sum(axis=1) >= PD["band_min_obs"]
+latex.report("clusBandMinObs", PD["band_min_obs"], desc="Observed country-years for an e0 band to count as well filled")
+mid_bands = clusters_per_band[[(iv.left >= 65) and (iv.right <= 80) for iv in clusters_per_band.index]]
+if mid_bands.min() == K:
+    mid_band_text = f"all {K}"
+elif mid_bands.min() == mid_bands.max():
+    mid_band_text = f"{int(mid_bands.min())} of the {K}"
+else:
+    mid_band_text = f"{int(mid_bands.min())}–{int(mid_bands.max())} of the {K}"
+print(f"eta² of e0 on the clusters:   {eta_e0:.3f}")
+print(f"eta² of year on the clusters: {eta_year:.3f}")
+print(f"Clusters with ≥ {PD['band_min_members']} members in each {PD['e0_bin']}-year e0 band:")
+print(pd.DataFrame({"country-years": per_band.sum(axis=1), "clusters present": clusters_per_band}).to_string())
+latex.report("clusEtaEzero", float(eta_e0), digits=2, desc="Share of e0 variance explained by cluster (eta squared)")
+latex.report("clusEtaYear", float(eta_year), digits=2, desc="Share of calendar-year variance explained by cluster (eta squared)")
+latex.report("clusMinClustersPerBand", int(clusters_per_band[well_filled].min()),
+             desc="Fewest clusters present in an e0 band with at least 100 country-years")
+latex.report("clusBandMinMembers", PD["band_min_members"],
+             desc="Members a cluster needs in an e0 band to count as present there")
+```
+
+```{python}
+#| label: fig-s5-geography
+#| fig-cap: "Composition of the clusters. Top: share of each population's observed country-years in each cluster (populations sorted by their majority cluster, then by its share). Bottom: calendar years (left) and e₀ of the observed schedules (right) of the members of each cluster (boxes: quartiles; whiskers: 5th and 95th percentiles)."
+counts_ck = clus.label_counts(labels, c_idx, C, K)                # (C, K)
+frac_ck = counts_ck / counts_ck.sum(axis=1, keepdims=True)
+major_c = clus.majority_label(labels, c_idx, C, K)
+order_c = np.lexsort((-frac_ck.max(axis=1), major_c))
+fig = plt.figure(figsize=(12, 8.5))
+gs = fig.add_gridspec(2, 2, height_ratios=[1.1, 1], hspace=0.6, wspace=0.2)
+ax = fig.add_subplot(gs[0, :])
+bottom = np.zeros(C)
+for k in range(K):
+    ax.bar(np.arange(C), frac_ck[order_c, k], bottom=bottom, color=CL[k], width=0.85,
+           edgecolor="white", linewidth=0.3, label=str(k + 1))
+    bottom += frac_ck[order_c, k]
+ax.set_xticks(np.arange(C), names[order_c], rotation=90, fontsize=7)
+ax.set_xlim(-0.6, C - 0.4)
+ax.set_ylabel("Share of country-years")
+ax.legend(ncol=K, loc="upper center", bbox_to_anchor=(0.5, 1.2), title="Cluster", fontsize=8)
+ax.grid(False)
+for pos, (vals, lab) in enumerate([(obs_year, "Year"), (e0, "$e_0$ of the observed schedule (years)")]):
+    axb = fig.add_subplot(gs[1, pos])
+    bp = axb.boxplot([vals[labels == k] for k in range(K)], whis=(5, 95), showfliers=False,
+                     patch_artist=True, widths=0.6)
+    for k, box in enumerate(bp["boxes"]):
+        box.set_facecolor(CL[k])
+        box.set_alpha(0.8)
+    for med in bp["medians"]:
+        med.set_color("black")
+    axb.set_xticks(np.arange(1, K + 1), [str(k + 1) for k in range(K)])
+    axb.set_xlabel("Cluster")
+    axb.set_ylabel(lab)
+plotting.save_figure(fig, "fig-s5-geography")
+plt.show()
+```
+
+Where the data allow a test, the clusters are not level strata: every
+5-year e₀ band with at least 100 country-years contains at least
+`{python} f"{int(clusters_per_band[well_filled].min())}"` clusters, and the
+bands between e₀ = 65 and 80 contain `{python} mid_band_text`.  Cluster
+membership explains $\eta^2$ = `{python} f"{eta_e0:.2f}"` of the variance
+of e₀ and $\eta^2$ = `{python} f"{eta_year:.2f}"` of the variance of
+calendar year.  This is not level leaking back into the features, whose
+mean does not depend on e₀ (Step 3).  What association there is comes from
+composition — below e₀ ≈ 45 only a few populations with long early series
+are observed, so the deviation patterns found there are theirs, and
+populations that enter the HMD late are observed only at high e₀ — and from
+spread: the residuals are larger at high mortality, and clusters that
+differ mainly in how widely their members scatter (see Step 7) differ in
+e₀ and period with it.  The clusters are therefore free of level in the
+sense intended — they are defined by deviations from the typical schedule
+at the same e₀ — but they are not uncorrelated with level or period.
+
+**Noise.**  A cluster can form around the noisy schedules of small
+populations, above all when the features include the high-order age
+columns (Step 2).  We check every cluster with two
+measures: the **roughness ratio** — the median roughness of its members'
+observed schedules (mean squared second difference of logit $q_x$ over ages
+`{python} f"{PX['noise_ages'][0]}"`–`{python} f"{PX['noise_ages'][1]}"`,
+`mdmx.clustering.roughness`) relative to typical schedules at the same e₀
+(a LOWESS of log roughness on e₀) — and the **share of its members from
+the smallest quarter of country-years by population size** (total HMD
+exposure).  A cluster is flagged as a noise cluster if its roughness ratio
+exceeds `{python} f"{PX['noise_roughness_ratio']}"` *and* more than
+`{python} f"{PX['noise_small_share']:.0%}"` of its members come from the
+smallest quarter (`mdmx.clustering.noise_diagnostics`).
+
+```{python}
+#| label: c06-noise
+#| code-summary: "Noise diagnostics for every cluster"
+low_mort = e0 > np.median(e0)
+eta_rough_low = clus.eta_squared(excess_rough[low_mort], labels[low_mort])
+eta_size_low = clus.eta_squared(log_size[low_mort], labels[low_mort])
+print(noise_tab.assign(cluster=noise_tab["cluster"] + 1).round(2).to_string(index=False))
+print(f"\nFlagged noise clusters: {[int(k) + 1 for k in noise_clusters] or 'none'} "
+      f"({int(sizes[noise_clusters].sum())} country-years)")
+print(f"eta² on the clusters, country-years with e0 above the median: excess roughness {eta_rough_low:.2f}, "
+      f"log population size {eta_size_low:.2f}")
+latex.report("clusNNoise", int(len(noise_clusters)), desc="Number of clusters flagged as small-population noise clusters")
+latex.report("clusNoiseMembers", int(sizes[noise_clusters].sum()), desc="Country-years in flagged noise clusters")
+latex.report("clusNoiseRatioMax", float(noise_tab["roughness_ratio"].max()), digits=1,
+             desc="Largest roughness ratio of a cluster")
+latex.report("clusNoiseRatioThreshold", PX["noise_roughness_ratio"], digits=1,
+             desc="Roughness ratio above which a cluster can be flagged as a noise cluster")
+latex.report("clusNoiseSmallThreshold", 100 * PX["noise_small_share"], digits=0,
+             desc="Percent of members from the smallest quarter by size above which a cluster can be flagged")
+# The text describes one noise cluster; with none or several there is no single share to quote.
+if len(noise_clusters) == 1:
+    latex.report("clusNoiseSmallShare", 100 * float(noise_tab.loc[noise_clusters[0], "small_share"]), digits=0,
+                 desc="Percent of the noise cluster's members from the smallest quarter of country-years by size")
+else:
+    print(f"clusNoiseSmallShare not reported: {len(noise_clusters)} noise clusters, and the text describes one.")
+latex.report("clusEtaRough", float(eta_rough_low), digits=2,
+             desc="eta squared of excess log roughness on clusters, e0 above median")
+latex.report("clusEtaSize", float(eta_size_low), digits=2,
+             desc="eta squared of log population size on clusters, e0 above median")
+```
+
+```{python}
+#| label: c06-noise-text
+#| output: asis
+#| code-summary: "Text: what the noise check found"
+if len(noise_clusters) == 0:
+    print("No cluster meets the noise rule.")
+else:
+    for k in noise_clusters:
+        m = labels == k
+        top = ", ".join(NAME[p_] for p_ in pd.Series(pops[c_idx[m]]).value_counts().index[:3])
+        print(f"Cluster {k + 1} meets the noise rule: its members' schedules are "
+              f"{noise_tab.loc[k, 'roughness_ratio']:.1f} times as rough as typical schedules at the "
+              f"same e₀, and {100 * noise_tab.loc[k, 'small_share']:.0f}% of its {sizes[k]} members come "
+              f"from the smallest quarter of country-years by population size (mostly {top}). ")
+    print(f"It holds {100 * sizes[noise_clusters].sum() / n_obs:.1f}% of the observed country-years; "
+          "it is reported here, and later chapters exclude it through the artefact's `noise_clusters` "
+          "entry. ")
+others = noise_tab[~noise_tab["noise"]]
+print(f"The other clusters have roughness ratios between {others['roughness_ratio'].min():.2f} and "
+      f"{others['roughness_ratio'].max():.2f}, and at most {100 * others['small_share'].max():.0f}% of the "
+      f"members of any of them come from the smallest quarter of country-years by size (against "
+      f"{100 * small.mean():.0f}% of all country-years). ")
+print(f"Among country-years with e₀ above the median, cluster membership still explains "
+      f"$\\eta^2$ = {eta_rough_low:.2f} of excess roughness and {eta_size_low:.2f} of log population "
+      "size: data quality remains one of the things the partition reflects.")
+```
+
+## Step 9 — countries, regions and periods
+
+### Majority labels
+
+Two derived clusterings, in the companion only, summarise the country-year labels: a
+population's **country cluster** is the cluster of the majority of its observed
+country-years, and a year's **year cluster** is the cluster of the majority of
+populations observed that year.  Both come from `mdmx.clustering.majority_label`, the
+single implementation of every majority vote in this chapter: only observed
+country-years vote, a population or year with none gets no label (`-1`),
+and **ties go to the lower-numbered cluster**.
+
+```{python}
+#| label: c06-derived
+#| code-summary: "Country and year clusters by majority vote; stability within countries"
+country_cluster = clus.majority_label(labels, c_idx, C, K)          # (C,)
+year_cluster = clus.majority_label(labels, t_idx, Tn, K)            # (T,), -1 where no data
+purity = counts_ck.max(axis=1) / counts_ck.sum(axis=1)
+n_multi = int(np.sum((counts_ck > 0).sum(axis=1) > 1))
+switches = clus.switch_share(labels, c_idx)
+n_country_ties = int(np.sum((counts_ck == counts_ck.max(axis=1, keepdims=True)).sum(axis=1) > 1))
+print("Populations per country cluster:", np.bincount(country_cluster, minlength=K).tolist())
+print(f"Populations with country-years in more than one cluster: {n_multi} of {C}")
+print(f"Median share of a population's country-years in its majority cluster: {np.median(purity):.2f}")
+print(f"Consecutive observed years of a population in different clusters: {100 * switches:.1f}%")
+print(f"Populations whose country cluster was decided by the tie-break: {n_country_ties}")
+latex.report("clusNPopsMulti", n_multi, desc="Populations with country-years in more than one cluster")
+latex.report("clusSwitchShare", 100 * switches, digits=1,
+             desc="Percent of consecutive observed years of a population that change cluster")
+latex.report("clusMedianPurity", 100 * float(np.median(purity)), digits=0,
+             desc="Median percent of a population's country-years in its majority cluster")
+```
+
+### Regions
+
+The regional grouping is listed in the parameter file, and
+`mdmx.clustering.region_of` stops with an error if a population is missing
+or listed twice.  Aggregates and their parts (for
+example the United Kingdom and England & Wales) are both clustered, so both
+are counted.
+
+```{python}
+#| label: fig-s5-region-summary
+#| fig-cap: "Country-years of each region by cluster. Aggregate populations and their parts (e.g. United Kingdom and England & Wales) are both counted, because both are clustered."
+region = clus.region_of(pops, REGIONS)
+region_names = list(REGIONS)
+region_idx = np.array([region_names.index(r) for r in region[c_idx]])
+counts_rk = clus.label_counts(labels, region_idx, len(region_names), K)
+fig, ax = plt.subplots(figsize=(10, 4.5))
+left = np.zeros(len(region_names))
+ypos = np.arange(len(region_names))[::-1]
+for k in range(K):
+    ax.barh(ypos, counts_rk[:, k], left=left, color=CL[k], edgecolor="white", linewidth=0.8,
+            height=0.75, label=str(k + 1))
+    left += counts_rk[:, k]
+ax.set_yticks(ypos, region_names)
+ax.set_xlabel("Observed country-years")
+ax.legend(loc="lower right", ncol=3, title="Cluster", fontsize=8)
+ax.grid(axis="y", visible=False)
+plotting.save_figure(fig, "fig-s5-region-summary")
+plt.show()
+```
+
+### Time and level
+
+```{python}
+#| label: fig-s5-time-structure
+#| fig-cap: "Cluster composition of the observed country-years by calendar decade (left) and by 5-year band of e₀ (right)."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+for ax, groups_v, width, xlabel in [(ax1, obs_year, PD["time_bin"], "Year"),
+                                    (ax2, e0, PD["e0_bin"], "$e_0$ of the observed schedule (years)")]:
+    lo = np.floor(groups_v / width) * width
+    bins_v = np.unique(lo)
+    b_idx = np.searchsorted(bins_v, lo)
+    counts_b = clus.label_counts(labels, b_idx, len(bins_v), K)
+    share_b = counts_b / counts_b.sum(axis=1, keepdims=True)
+    ax.stackplot(bins_v + width / 2, share_b.T, colors=CL, edgecolor="white", linewidth=0.4)
+    ax.set_ylim(0, 1)
+    ax.set_xlabel(xlabel)
+ax1.set_ylabel("Share of observed country-years")
+fig.legend(handles=[Patch(color=CL[k], label=str(k + 1)) for k in range(K)], loc="upper center",
+           ncol=K, title="Cluster", bbox_to_anchor=(0.5, 1.08), fontsize=8)
+plotting.save_figure(fig, "fig-s5-time-structure")
+plt.show()
+```
+
+```{python}
+#| label: fig-s5-time-heatmap
+#| fig-cap: "Majority cluster of each population in each decade (white: no observed country-years). Populations sorted by their first observed decade."
+#| fig-height: 8
+decades = np.unique(obs_year // 10 * 10)
+dec_idx = np.searchsorted(decades, obs_year // 10 * 10)
+cell = c_idx * len(decades) + dec_idx
+dec_major = clus.majority_label(labels, cell, C * len(decades), K).reshape(C, len(decades))
+first_dec = np.array([np.flatnonzero(row >= 0)[0] for row in dec_major])
+order_rows = np.lexsort((names, first_dec))
+fig, ax = plt.subplots(figsize=(11, 8))
+ax.imshow(np.ma.masked_less(dec_major[order_rows], 0), cmap=ListedColormap(CL), vmin=-0.5,
+          vmax=K - 0.5, aspect="auto", interpolation="nearest")
+ax.set_yticks(np.arange(C), names[order_rows], fontsize=7)
+ax.set_xticks(np.arange(len(decades))[::3], [f"{d_}s" for d_ in decades[::3]], rotation=90, fontsize=8)
+ax.grid(False)
+ax.legend(handles=[Patch(color=CL[k], label=str(k + 1)) for k in range(K)], loc="lower left",
+          ncol=3, title="Cluster", fontsize=7)
+plotting.save_figure(fig, "fig-s5-time-heatmap")
+plt.show()
+```
+
+### Trajectories in feature space
+
+```{python}
+#| label: fig-s5-trajectories
+#| fig-cap: "Selected populations' paths through the reduced level-free feature space (first two principal components), coloured by cluster. Circle: first observed year; star: last. Because level has been removed, movement along these axes is change in the deviation pattern, not in mortality level."
+show = list(PD["trajectory_countries"])
+missing = [p for p in show if p not in set(pops)]
+if missing:
+    raise ValueError(f"trajectory_countries not in the tensor: {missing}")
+fig, axes = plt.subplots(3, 4, figsize=(12, 8.5), sharex=True, sharey=True)
+for ax, p in zip(axes.flat, show, strict=True):
+    rows_p = np.flatnonzero(pops[c_idx] == p)
+    ax.plot(X[rows_p, 0], X[rows_p, 1], color=plotting.COLORS["grey"], lw=0.6, zorder=1)
+    ax.scatter(X[rows_p, 0], X[rows_p, 1], c=[CL[k] for k in labels[rows_p]], s=8, lw=0, zorder=2)
+    ax.scatter(*X[rows_p[0], :2], marker="o", s=40, facecolor="none", edgecolor="black", zorder=3)
+    ax.scatter(*X[rows_p[-1], :2], marker="*", s=70, color="black", zorder=3)
+    ax.set_title(f"{NAME[p]} {obs_year[rows_p[0]]}–{obs_year[rows_p[-1]]}", fontsize=9)
+for ax in axes[-1]:
+    ax.set_xlabel("PC 1")
+for ax in axes[:, 0]:
+    ax.set_ylabel("PC 2")
+fig.legend(handles=[Patch(color=CL[k], label=str(k + 1)) for k in range(K)], loc="lower center",
+           ncol=K, title="Cluster", bbox_to_anchor=(0.5, -0.05), fontsize=8)
+plotting.save_figure(fig, "fig-s5-trajectories")
+plt.show()
+```
+
+```{python}
+#| label: c06-pc-corr
+#| code-summary: "How the leading principal components relate to e0 and time"
+pc_corr = pd.DataFrame({"corr with e0": [np.corrcoef(X[:, j], e0)[0, 1] for j in range(3)],
+                        "corr with year": [np.corrcoef(X[:, j], obs_year)[0, 1] for j in range(3)]},
+                       index=["PC 1", "PC 2", "PC 3"])
+pc_corr.round(3)
+```
+
+Because level has been removed, the paths do not run along an axis of
+mortality decline: the leading principal components are nearly
+uncorrelated with e₀ (largest |r| =
+`{python} f"{pc_corr['corr with e0'].abs().max():.2f}"`).  Populations
+wander within the cloud of deviation patterns:
+`{python} f"{n_multi}"` of `{python} f"{C}"` populations pass through more
+than one cluster, a median of
+`{python} f"{100 * np.median(purity):.0f}"`% of a population's country-years
+are in its majority cluster, and the label changes in
+`{python} f"{100 * switches:.0f}"`% of consecutive observed years.  A
+population's deviation pattern persists from year to year, but it is not
+fixed over the whole series.
+
+# Part B — Level epochs
+
+## The level signal and its direction
+
+The level coordinate $\mathcal{G}_{c,t}[1,1]$ removed in Part A is used
+here to describe *how fast mortality is changing* (the level epochs, which are in the
+companion only).  Its sign
+is that of the singular vectors $\mathbf{s}_1$ and $\mathbf{a}_1$, which is a
+convention: in this decomposition $\mathcal{G}_{c,t}[1,1]$ *falls* as e₀
+rises, but another linear-algebra library or sign rule could flip it.  To
+make "improvement" mean improvement whatever the convention, we multiply
+the level coordinate by the sign of its correlation with e₀
+(`mdmx.clustering.level_orientation`):
+
+$$
+\ell_{c,t} = \sigma\, \mathcal{G}_{c,t}[1,1], \qquad
+\sigma = \operatorname{sign}\operatorname{corr}\bigl(\mathcal{G}_{c,t}[1,1],\, e_0\bigr),
+$$
+
+so that $\ell$ rises when mortality improves whatever the orientation of the
+bases (with the decomposition chapter's orientation, $\sigma = +1$).  The
+thresholds below are stated for $\ell$.  To express them in years of life expectancy, we regress e₀ on
+$\ell$ across all observed country-years: one unit of $\ell$ corresponds to
+$b$ years of e₀.
+
+```{python}
+#| label: c06-orientation
+#| code-summary: "Orient the level signal by e0 and translate the thresholds into e0 units"
+sigma = clus.level_orientation(level, e0)
+ell = sigma * level
+e0_per_ell, e0_at_zero = np.polyfit(ell, e0, 1)
+print(f"σ = {sigma:+d}: the level coordinate G[1,1] {'falls' if sigma < 0 else 'rises'} as e0 rises")
+print(f"e0 ≈ {e0_at_zero:.1f} + {e0_per_ell:.3f} ℓ   (R² = {np.corrcoef(ell, e0)[0, 1] ** 2:.3f})")
+print(f"δ = {PE['delta']} ℓ/year ≈ {PE['delta'] * e0_per_ell:.3f} years of e0 per year; "
+      f"δ_rapid = {PE['delta_rapid']} ℓ/year ≈ {PE['delta_rapid'] * e0_per_ell:.3f}")
+latex.report("clusEpochWindow", PE["window"], desc="Epoch rolling-window width W (years)")
+latex.report("clusEpochMinPoints", PE["min_points"], desc="Minimum observed years per window")
+latex.report("clusEpochMinYears", PE["min_years"], desc="Minimum observed years for a population to be classified")
+latex.report("clusEpochDelta", PE["delta"], digits=2, desc="Stagnation half-width delta (level units per year)")
+latex.report("clusEpochDeltaRapid", PE["delta_rapid"], digits=2, desc="Rapid-change threshold (level units per year)")
+latex.report("clusEpochLowessFrac", PE["lowess_frac"], digits=2, desc="LOWESS span (share of a population's years)")
+latex.report("clusEpochLowessMinPoints", PE["lowess_min_points"], desc="Minimum LOWESS span (observed years)")
+latex.report("clusEpochEzeroPerLevel", float(e0_per_ell), digits=2, desc="Years of e0 per unit of the level signal (OLS slope)")
+latex.report("clusEpochDeltaEzero", float(PE["delta"] * e0_per_ell), digits=2,
+             desc="delta translated into years of e0 per calendar year")
+latex.report("clusEpochDeltaRapidEzero", float(PE["delta_rapid"] * e0_per_ell), digits=2,
+             desc="delta_rapid translated into years of e0 per calendar year");
+```
+
+The translation is close to one-to-one: a stagnation band of
+$|\text{slope}| \le \delta$ = `{python} f"{PE['delta']}"` level units per
+year means e₀ changing by less than about
+`{python} f"{PE['delta'] * e0_per_ell:.2f}"` years per year (half a year
+per decade), and "rapid" change means more than about
+`{python} f"{PE['delta_rapid'] * e0_per_ell:.2f}"` years of e₀ per year
+(two years per decade).
+
+## The classification
+
+The procedure takes every setting from the parameter file:
+
+1. **Smooth.**  For each population with at least
+   `{python} f"{PE['min_years']}"` observed years, smooth $\ell$ and e₀
+   over its observed years by LOWESS (`mdmx.clustering.lowess_at`), with a
+   span of `{python} f"{PE['lowess_frac']}"` of the population's years but
+   never fewer than `{python} f"{PE['lowess_min_points']}"` years, and
+   `{python} f"{PE['lowess_iterations']}"` robustness iterations.
+2. **Slopes.**  Slide a window of $W$ = `{python} f"{PE['window']}"`
+   calendar years across the series one year at a time; in each window
+   with at least `{python} f"{PE['min_points']}"` observed years, fit a
+   least-squares line to the smoothed $\ell$ and keep its slope
+   (`mdmx.clustering.window_slopes`).
+3. **Classify** each window slope $s$: rapid improvement if
+   $s > \delta_{\text{rapid}}$, slow improvement if
+   $\delta < s \le \delta_{\text{rapid}}$, stagnation if $|s| \le \delta$,
+   slow worsening if $-\delta_{\text{rapid}} \le s < -\delta$, rapid
+   worsening if $s < -\delta_{\text{rapid}}$ (`classify_slopes`).
+4. **Assign years.**  Each calendar year from the population's first to
+   last observed year takes the most common category among the windows
+   that contain it (`yearly_categories`, which uses `majority_label`);
+   ties go to the category listed first above, i.e. towards rapid
+   improvement.  Years in the middle of a series are covered by $W$
+   windows; years near either end by fewer, so their category rests on
+   less evidence.
+5. **Epochs** are maximal runs of consecutive calendar years with the
+   same category (`runs`).
+
+```{python}
+#| label: c06-epochs
+#| code-summary: "Classify level epochs for every population"
+ep = clus.classify_epochs(c_idx, obs_year, ell, e0, pops, **PE)
+win, yrs_cat, epochs = ep["windows"], ep["years"], ep["epochs"]
+epochs.insert(1, "name", epochs["pop"].map(NAME))
+classified = yrs_cat[yrs_cat["category"] >= 0]
+sign_agree = float(np.mean(np.sign(win["slope_level"]) == np.sign(win["slope_e0"])))
+cat_share = classified["category"].value_counts(normalize=True).reindex(range(5), fill_value=0)
+tie_share = float(classified["tied"].mean())
+print(f"Populations classified: {yrs_cat['pop'].nunique()}; skipped (too few years): {ep['skipped'] or 'none'}")
+print(f"Windows: {len(win):,}; calendar years classified: {len(classified):,}; "
+      f"unclassified years inside a series: {int((yrs_cat['category'] < 0).sum())}")
+print(f"Windows in which the level and e0 slopes have the same sign: {100 * sign_agree:.1f}%")
+print(f"Calendar years decided by the tie-break: {100 * tie_share:.1f}%")
+print("\nMedian e0 slope (years per year) of the windows in each category:")
+print(win.groupby("category")["slope_e0"].median().rename(index=dict(enumerate(clus.EPOCH_CATEGORIES))).round(3))
+print("\nShare of classified country-years and number of epochs by category:")
+print(pd.DataFrame({"share of years": cat_share.to_numpy().round(3),
+                    "epochs": epochs["category"].value_counts().reindex(range(5), fill_value=0).to_numpy()},
+                   index=clus.EPOCH_CATEGORIES))
+latex.report("clusEpochNPops", int(yrs_cat["pop"].nunique()), desc="Populations with level epochs")
+latex.report("clusEpochNEpochs", int(len(epochs)), desc="Number of level epochs")
+latex.report("clusEpochSignAgree", 100 * sign_agree, digits=1,
+             desc="Percent of windows where level-signal and e0 slopes have the same sign")
+latex.report("clusEpochTieShare", 100 * tie_share, digits=1, desc="Percent of classified years decided by the tie-break")
+for code, key in enumerate(["RapidImp", "SlowImp", "Stag", "SlowWorse", "RapidWorse"]):
+    latex.report(f"clusEpochShare{key}", 100 * float(cat_share[code]), digits=1,
+                 desc=f"Percent of classified country-years in category '{clus.EPOCH_CATEGORIES[code]}'")
+```
+
+```{python}
+#| label: fig-s5-epoch-trajectories
+#| fig-cap: "Level epochs of selected populations. Points: e₀ of the observed schedules; solid line: LOWESS-smoothed e₀; dashed line: the smoothed level signal ℓ, drawn on the e₀ scale through the regression e₀ ≈ a + bℓ. Shading: epoch category of each calendar year."
+show_ep = PD["epoch_countries"]
+missing = [p for p in show_ep if p not in set(yrs_cat["pop"])]
+if missing:
+    raise ValueError(f"epoch_countries without epochs: {missing}")
+series = ep["series"]
+fig, axes = plt.subplots(4, 3, figsize=(12, 11), sharey=True)
+for ax, p in zip(axes.flat, show_ep, strict=True):
+    for _, e_ in epochs[epochs["pop"] == p].iterrows():
+        ax.axvspan(e_["start"] - 0.5, e_["end"] + 0.5, color=EPOCH_COLORS[e_["category"]], alpha=0.45, lw=0)
+    sp = series[series["pop"] == p]
+    ax.plot(sp["year"], sp["e0"], ".", ms=2.5, color=plotting.COLORS["observed"], alpha=0.6)
+    ax.plot(sp["year"], sp["e0_smooth"], color=plotting.COLORS["observed"], lw=1.5)
+    ax.plot(sp["year"], e0_at_zero + e0_per_ell * sp["level_smooth"], ls="--", color="black", lw=1)
+    ax.set_title(NAME[p], fontsize=10)
+for ax in axes[:, 0]:
+    ax.set_ylabel("$e_0$ (years)")
+handles = [Patch(color=EPOCH_COLORS[i], alpha=0.6, label=lab) for i, lab in enumerate(clus.EPOCH_CATEGORIES)]
+handles += [Line2D([], [], color=plotting.COLORS["observed"], lw=1.5, label="$e_0$ (smoothed)"),
+            Line2D([], [], color="black", ls="--", lw=1, label=r"level signal $\ell$ on the $e_0$ scale")]
+fig.legend(handles=handles, loc="lower center", ncol=4, bbox_to_anchor=(0.5, -0.03))
+fig.tight_layout(rect=(0, 0.03, 1, 1))
+plotting.save_figure(fig, "fig-s5-epoch-trajectories")
+plt.show()
+```
+
+```{python}
+#| label: fig-s5-calendar
+#| fig-cap: "Epoch calendar: the level-epoch category of every population in every calendar year from its first to its last observed year (white: outside the series). Populations sorted by first observed year."
+#| fig-height: 8
+pop_row = {p: i for i, p in enumerate(pops)}
+grid = np.full((C, Tn), -1)
+grid[yrs_cat["pop"].map(pop_row).to_numpy(), yrs_cat["year"].to_numpy() - years[0]] = yrs_cat["category"].to_numpy()
+first_obs = np.array([obs_year[c_idx == c].min() for c in range(C)])
+order_rows = np.lexsort((names, first_obs))
+fig, ax = plt.subplots(figsize=(11, 8))
+ax.imshow(np.ma.masked_less(grid[order_rows], 0), cmap=ListedColormap(EPOCH_COLORS), vmin=-0.5, vmax=4.5,
+          aspect="auto", interpolation="nearest", extent=(years[0] - 0.5, years[-1] + 0.5, C - 0.5, -0.5))
+ax.set_yticks(np.arange(C), names[order_rows], fontsize=7)
+ax.set_xlabel("Year")
+ax.grid(False)
+ax.legend(handles=[Patch(color=EPOCH_COLORS[i], label=lab) for i, lab in enumerate(clus.EPOCH_CATEGORIES)],
+          loc="lower left", fontsize=8)
+plotting.save_figure(fig, "fig-s5-calendar")
+plt.show()
+```
+
+```{python}
+#| label: c06-epoch-text
+#| code-summary: "Facts quoted in the text below"
+worse = epochs[epochs["category"] >= 3]
+worse_by_pop = worse.groupby("pop").agg(first=("start", "min"), last=("end", "max"), years=("n_years", "sum"))
+def _span(first, last):
+    """'1970' for a single year, '1972–1998' for a range."""
+    return f"{first}" if first == last else f"{first}–{last}"
+
+worse_text = "; ".join(f"{NAME[p_]} ({_span(r_['first'], r_['last'])}, "
+                       f"{r_['years']} year{'s' if r_['years'] > 1 else ''})"
+                       for p_, r_ in worse_by_pop.sort_values("first").iterrows())
+usa_last = epochs[epochs["pop"] == "USA"].tail(3)
+usa_text = ", ".join(f"{r_.label.lower()} {_span(r_.start, r_.end)}" for r_ in usa_last.itertuples())
+usa_years = yrs_cat[yrs_cat["pop"] == "USA"]
+usa_last_windows = int(usa_years["n_windows"].iloc[-1])
+print("Worsening epochs:", worse_text)
+print("Last three epochs of the United States:", usa_text)
+latex.report("clusEpochShareWorse", 100 * float(cat_share[3] + cat_share[4]), digits=1,
+             desc="Percent of classified country-years in a worsening category");
+```
+
+Improvement dominates: `{python} f"{100 * cat_share[0]:.0f}"`% of the
+classified country-years are in rapid and
+`{python} f"{100 * cat_share[1]:.0f}"`% in slow improvement,
+`{python} f"{100 * cat_share[2]:.0f}"`% in stagnation and only
+`{python} f"{100 * (cat_share[3] + cat_share[4]):.1f}"`% in worsening.
+Stagnation marks the long pre-transition periods of the earliest series
+(Sweden, France, England & Wales, Norway) and the Eastern European
+plateau of the 1960s–1980s.  The worsening epochs are few and
+recognisable: `{python} worse_text`.  The post-Soviet mortality crisis is
+therefore captured.  For the United States the last three epochs are
+`{python} usa_text`; the final year of a series is covered by only
+`{python} f"{usa_last_windows}"` window (years near either end of a
+series always rest on fewer windows than years in the middle), so the
+recent slowdown of mortality improvement in the United States appears essentially as
+stagnation rather than worsening.  Because the level and e₀ slopes agree
+in sign in `{python} f"{100 * sign_agree:.1f}"`% of windows, the
+direction assigned to each window is unambiguous almost everywhere.
+
+```{python}
+#| label: c06-worsening
+#| code-summary: "All epochs of worsening mortality"
+epochs[epochs["category"] >= 3].round(2)
+```
+
+# The `clustering` artefact
+
+Everything later chapters need is saved as one artefact, `clustering`.
+Per-observation arrays have one row per observed country-year in the order
+of `c_idx`, `t_idx` (by population, then year).  Age columns of the core
+are 0-based in the arrays (column 0 is the level).
+
+| Key | Shape / type | Content |
+|---|---|---|
+| `c_idx`, `t_idx` | (n_obs,) int | population and year index of each observed country-year |
+| `pops`, `years` | (C,), (T,) | population codes and calendar years of those indices |
+| `e0` | (n_obs, S) | e₀ of the observed schedule (female, male); `e0_mean` (n_obs,) is their average |
+| `K`, `labels`, `posterior` | int, (n_obs,), (n_obs, K) | clusters 0 … K−1 (figures and paper: 1 … K), numbered by mean e₀; K is the reproducible K of Step 5 |
+| `K_bic` | int | the K with the lowest BIC (not used for the partition) |
+| `noise_clusters` | (m,) int | clusters flagged as small-population noise clusters (Step 8); exclude them when using the clusters |
+| `noise_measures` | dict | `excess_log_roughness` (n_obs,) log₁₀ roughness minus its e₀-conditional mean, `small` (n_obs,) bool, in the smallest quarter by population size (Step 8) |
+| `stability` | dict | `reproducibility` (ARI between refits, by K), `bootstrap_by_k` (Jaccard and ARI under resampling of population families, by K), `jaccard` (K,) each cluster's mean Jaccard, `jaccard_present` (K,) resamples holding the cluster |
+| `features` | dict | `n_columns` (k), `index` (p, 2) = (sex component, age column) of each feature, `raw` (n_obs, p) core entries, `values` (n_obs, p) level-free features |
+| `conditional_mean` | dict | `e0_grid` (g,), `core` (g, r₁, r₂) e₀-conditional mean of the full effective core, `features` (g, p) the same at the feature positions, `frac`, `iterations` |
+| `residual_mean` | (K, p) | each cluster's mean feature vector |
+| `residual_core` | (K, r₁, r₂) | the same in core coordinates (zero outside the feature positions) |
+| `deviation_logit` | (K, S, A) | the cluster's deviation $\mathbf{S}\mathbf{D}_k\mathbf{A}^\top$ in logit(q_x) |
+| `member_mean_core`, `member_mean_e0` | (K, r₁, r₂), (K,) | mean effective core and mean e₀ of the members |
+| `pca`, `scores` | dict, (n_obs, d) | `mean`, `components` (p, d), `explained_variance_ratio`, `d`; the reduced features |
+| `gmm` | dict | `weights`, `means`, `covariances`, `covariance_type` (in PCA coordinates) |
+| `bic` | DataFrame | BIC/AIC for every K |
+| `ward_labels`, `ward_agreement`, `ward_ari` | | Ward groups (matched to clusters) and agreement |
+| `country_cluster`, `year_cluster` | (C,), (T,) int | majority labels (−1: no observed country-years) |
+| `level_sign`, `e0_per_level` | int, float | σ and b of Part B |
+| `epochs`, `epoch_years`, `epoch_windows` | DataFrames | epoch table, per-year categories, window slopes |
+
+To build the schedule of cluster `k` at a target life expectancy `x`:
+
+```python
+core = clus.conditional_core_at(x, art["conditional_mean"]["e0_grid"], art["conditional_mean"]["core"])
+core = core + art["residual_core"][k]                       # (r1, r2)
+logit_qx = tz.schedules_from_cores(core, tucker["U_sex"], tucker["U_age"])   # (S, A)
+```
+
+Its e₀ is close to, but not exactly, `x` (Step 3); adjust the level
+coordinate `core[0, 0]` if an exact e₀ is required.  A new schedule (e.g. a
+fitted one) is placed in the clusters' feature space with
+`clus.cores_to_features(G, index) − clus.cores_to_features(conditional_core_at(e0, …), index)`
+followed by `clus.pca_transform(…, art["pca"])`.
+
+```{python}
+#| label: c06-save
+#| code-summary: "Assemble and save the clustering artefact"
+def _assemble():
+    return {
+        "c_idx": c_idx, "t_idx": t_idx, "pops": pops, "years": years,
+        "e0": e0_sex, "e0_mean": e0,
+        "K": K, "K_bic": K_bic, "labels": labels, "posterior": chosen["posterior"],
+        "noise_clusters": noise_clusters,
+        "noise_measures": {"excess_log_roughness": excess_rough, "small": small},
+        "features": {"n_columns": int(k_cols), "index": fidx, "raw": F_raw, "values": R},
+        "conditional_mean": {"e0_grid": e0g, "core": core_grid, "features": F_grid,
+                             "frac": PF["conditional_frac"], "iterations": PF["conditional_iterations"]},
+        "residual_mean": residual_mean, "residual_core": residual_core,
+        "deviation_logit": np.moveaxis(deviation, -1, 0),
+        "member_mean_core": member_mean_core,
+        "member_mean_e0": np.array([e0[labels == k].mean() for k in range(K)]),
+        "pca": {k_: pca[k_] for k_ in ("mean", "components", "explained_variance_ratio", "d")},
+        "scores": X,
+        "gmm": {"weights": chosen["weights"], "means": chosen["means"], "covariances": chosen["covariances"],
+                "covariance_type": PG["covariance_type"]},
+        "bic": bic_table,
+        "stability": {"reproducibility": repro_table, "bootstrap_by_k": boot_by_k,
+                      "jaccard": jac_K, "jaccard_present": present_K},
+        "ward_labels": ward_labels, "ward_agreement": ward_agree, "ward_ari": float(ward_ari),
+        "country_cluster": country_cluster, "year_cluster": year_cluster,
+        "level_sign": sigma, "e0_per_level": float(e0_per_ell),
+        "epochs": epochs, "epoch_years": yrs_cat, "epoch_windows": win,
+    }
+
+art = artifacts.stage(
+    "clustering", _assemble,
+    inputs=["tucker", "tensor", "hmd_raw", "populations", "clustering_gmm", "clustering_reproducibility",
+            "clustering_bootstrap"],
+    params={"features": PF, "gmm": PG, "stability": {**REPRO_KEY, **BOOT_KEY,
+                                                      "reproducibility_ari": PSt["reproducibility_ari"]},
+            "epochs": PE, "diagnostics": PX},
+    code=[_assemble, clus],
+    desc="Level-free clusters of observed country-years, conditional-mean core, deviations, e0, and level epochs")
+print({k_: (getattr(v, "shape", None) or type(v).__name__) for k_, v in art.items()})
+
+# Check the recipe above on one cluster: the schedule at the mean e0 of its members.
+k_chk = int(np.argmax(sizes))
+x_chk = float(art["member_mean_e0"][k_chk])
+core_chk = clus.conditional_core_at(x_chk, art["conditional_mean"]["e0_grid"], art["conditional_mean"]["core"]) \
+    + art["residual_core"][k_chk]
+e0_chk = lifetable.e0_from_logit(tz.schedules_from_cores(core_chk, U_sex, U_age)).mean()
+print(f"Recipe check, {CNAME[k_chk]}: target e0 {x_chk:.2f}, e0 of the generated schedule {e0_chk:.2f}")
+```
+
+# Supplementary diagnostics {.unnumbered}
+
+**Other specifications.**  The table repeats the BIC search with shared
+(`tied`) and diagonal (`diag`) covariance matrices, with other numbers of
+age columns $c_{\text{feat}}$, with other LOWESS spans for the conditional mean, and with
+the residuals also divided by their e₀-conditional root-mean-square
+("standardised"), using `{python} f"{P.clustering.supplementary.sensitivity_n_init}"`
+EM starts per $K$, and once more on a tensor built **without pooling**
+(chapter d5): the same specification, with the bases and effective cores
+estimated again from the unpooled schedules.  For each it reports the $K$
+with the lowest BIC, whether it lies at a bound of the range, how strongly
+the clusters are tied to e₀ and year, how many clusters the noise rule of
+Step 8 flags, and — since the chapter does not choose $K$ by BIC — the $K$
+of the rule of Step 5 (refits from the same seeds, with
+`{python} f"{PG['n_init']}"` EM starts each, as in Step 5).  The variants
+inform only: nothing downstream uses them, and this section is in the companion only.
+
+```{python}
+#| label: c06-sensitivity
+#| code-summary: "Repeat the search under other specifications (cached)"
+
+def _variant_features(n_columns, frac, standardise):
+    """Level-free features for one variant of the specification."""
+    idx_v = clus.feature_index(r1, n_columns)
+    raw_v = clus.cores_to_features(G_obs, idx_v)
+    cm_v = {**cm, "frac": frac}
+    fit_v, _ = clus.conditional_mean(e0, raw_v, **cm_v)
+    res_v = raw_v - fit_v
+    if standardise:
+        scale2, _ = clus.conditional_mean(e0, res_v ** 2, **cm_v)
+        res_v = res_v / np.sqrt(np.clip(scale2, 1e-12, None))
+    return res_v
+
+from mdmx import smoothing
+
+cur_lt = artifacts.load("lt_curated")["lt"]
+ev_labels = artifacts.load("event_labels")
+pop_reg = artifacts.load("populations")
+
+
+def _nopool_features():
+    """Level-free features (n_obs, p) of the observed country-years from a tensor built without pooling.
+
+    The tensor of chapter d6, the bases and effective cores of chapter 04 (the
+    age rank held at its value with pooling, r₂) and the features of Steps 2-3,
+    all from the curated life tables before chapter d5 pools them.
+    """
+    tn = data.build_tensor(cur_lt, ev_labels, q_min=P.data.q_min,
+                           min_observed_years=P.data.min_observed_years, populations=pop_reg)
+    if not np.array_equal(tn["observed"], tucker["observed"]):
+        raise ValueError("Without pooling the observed country-years differ; the variant is not comparable.")
+    Mz_n = np.nan_to_num(tn["M"])
+    b = tz.sex_age_bases(Mz_n, tn["observed"], tau=P.tucker.tau, age_bounds=(r2, r2))
+    U_a, _ = smoothing.smooth_age_basis(b["U_age"], P.tucker.smooth_components, P.tucker.smooth_rest_sigma,
+                                       P.tucker.smooth_preserve, P.tucker.smooth_orth_tol)
+    G_n = clus.observed_cores(tz.effective_cores(Mz_n, tn["observed"], b["U_sex"], U_a), c_idx, t_idx)
+    e0_n = clus.observed_e0(tn["M"], c_idx, t_idx).mean(axis=1)
+    raw_n = clus.cores_to_features(G_n, clus.feature_index(r1, k_cols))
+    fit_n, _ = clus.conditional_mean(e0_n, raw_n, **{**cm, "grid": clus.e0_grid(e0_n, PF["e0_grid_step"])})
+    return raw_n - fit_n
+
+
+def _rule_k(X_v, cov):
+    """K of the agreed rule (Step 5) for features X_v, and the refits' mean ARI at it."""
+    table, _ = clus.reproducibility_sweep(
+        X_v, k_values, repro_seeds, workers=PSt["workers"], covariance_type=cov,
+        **{k_: PG[k_] for k_ in ("n_init", "max_iter", "tol", "reg_covar")})
+    k_rule = clus.choose_k_reproducible(table, PSt["reproducibility_ari"])
+    return k_rule, float(table.set_index("K").loc[k_rule, "ari_mean"])
+
+
+def _sensitivity():
+    variants = [(f"{cov} covariance", k_cols, PF["conditional_frac"], False, cov)
+                for cov in PS["sensitivity_covariance"]]
+    variants += [(f"c_feat = {k_}", k_, PF["conditional_frac"], False, PG["covariance_type"])
+                 for k_ in PS["sensitivity_columns"]]
+    variants += [(f"LOWESS span {f_}", k_cols, f_, False, PG["covariance_type"])
+                 for f_ in PS["sensitivity_frac"]]
+    if PS["sensitivity_standardised"]:
+        variants.append(("standardised residuals", k_cols, PF["conditional_frac"], True, PG["covariance_type"]))
+    variants.append(("no pooling", k_cols, PF["conditional_frac"], False, PG["covariance_type"]))
+    rows, all_labels = [], []
+    for name, k_, f_, std, cov in variants:
+        res_v = _nopool_features() if name == "no pooling" else _variant_features(k_, f_, std)
+        X_v = clus.pca_fit(res_v, PF["pca_variance"])["scores"]
+        settings = {**gmm_settings, "covariance_type": cov, "n_init": PS["sensitivity_n_init"]}
+        table, models = clus.bic_sweep(X_v, k_values, **settings)
+        ranked_v = table.sort_values("bic").reset_index(drop=True)
+        k_best = int(ranked_v.loc[0, "K"])
+        k_rule, ari_rule = _rule_k(X_v, cov)
+        rows.append({"variant": name, "R² e0 ~ features": clus.linear_r_squared(e0, res_v), "K": k_best,
+                     "runner-up K": int(ranked_v.loc[1, "K"]),
+                     "BIC margin": float(ranked_v.loc[1, "bic"] - ranked_v.loc[0, "bic"]),
+                     "rule K": k_rule, "ARI at rule K": ari_rule})
+        all_labels.append(models[k_best].predict(X_v))
+    return {"summary": pd.DataFrame(rows), "labels": np.vstack(all_labels)}
+
+sens = artifacts.stage(
+    "clustering_sensitivity", _sensitivity,
+    inputs=["tucker", "tensor", "lt_curated", "event_labels", "populations"],
+    params={"features": PF, "gmm": PG, "supplementary": PS, "stability": REPRO_KEY,
+            "rule": PSt["reproducibility_ari"], "data": P.section("data"), "tucker": P.section("tucker")},
+    code=[_sensitivity, _variant_features, _nopool_features, _rule_k, clus.feature_index,
+          clus.cores_to_features, clus.conditional_mean, clus.pca_fit, clus.bic_sweep, clus.fit_gmm,
+          clus.gmm_n_parameters, clus.reproducibility_sweep, clus.choose_k_reproducible,
+          data.build_tensor, tz.sex_age_bases, tz.effective_cores, smoothing.smooth_age_basis],
+    desc="Clustering under other specifications (supplementary)")
+# The chapter's specification with K chosen by BIC, like the variants (the chapter itself uses
+# the reproducible K of Step 5).
+spec_rows = [{"variant": f"chapter: c_feat = {k_cols}, {PG['covariance_type']} covariance",
+              "R² e0 ~ features": rsq_res, "K": K_bic, "runner-up K": k_second, "BIC margin": bic_margin,
+              "rule K": K, "ARI at rule K": float(repro_table.set_index("K").loc[K, "ari_mean"])}]
+spec_rows += sens["summary"].to_dict("records")
+spec_labels = [fit["fits"][str(K_bic)]["labels"]] + list(sens["labels"])
+for row, lab_v in zip(spec_rows, spec_labels, strict=True):
+    k_v = int(lab_v.max()) + 1
+    noise_v = clus.noise_diagnostics(lab_v, k_v, excess_rough, small,
+                                     roughness_ratio=PX["noise_roughness_ratio"], small_share=PX["noise_small_share"])
+    row["at bound"] = row["K"] in (PG["k_min"], PG["k_max"])
+    row["smallest"] = int(np.bincount(lab_v).min())
+    row["largest"] = int(np.bincount(lab_v).max())
+    row["eta2 e0"] = clus.eta_squared(e0, lab_v)
+    row["eta2 year"] = clus.eta_squared(obs_year.astype(float), lab_v)
+    row["noise clusters"] = int(noise_v["noise"].sum())
+    row["in noise clusters"] = int(noise_v.loc[noise_v["noise"], "n"].sum())
+table_s = pd.DataFrame(spec_rows)
+table_s.round(3)
+```
+
+```{python}
+#| label: c06-sensitivity-text
+#| output: asis
+#| code-summary: "Text: what the comparison shows"
+row = {r_["variant"]: r_ for r_ in table_s.to_dict("records")}
+tied, diag = row["tied covariance"], row["diag covariance"]
+std = row["standardised residuals"]
+k_rows = [r_ for v_, r_ in row.items() if v_.startswith("c_feat = ")]
+print(f"With a shared covariance matrix (tied), one cluster holds {tied['largest']:,} of "
+      f"{n_obs:,} country-years and the others are small satellites "
+      f"(smallest {tied['smallest']}), {tied['noise clusters']} of them flagged as noise. "
+      f"With diagonal covariances BIC chooses K = {diag['K']}"
+      f"{' — the upper bound of the range' if diag['at bound'] else ''}. "
+      f"Other numbers of age columns give K = {', '.join(str(r_['K']) for r_ in k_rows)} "
+      f"for c_feat = {', '.join(v_[len('c_feat = '):] for v_, r_ in row.items() if v_.startswith('c_feat = '))}, each with "
+      f"{', '.join(str(r_['noise clusters']) for r_ in k_rows)} noise cluster(s); the smallest k gives "
+      f"clusters much less tied to e₀ (η² {min(r_['eta2 e0'] for r_ in k_rows):.2f} against "
+      f"{spec_rows[0]['eta2 e0']:.2f} for the chapter's specification, both at the K with the lowest BIC). "
+      f"The LOWESS span changes K but little else. "
+      f"If the residuals are also divided by their e₀-conditional root-mean-square, BIC finds "
+      f"K = {std['K']} with a smallest cluster of {std['smallest']} and a margin of "
+      f"{std['BIC margin']:.0f}: almost all of the cluster structure disappears, which shows that "
+      "much of it comes from differences in the *spread* of deviations between eras and levels "
+      "of mortality. ")
+chapter_row = spec_rows[0]
+print("\n\nThe chapter keeps unrestricted covariance matrices with k chosen by the stated rule: it is "
+      f"the specification the paper describes; with it BIC chooses K = {chapter_row['K']}"
+      f"{' — the upper bound of the range' if chapter_row['at bound'] else ''}, the largest cluster holds "
+      f"{chapter_row['largest']:,} country-years, and {chapter_row['noise clusters']} cluster(s) are "
+      "flagged as noise.  Shared covariances produce a catch-all cluster, and diagonal covariances "
+      f"push K to the bound.  The chapter itself uses the reproducible K = {K} of Step 5: refits of "
+      f"its BIC partition from other starting values agree only at a mean ARI of {ari_at[K_bic]:.2f}.")
+rule_ks = [int(r_["rule K"]) for r_ in spec_rows[1:]]
+k_nopool = int(row["no pooling"]["rule K"])
+print(f"\n\nUnder the rule of Step 5, K is {', '.join(map(str, rule_ks))} across the variants "
+      f"(the chapter: {K}); on the tensor without pooling it is {k_nopool}.  The rule's K is therefore "
+      + ("stable" if min(rule_ks) == max(rule_ks) == K else "sensitive to the specification and to small changes in the data")
+      + ", like the clusters themselves (Step 6).")
+latex.report("clusSensKRuleMin", min(rule_ks), desc="Smallest K of the agreed rule across the sensitivity variants")
+latex.report("clusSensKRuleMax", max(rule_ks), desc="Largest K of the agreed rule across the sensitivity variants")
+latex.report("clusSensKRuleNoPool", k_nopool, desc="K of the agreed rule on the tensor without pooling")
+latex.report("clusSensNVariants", len(rule_ks), desc="Sensitivity variants (specifications and the tensor without pooling)")
+```
+
+```{python}
+#| label: c06-end
+#| code-summary: "Write this chapter's numbers and close"
+latex.write_numbers()
+provenance.end_chapter();
+```

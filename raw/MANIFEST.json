@@ -1,0 +1,38 @@
+{
+ "description": "Checksums of every raw input. The pipeline refuses to run on files that do not match. Tracked in git; the data files themselves are not (see README, section Data).",
+ "hmd": {
+  "20260218": {
+   "title": "Human Mortality Database, bulk download 'all statistics' (period and cohort), release of 18 Feb 2026",
+   "source_url": "https://www.mortality.org/Data/ZippedDataFiles",
+   "file": "raw/hmd/hmd_statistics_20260218.zip",
+   "zip_sha256": "1f40e622d77e44d31e00a5cda18b392bdaaf1b85156a0375c90c5580d0d19c40",
+   "zip_bytes": 193951218,
+   "last_modified_stamp": "18 Feb 2026; Methods Protocol: v6 (2017)",
+   "downloaded": "2026-03-06",
+   "members": {
+    "lt_female/fltper_1x1/fltper_1x1.txt": "7b5d169e79693019db1ed12f3e1b6f231701e46c406a6a225fbc685172ee11e1",
+    "lt_male/mltper_1x1/mltper_1x1.txt": "47645b1263f8200a5ebc21763ad9f2b4339e6c0e8ba394fffefef1a5c4ad1c95",
+    "deaths/Deaths_1x1/Deaths_1x1.txt": "b685f3f50b0d21cb376e0c6161d106cf5c6534768aede6a3be7c462e256c28ed",
+    "exposures/Exposures_1x1/Exposures_1x1.txt": "fc47184976d39e8474a1bfeb33daedfa70ebb8c377bfdeaa8e826c8cf9a93665"
+   },
+   "license": "HMD estimates (life tables, death rates, exposures): CC BY 4.0. Cite as instructed at https://www.mortality.org/Research/CitationGuidelines"
+  },
+  "20261029": {
+   "title": "Human Mortality Database, bulk download 'all statistics' (period and cohort), release of 29 Oct 2026",
+   "source_url": "https://www.mortality.org/Data/ZippedDataFiles",
+   "doi": "10.4054/HMD.Countries.20261029",
+   "file": "raw/hmd/hmd_statistics_20261029.zip",
+   "zip_sha256": "9f6182fe1298dd599592cf2b955e4d432019155053b119361fa2868076e43ca3",
+   "zip_bytes": 194352455,
+   "last_modified_stamp": "29 Oct 2026; Methods Protocol: v6 (2017)",
+   "downloaded": "2026-11-03",
+   "members": {
+    "lt_female/fltper_1x1/fltper_1x1.txt": "7b1f9adf7750ae616df24c452d8bfe6c8dd417162c890b773dd60cdc70fc3f0d",
+    "lt_male/mltper_1x1/mltper_1x1.txt": "8ec771dd115e88f62373fe4ee61f19a82a61fcc51d236158cb7fcfb4fd5d3b68",
+    "deaths/Deaths_1x1/Deaths_1x1.txt": "bfb347d138c3aff2ffd3c990d06e11a1487c05abe80416fbdaa28a2f0f73ff73",
+    "exposures/Exposures_1x1/Exposures_1x1.txt": "515f34682c612438863e3951652618729686364e1607bd81536fa114bf635e7f"
+   },
+   "license": "HMD estimates (life tables, death rates, exposures): CC BY 4.0. Cite as instructed at https://www.mortality.org/Research/CitationGuidelines"
+  }
+ }
+}

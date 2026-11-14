@@ -1,0 +1,207 @@
+---
+title: "Adaptive temporal pooling"
+subtitle: "Removing zero counts at low-mortality ages in small populations"
+---
+
+::: {.callout-note appearance="simple"}
+## Paper correspondence
+Paper §2.4 ("Adaptive temporal pooling").  Produces `fig-s2-smoothing` and
+`fig-s2-smoothing-by-age` (companion only), and the pooling records in the change ledger.
+:::
+
+```{python}
+#| label: d5-setup
+#| code-summary: "Chapter setup"
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from mdmx import artifacts, data, latex, lifetable, plotting, provenance
+from mdmx.config import params
+
+provenance.start_chapter("d5-pooling")
+plotting.use_style()
+P = params()
+cur = artifacts.load("lt_curated")
+lt_cur = cur["lt"]
+de = artifacts.load("hmd_raw")["de"]
+labels = artifacts.load("event_labels")
+pops = artifacts.load("populations")
+names = dict(zip(pops["code"], pops["name"]))
+```
+
+## The problem: zeros in small populations
+
+Between late childhood and middle age, the annual probability of dying is
+of the order of $10^{-4}$ to $10^{-3}$.  In a population the size of Iceland
+or Luxembourg that means a handful of deaths — or none — at each single age
+in a given year.  When the HMD records no deaths, $m_x$ and $q_x$ are
+exactly zero, and their logit is $-\infty$ (in practice, the floor
+$\operatorname{logit}(10^{-8}) \approx -18.4$, far below any real value
+near $-7$).  Left in the tensor, such cells are enormous outliers that the
+decomposition would spend rank on.
+
+## The remedy: pool adjacent years
+
+Following @clark2001investigation, we pool adjacent years: deaths and
+exposures are summed over a block of years and the pooled rate
+$m_x = \sum_t D_{x,t} / \sum_t E_{x,t}$ replaces the single-year rates.  A
+block is just wide enough to contain at least one death at every affected
+age, so large populations are not pooled at all and small ones only as much
+as they need.  The algorithm, implemented in
+`mdmx.data.adaptive_pooling()`, is:
+
+1. **Valley ages.**  Ages whose median $q_x$ across all populations, sexes
+   and years is below $q_{\text{thresh}} =$ `{python} P.data.valley_q_threshold`.
+2. **Flag.**  A population–sex is pooled only if one of its non-exceptional
+   years has $m_x = 0$ at a valley age.  Its *pooling ages* are the valley
+   ages plus any other age below `{python} P.data.pool_raw_rate_age_limit` at which it
+   has a zero rate (in the very smallest populations zeros also occur a few
+   years above the valley).  Above that age the HMD's rates are smoothed by
+   a model and are never zero.
+3. **Blocks.**  The flagged population–sex's non-exceptional years are
+   taken in calendar order and split into *runs* wherever more than
+   `{python} P.data.pool_max_gap` calendar years are missing (so 2019 and 2023 belong to
+   the same run across the COVID years 2020–22, but a long gap breaks the
+   run).  Within a run, years are added to a block until every pooling age
+   has at least one death in the block; the block is then closed and the
+   next begins.  Years left over at the end of a run join the previous block.
+4. **Pool and rebuild.**  In a block of two or more years, the pooled rate
+   $\sum_t D_{x,t}/\sum_t E_{x,t}$ is computed at each pooling age, and in
+   every year of the block $q_x$ at those ages is recomputed from the pooled
+   rate and that year's own $a_x$: $q_x = m_x / \{1 + (1-a_x)\,m_x\}$.
+5. **Everything else is untouched.**  Outside the pooling ages, every year
+   keeps the HMD's published $q_x$; single-year blocks (years that already
+   have deaths at every pooling age) and unflagged populations are not
+   changed at all; and exceptional years are never pooled.
+
+```{python}
+#| label: d5-pool
+#| code-summary: "Find the valley ages and pool (cached)"
+def _pool():
+    valley = data.valley_ages(lt_cur, P.data.valley_q_threshold)
+    pooled, blocks = data.adaptive_pooling(
+        lt_cur, de, labels, valley,
+        max_gap=P.data.pool_max_gap, raw_rate_age_limit=P.data.pool_raw_rate_age_limit)
+    return {"lt": pooled, "blocks": blocks, "valley_ages": valley}
+
+res = artifacts.stage("lt_pooled", _pool, inputs=["lt_curated", "hmd_raw", "event_labels"],
+                      params=P.section("data"),
+                      code=[_pool, data.valley_ages, data.adaptive_pooling, data.plan_blocks,
+                            data.contiguous_runs, lifetable.qx_from_mx],
+                      desc="Life tables after adaptive temporal pooling, with the block record")
+lt_pool, blocks, valley = res["lt"], res["blocks"], res["valley_ages"]
+print(f"Valley ages: {valley.min()}–{valley.max()}")
+print(f"Multi-year blocks: {len(blocks)} in {blocks.groupby(['pop', 'sex']).ngroups} population-sexes "
+      f"({blocks['pop'].nunique()} populations)")
+print(f"Country-years pooled: {int(blocks['n_years'].sum())} (sex-specific)")
+print(f"Block width: median {blocks['n_years'].median():.0f}, max {blocks['n_years'].max()} years")
+latex.report("dataValleyFirst", int(valley.min()), text=str(int(valley.min())), desc="First valley age")
+latex.report("dataValleyLast", int(valley.max()), text=str(int(valley.max())), desc="Last valley age")
+latex.report("dataNPoolBlocks", len(blocks), desc="Multi-year pooling blocks")
+latex.report("dataNPoolPops", blocks["pop"].nunique(), desc="Populations with at least one pooled block")
+latex.report("dataNPoolYears", int(blocks["n_years"].sum()), desc="Sex-specific life tables changed by pooling")
+latex.report("dataPoolMaxWidth", int(blocks["n_years"].max()), desc="Widest pooling block (years)")
+latex.report("dataPoolMedianWidth", int(blocks["n_years"].median()), desc="Median pooling block width (years)")
+latex.report("dataValleyQThreshold", P.data.valley_q_threshold, text=f"{P.data.valley_q_threshold:g}",
+             desc="Valley ages: median q_x below this threshold")
+latex.report("dataPoolMaxGap", int(P.data.pool_max_gap), desc="Most missing years a pooling run may span")
+```
+
+```{python}
+#| label: d5-blocks
+#| code-summary: "Blocks per population, and the widest blocks"
+per_pop = (blocks.groupby("pop").agg(blocks=("n_years", "size"), years=("n_years", "sum"),
+                                     widest=("n_years", "max"))
+           .sort_values("years", ascending=False))
+per_pop.index = per_pop.index.map(names)
+display(per_pop)
+blocks.sort_values("n_years", ascending=False).head(10)
+```
+
+The widest blocks belong to the smallest populations — Iceland, the Māori
+population of New Zealand, Northern Ireland, Estonia and Luxembourg — where
+a block of a decade or more is needed before every single age between 1
+and the late forties has recorded a death.  Because only the zero-prone
+ages are pooled, these long blocks do not flatten the trend in infant or
+old-age mortality, which carry most of the information about the level of
+mortality in each year.
+
+## What pooling does to the schedules
+
+```{python}
+#| label: fig-s2-smoothing
+#| fig-cap: "Single-year versus pooled schedules (logit q_x, females) for four small populations. Thin grey lines: the published single-year schedules of the years in one block; blue line: the pooled result for one year of the block. Orange shading marks the pooling ages. Outside them the schedules are unchanged."
+SHOW = ["ISL", "LUX", "EST", "NZL_MA"]
+fig, axes = plt.subplots(2, 2, figsize=(10, 7), sharex=True)
+for ax, pop in zip(axes.flat, SHOW):
+    b = (blocks[(blocks["pop"] == pop) & (blocks["sex"] == "female")]
+         .sort_values("n_years").iloc[len(blocks[(blocks["pop"] == pop) & (blocks["sex"] == "female")]) // 2])
+    years = [int(y) for y in b["years"].split()]
+    for y in years:
+        s = lt_cur[(lt_cur["pop"] == pop) & (lt_cur["sex"] == "female") & (lt_cur["year"] == y)]
+        ax.plot(s["age"], lifetable.logit(s["qx"], P.data.q_min), color="#bbbbbb", lw=0.6)
+    s = lt_pool[(lt_pool["pop"] == pop) & (lt_pool["sex"] == "female") & (lt_pool["year"] == years[0])]
+    ax.plot(s["age"], lifetable.logit(s["qx"], P.data.q_min), color=plotting.COLORS["respiratory"], lw=1.8)
+    changed = (lt_pool.set_index(["pop", "sex", "year", "age"])["qx"]
+               != lt_cur.set_index(["pop", "sex", "year", "age"])["qx"]).loc[(pop, "female", years[0])]
+    ages_changed = changed[changed].index.to_numpy()
+    if len(ages_changed):
+        ax.axvspan(ages_changed.min() - 0.5, ages_changed.max() + 0.5, color="#fdae61", alpha=0.25)
+    ax.set_ylim(-19, 0)
+    ax.set_title(f"{names[pop]}, {b['first']}–{b['last']} ({b['n_years']} years)", fontsize=10)
+for ax in axes[1]:
+    ax.set_xlabel("Age")
+for ax in axes[:, 0]:
+    ax.set_ylabel(r"logit$(q_x)$")
+plotting.save_figure(fig, "fig-s2-smoothing")
+plt.show()
+```
+
+How much noise does pooling remove?  A good measure is the year-to-year
+change in $\operatorname{logit}(q_x)$ at each age: real mortality changes
+slowly, so large jumps between consecutive years are mostly noise.  The
+figure compares the median absolute year-to-year change, before and after
+pooling, over the *same* country-years (all non-exceptional years of the
+pooled populations, zero-free cells only so that the floor does not dominate
+the "before" curve).
+
+```{python}
+#| label: fig-s2-smoothing-by-age
+#| fig-cap: "Median absolute year-to-year change in logit(q_x), by age, before (grey) and after (blue) pooling, over the same non-exceptional country-years of the pooled populations. Cells with a zero rate before pooling are excluded from both curves."
+pooled_ps = set(map(tuple, blocks[["pop", "sex"]].drop_duplicates().to_numpy()))
+nonexc = labels.loc[labels["label"] == 0, ["pop", "year"]]
+def yearly_change(lt):
+    df = lt.merge(nonexc, on=["pop", "year"])
+    df = df[[ (p, s) in pooled_ps for p, s in zip(df["pop"], df["sex"])]].copy()
+    df["z"] = lifetable.logit(df["qx"], P.data.q_min)
+    df = df.sort_values(["pop", "sex", "age", "year"])
+    g = df.groupby(["pop", "sex", "age"], observed=True)
+    df["dz"] = g["z"].diff().abs()
+    df["consecutive"] = g["year"].diff() == 1
+    return df.set_index(["pop", "sex", "age", "year"])
+before, after = yearly_change(lt_cur), yearly_change(lt_pool)
+ok = before["consecutive"] & (before["qx"] > 0) & (before.groupby(level=[0, 1, 2]).shift(1)["qx"] > 0)
+med_before = before.loc[ok, "dz"].groupby(level="age").median()
+med_after = after.loc[ok[ok].index, "dz"].groupby(level="age").median()
+fig, ax = plt.subplots(figsize=(8, 4.5))
+ax.plot(med_before.index, med_before.to_numpy(), color=plotting.COLORS["grey"], lw=1.6, label="Before pooling")
+ax.plot(med_after.index, med_after.to_numpy(), color=plotting.COLORS["respiratory"], lw=1.6, label="After pooling")
+ax.axvspan(valley.min() - 0.5, valley.max() + 0.5, color="#fdae61", alpha=0.2, label="Valley ages")
+ax.set_xlabel("Age"); ax.set_ylabel(r"median |Δ logit$(q_x)$| between consecutive years")
+ax.legend()
+plotting.save_figure(fig, "fig-s2-smoothing-by-age")
+plt.show()
+valley_mask = med_before.index.isin(valley)
+reduction = 1 - med_after[valley_mask].mean() / med_before[valley_mask].mean()
+latex.report("dataPoolNoiseReduction", 100 * reduction, digits=0,
+             desc="Percent reduction in median year-to-year |Δlogit q| at valley ages, pooled populations")
+print(f"Year-to-year noise at valley ages reduced by {100 * reduction:.0f}%")
+```
+
+```{python}
+#| label: d5-end
+#| code-summary: "Write this chapter's numbers and close"
+latex.write_numbers()
+provenance.end_chapter();
+```

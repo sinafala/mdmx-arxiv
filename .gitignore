@@ -1,0 +1,23 @@
+# The HMD's data: download them yourself (raw/hmd/README.md); they are never committed.
+raw/hmd/*
+!raw/hmd/README.md
+# The cache of intermediate results and bayesLife's runs: a render rebuilds them.
+work/
+# The rendered book (published for each snapshot on this repository's GitHub Pages site).
+companion/_output/
+companion/.quarto/
+companion/**/*.quarto_ipynb
+# Lock files that a render writes beside the results.
+companion/results/*.lock
+# Environments, caches, OS and editor files.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+Thumbs.db
+.Rhistory
+.RData
+# A copy of the published numbers, made when checking a render (README, step 7).
+numbers-arxiv-v*.json

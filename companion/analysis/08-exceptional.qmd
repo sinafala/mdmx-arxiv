@@ -1,0 +1,1371 @@
+---
+title: "Exceptional mortality"
+subtitle: "Baselines for war and epidemic years, chosen on pseudo-events, and the profiles and intensities of the disruptions"
+---
+
+::: {.callout-note appearance="simple"}
+## Paper correspondence
+Paper §6 ("Exceptional Mortality"): the baseline of an exceptional year and its choice on
+pseudo-events (§6.1), the residuals and the cells they keep (§6.2), the disruption model,
+with the event types, the profiles and their estimation (§6.3), the complete model (§6.4),
+and the profiles, intensities and their effect, with the model's limitations (§6.5).  Produces the tables `tbl-s7-baseline-holdout`
+and `tbl-s7-subclustering` and the figures `fig-s7-disruption-profiles`,
+`fig-s7-event-profiles`, `fig-s7-disruption-impact`, `fig-s7-baseline-selected`,
+`fig-s7-baseline-natural`, `fig-s7-baseline-context`, `fig-s7-residual-heatmaps`,
+`fig-s7-baseline-holdout`, `fig-s7-intensity-dist`, `fig-s7-explained-fraction`,
+`fig-s7-residual-examples`, `fig-s7-residual-quality` and `fig-s7-disruption-subclusters`, all
+in the companion only, as are Ward's sub-profiles, the baseline independence of a disruption
+and the composability of two disruptions.  Also produces the in-text numbers
+with prefix `exc`, and the artefact `disruption` (baselines, residuals,
+profiles and intensities of every exceptional country-year) for chapter 09
+and the app.  Parameters: `config/params.d/exceptional.toml`.  Code:
+`mdmx.disruption`.
+:::
+
+```{python}
+#| label: c08-setup
+#| code-summary: "Chapter setup"
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.lines import Line2D
+
+from mdmx import artifacts, latex, lifetable, plotting, provenance
+from mdmx import clustering as clus
+from mdmx import disruption as ds
+from mdmx import nn as mnn
+from mdmx import svdcomp as sc
+from mdmx import tensor as tz
+from mdmx import trajectories as tr
+from mdmx.config import params
+
+provenance.start_chapter("08-exceptional")
+plotting.use_style()
+P = params()
+PE = P.section("exceptional")                  # config/params.d/exceptional.toml
+PP, PH, PFIG = PE["profiles"], PE["heterogeneity"], PE["figures"]
+PTK = P.section("tucker")                      # the completion model's EM settings (chapter 04)
+Q_MIN = P.data.q_min
+
+T = artifacts.load("tensor")
+tucker = artifacts.load("tucker")
+event_labels = artifacts.load("event_labels")
+populations = artifacts.load("populations")
+hmd = artifacts.load("hmd_raw")
+traj = artifacts.load("trajectories")
+dictionary = artifacts.load("events")
+
+M, observed, exceptional, label = T["M"], T["observed"], T["exceptional"], T["label"]
+pops, years, ages = np.asarray(T["pops"]), np.asarray(T["years"]), np.asarray(T["ages"])
+names = {str(p): str(n) for p, n in zip(T["pops"], T["pop_names"], strict=True)}
+pooled = ds.pooling_groups(artifacts.load("lt_pooled")["blocks"], pops, years) > 0   # (C, T) in a pooling block
+U_sex, U_age, G = tucker["U_sex"], tucker["U_age"], tucker["G_ct"]
+r3, r4 = int(tucker["ranks"][2]), int(tucker["ranks"][3])
+COMPLETION04 = {"core": tucker["core"], "U_country": tucker["U_country"], "U_year": tucker["U_year"]}
+fam_pop = sc.population_families(pops, populations)                 # (C,) family of each population
+S, A = M.shape[:2]
+SEXES = plotting.SEX_LABELS
+TYPES = {1: "war", 2: "respiratory", 3: "enteric", 4: "other"}
+PROFILE_TYPES = [int(d) for d in PP["profile_types"]]
+
+# The event of every exceptional country-year (chapter d4's label priority: war > respiratory > enteric > other).
+row_of_pop = {p: i for i, p in enumerate(pops)}
+col_of_year = {int(y): j for j, y in enumerate(years)}
+exc_rows = event_labels[event_labels["label"] > 0]
+event_of = np.full(observed.shape, "", dtype=object)
+event_of[exc_rows["pop"].map(row_of_pop).to_numpy(), exc_rows["year"].map(col_of_year).to_numpy()] = \
+    exc_rows["event_id"].to_numpy()
+if not np.array_equal(event_of != "", exceptional):
+    raise ValueError("The event labels and the tensor's exceptional mask disagree.")
+type_of_event = dict(zip(exc_rows["event_id"], exc_rows["label"].astype(int), strict=False))
+group_of_event = {e: g for g, es in PE["event_groups"].items() for e in es}
+
+ci, ti = np.nonzero(exceptional)                    # exceptional country-years, by population then year
+n_exc = len(ci)
+y_exc = np.moveaxis(M[:, :, ci, ti], -1, 0)        # (n, S, A) observed logit(q_x)
+types = label[ci, ti].astype(int)
+events = event_of[ci, ti].astype(str)
+groups = np.array([group_of_event.get(e, e) for e in events])
+families = fam_pop[ci]
+COMMON = {"years": years, "U_sex": U_sex, "U_age": U_age}
+
+
+def cy(i):
+    """'France 1915' for exceptional row i."""
+    return f"{names[pops[ci[i]]]} {years[ti[i]]}"
+
+
+EVENT_NAME = {r.id: f"{r.event} {r.start}" if r.start == r.end else f"{r.event} {r.start}–{r.end}"
+              for r in dictionary.itertuples()}
+
+
+def num(key):
+    """A reported number as the book prints it (the paper's LaTeX minus sign as a plain one)."""
+    return latex.reported()[key]["text"].replace("$-$", "−")
+
+
+def group_name(g):
+    """Display name of an event group: its name in the parameters, or the dictionary entry's name and years."""
+    return g if g in PE["event_groups"] else EVENT_NAME[g]
+```
+
+## What this chapter does
+
+The decomposition and the regimes describe the slow, secular change of
+mortality.  Wars and epidemics are short, sharp departures from it, so the
+country-years they affect were set aside (chapter d4) and are modelled
+here.  Paper §6 writes an exceptional country-year as
+
+$$
+y_{s,a,c,t} \;=\; \hat y_{s,a,c,t} + \lambda_{c,t}\,\delta_{d,s,a},
+$$
+
+its **baseline** $\hat y$ — the schedule it would have had without the
+event — plus a **disruption**: the profile $\boldsymbol\delta_d$ of the
+event's type $d$ (a unit vector over sex and age) scaled by an
+**intensity** $\lambda_{c,t}$.  Everything rests on the baseline, which is
+never observed.  The chapter chooses it by asking which candidate best
+recovers schedules we *do* know, then estimates the profiles and
+intensities, checks how well one profile per type describes the events,
+and shows what a disruption does to life expectancy.
+
+## Step 1 — the exceptional country-years
+
+The event dictionary of chapter d4 flags
+`{python} f"{n_exc:,}"` country-years with data.  Each carries the type of
+its event; a type groups the country-years that share a kind of exposure,
+whatever their baseline mortality.  Consecutive exceptional years of one
+population form a *spell*.
+
+```{python}
+#| label: c08-data
+#| code-summary: "Exceptional country-years by type, their spells, and years without any observed population"
+sp = ds.spells(exceptional)
+sp["one_sided"] = [not observed[r.c, r.end + 1:].any() or not observed[r.c, :r.start].any() for r in sp.itertuples()]
+n_type = pd.Series(types).map(TYPES).value_counts().reindex(list(TYPES.values()), fill_value=0)
+# Calendar years in which every population with data is exceptional: no observed population at all.
+whole = np.flatnonzero(exceptional.any(axis=0) & ~observed.any(axis=0))
+in_whole = np.isin(ti, whole)
+# What emptied each such year: a respiratory pandemic in every population with data, or something else
+# (in the eighteenth and early nineteenth centuries only one or two populations have data at all).
+whole_resp = np.array([np.all(label[exceptional[:, j], j] == 2) for j in whole])
+n_present = (observed | exceptional)[:, whole].sum(axis=0)
+print(n_type.to_string())
+print(f"\nSpells: {len(sp)} (length {sp['length'].min()}–{sp['length'].max()} years); "
+      f"{int(sp['one_sided'].sum())} have observed years on one side only")
+print(f"Calendar years with no observed population: {len(whole)} "
+      f"({', '.join(str(y) for y in years[whole][:4])}, …, {', '.join(str(y) for y in years[whole][-4:])}); "
+      f"they hold {int(in_whole.sum())} exceptional country-years")
+print(f"  respiratory pandemics in every population with data: {int(whole_resp.sum())} "
+      f"({', '.join(str(y) for y in years[whole][whole_resp])})")
+print(f"  other (wars when at most {int(n_present[~whole_resp].max())} populations have data): {int((~whole_resp).sum())} "
+      f"({years[whole][~whole_resp].min()}–{years[whole][~whole_resp].max()})")
+latex.report("excN", n_exc, desc="Exceptional country-years with data")
+for d, word in ((1, "War"), (2, "Resp"), (3, "Enteric"), (4, "Other")):
+    latex.report(f"excN{word}", int(n_type[TYPES[d]]), desc=f"Exceptional country-years of type {TYPES[d]}")
+latex.report("excNSpells", len(sp), desc="Spells of consecutive exceptional years")
+latex.report("excNOneSided", int(sp["one_sided"].sum()), desc="Spells with observed years on one side only")
+latex.report("excNWholeYears", len(whole), desc="Calendar years in which no population is observed (all exceptional)")
+latex.report("excNInWholeYears", int(in_whole.sum()), desc="Exceptional country-years in such calendar years")
+latex.report("excNWholeYearsResp", int(whole_resp.sum()), desc="Of these, years of a respiratory pandemic in every population")
+```
+
+```{python}
+#| label: c08-completion-gap
+#| code-summary: "What the chapter 04 completion model says in a year without any observed population"
+SWE = row_of_pop[PFIG["completion_example"]]
+check_years = [y for y in PFIG["completion_example_years"] if y in col_of_year]
+Y_EX = PFIG["completion_example_year"]
+comp_core = np.einsum("pqiy,i,ty->tpq", tucker["core"], tucker["U_country"][SWE],
+                      tucker["U_year"][[col_of_year[y] for y in check_years]])
+e0_comp = lifetable.e0_from_logit(tr.schedules(comp_core, U_sex, U_age)).mean(axis=1)
+e0_data = lifetable.e0_from_logit(np.moveaxis(M[:, :, SWE, [col_of_year[y] for y in check_years]], -1, 0)).mean(axis=1)
+print(pd.DataFrame({"year": check_years, "observed": e0_data.round(1),
+                    "completion model": e0_comp.round(1)}).to_string(index=False))
+latex.report("excCompletionSweEzero", float(e0_comp[check_years.index(Y_EX)]), digits=1,
+             desc="e0 of the completion model for the example population and year (years)")
+latex.report("excObservedSweEzero", float(e0_data[check_years.index(Y_EX)]), digits=1,
+             desc="Observed e0 of the example population and year (years)")
+```
+
+Spells are short — most last two or three years, the longest
+(Sweden in the Napoleonic Wars) `{python} f"{sp['length'].max()}"` — but
+`{python} f"{int(sp['one_sided'].sum())}"` have data on one side only, mostly
+COVID-19 at the end of a series, where any baseline must extrapolate.  In
+`{python} f"{len(whole)}"` calendar years **no population is observed at
+all**: in `{python} f"{int(whole_resp.sum())}"` of them an influenza pandemic or
+COVID-19 hit every population with data, and the other
+`{python} f"{int((~whole_resp).sum())}"` are war years of the eighteenth and
+early nineteenth centuries, when at most
+`{python} f"{int(n_present[~whole_resp].max())}"` populations have data.
+The completion model of chapter 04 cannot predict such a year — its year
+loading has nothing to be estimated from, and EM leaves it close to where it
+started, near the country means.  For `{python} names[PFIG["completion_example"]]` in `{python} Y_EX` it gives an e₀ of
+`{python} num("excCompletionSweEzero")` years against
+an observed `{python} num("excObservedSweEzero")`.
+The completion model is therefore scored below only to show this; it is not
+a candidate in practice.
+
+## Step 2 — the baseline, chosen on pseudo-events
+
+The baseline of an exceptional year is the schedule the population would
+have had without the event.  The candidates (paper §6.1; the first two
+never read the exceptional year's own schedule):
+
+* **temporal interpolation** of the population's effective cores (paper
+  §6.1) — *linear* between
+  the nearest observed years on either side (at a series end either
+  carrying the last core or extending a
+  `{python} f"{PE['trend_years']}"`-year trend), or a *local-linear*
+  smoother in calendar year over
+  ±`{python} ", ±".join(f"{w:g}" for w in PE["local_windows"])` years;
+* the **neural core** (a reference candidate, not in the paper): a network from
+  the country's loading and nine features of calendar year to the core,
+  trained on the observed country-years, with early stopping on whole
+  held-out calendar years;
+* the **naïve projection** (paper §6.1): the schedule in the
+  population's slice of the completion model closest to the observed
+  exceptional schedule;
+* the **penalised projection** (paper §6.1, Eq. 15): the same, pulled
+  towards an interpolation with weight α (one of
+  `{python} ", ".join(f"{a:g}" for a in PE["alphas"])`).  As α grows it tends
+  to the *projection* of the interpolation onto that slice, not to the
+  interpolation itself;
+* the **completion model** of chapter 04, for reference.
+
+To compare them on schedules whose truth is known, every event is moved, as
+one block across all its populations, to the normal years just beyond its
+own span on each side (`mdmx.disruption.pseudo_events`).  Those
+**pseudo-events** are hidden from every candidate; a spell with data on one
+side only keeps that property, and an event that hits every population
+leaves no population observed in the shifted year either.  A normal year
+that chapter d5 pooled with its neighbours is not used: they carry its
+deaths, which the neighbours of a real exceptional year never do.  The completion
+model and the neural core are refitted without the hidden years.  Each
+pseudo-event then receives the residual of a real exceptional country-year
+of the same type from another population family (`mdmx.disruption.inject`;
+the residuals come from linear interpolation), and every candidate
+estimates the baseline from the disrupted schedule.  The score is the
+**RMSE of logit($q_x$)** between the estimate and the clean schedule, over
+both sexes and all ages.  The rule, fixed before the run: **the candidate
+with the lowest pooled RMSE over the injected pseudo-events is used**.  The
+same candidates are also scored without injection, for comparison.
+
+```{python}
+#| label: c08-holdout
+#| code-summary: "The pseudo-event hold-out (cached; about a minute)"
+SPECS = {}
+for rule in PE["end_rules"]:
+    SPECS[f"linear, {rule}"] = {"kind": "linear", "end_rule": rule, "trend_years": PE["trend_years"]}
+for w in PE["local_windows"]:
+    SPECS[f"local ±{w:g}"] = {"kind": "local", "window": w}
+INTERP = list(SPECS)
+SCREEN = "linear, carry"          # the interpolation behind the expected-deaths screen and the donors
+if SCREEN not in SPECS:
+    raise ValueError("end_rules must include 'carry': the expected-deaths screen uses linear interpolation with it")
+SPECS["projection"] = {"kind": "projection"}
+for prior in INTERP:
+    for a in PE["alphas"]:
+        SPECS[f"penalized α={a:g} → {prior}"] = {"kind": "penalized", "alpha": a, "prior": prior}
+SPECS["neural"] = {"kind": "neural"}
+SPECS["completion"] = {"kind": "completion"}
+de = hmd["de"]
+HOLD = {"pops": pops, "years": years, "U_sex": U_sex, "U_age": U_age, "q_min": Q_MIN,
+        "min_expected_deaths": PE["min_expected_deaths"]}
+
+
+def _holdout():
+    return ds.baseline_holdout(M, G, observed, event_of, type_of_event, fam_pop, de, SPECS, ranks=(r3, r4),
+                               em={"max_iter": PTK["em_max_iter"], "tol": PTK["em_tol"]}, neural=PE["neural"],
+                               buffer=PE["buffer"], injection_seed=PE["injection_seed"], pooled=pooled, **HOLD)
+
+
+holdout = artifacts.stage(
+    "disruption_holdout", _holdout,
+    inputs=["tensor", "tucker", "event_labels", "populations", "hmd_raw", "lt_pooled"],
+    params={"specs": SPECS, "exceptional": {k: v for k, v in PE.items() if k != "figures"},
+            "em": {"max_iter": PTK["em_max_iter"], "tol": PTK["em_tol"]}, "q_min": Q_MIN},
+    code=[_holdout, ds, tz.complete_cores, tz.country_mean_impute, mnn, lifetable],
+    desc="Baseline candidates scored on pseudo-events (normal years next to real events), with and without "
+         "an injected real disruption")
+pseudo = holdout["pseudo"]
+pseudo["prow"] = np.arange(len(pseudo))
+# Scores carry the row number within their side; attach each row's pseudo-event description.
+offset = pseudo.groupby("side", sort=False).cumcount()
+key = pseudo.assign(row=offset)[["side", "row", "prow", "type", "one_sided", "family", "event_id"]]
+scores = holdout["scores"].merge(key, on=["side", "row"], how="left", validate="many_to_one")
+inj = scores[scores["injection"] == "injected"]
+cln = scores[scores["injection"] == "clean"]
+pooled = inj.groupby("candidate", sort=False)["mse"].mean().pow(0.5)
+pooled_clean = cln.groupby("candidate", sort=False)["mse"].mean().pow(0.5)
+CHOSEN = str(pooled.idxmin())
+CHOSEN_SPEC = SPECS[CHOSEN]
+BEST_INTERP = str(pooled[INTERP].idxmin())
+PRIOR = CHOSEN_SPEC.get("prior", BEST_INTERP)
+pen_names = [f"penalized α={a:g} → {PRIOR}" for a in PE["alphas"]]
+CLEAN_BEST = str(pooled_clean.idxmin())
+n_unpooled = sum(len(r) for _, r in ds.pseudo_events(event_of, observed, buffer=PE["buffer"]).values())
+print(f"Pseudo-events: {len(pseudo):,} country-years ({pseudo['side'].value_counts().to_dict()}); "
+      f"{n_unpooled - len(pseudo)} more were in pooling blocks and are not used")
+latex.report("excNPseudoPooled", n_unpooled - len(pseudo), desc="Shifted country-years not used because they were pooled")
+print(pd.DataFrame({"injected": pooled, "clean": pooled_clean}).sort_values("injected").head(12).round(4).to_string())
+print(f"\nChosen: {CHOSEN}")
+```
+
+```{python}
+#| label: c08-choice
+#| code-summary: "How the candidates compare, by type and for one-sided spells, with a bootstrap over families"
+SHOW = INTERP + ["projection"] + pen_names + ["neural", "completion"]
+by_type = inj.pivot_table(index="candidate", columns="type", values="mse", aggfunc="mean").pow(0.5)
+by_side = inj.pivot_table(index="candidate", columns="one_sided", values="mse", aggfunc="mean").pow(0.5)
+e0_mae = inj.groupby("candidate")["e0_error"].apply(lambda e: e.abs().mean())
+e0_bias = inj.groupby("candidate")["e0_error"].mean()
+e0_bias_clean = cln.groupby("candidate")["e0_error"].mean()
+mse_wide = inj.pivot_table(index="prow", columns="candidate", values="mse")
+fam_rows = pseudo.set_index("prow").loc[mse_wide.index, "family"].to_numpy()
+RIVAL = BEST_INTERP if CHOSEN not in INTERP else str(pooled[[c for c in SHOW if c not in INTERP]].idxmin())
+cmp_ = tr.paired_rmse_difference(mse_wide[CHOSEN].to_numpy(), mse_wide[RIVAL].to_numpy(), fam_rows,
+                                 n_resamples=PE["bootstrap_resamples"], seed=PE["bootstrap_seed"])
+print(pd.DataFrame({"RMSE": pooled[SHOW], "clean": pooled_clean[SHOW], "war": by_type.loc[SHOW, 1],
+                    "resp.": by_type.loc[SHOW, 2], "enteric": by_type.loc[SHOW, 3],
+                    "one-sided": by_side.loc[SHOW, True], "e0 MAE": e0_mae[SHOW],
+                    "e0 bias": e0_bias[SHOW]}).round(3).to_string())
+print(f"\n{CHOSEN} minus {RIVAL}: {cmp_}")
+
+latex.report("excNPseudo", len(pseudo), desc="Pseudo-events (normal country-years) in the baseline hold-out")
+latex.report("excTrendYears", PE["trend_years"],
+             desc="Nearest observed years through which the trend end rule extends a line")
+latex.report("excBaselineChosen", CHOSEN, text=CHOSEN.split(" →")[0].replace("α", r"$\alpha$"),
+             desc="Chosen baseline candidate")
+if CHOSEN_SPEC["kind"] == "penalized":
+    latex.report("excAlpha", CHOSEN_SPEC["alpha"], digits=0, desc="Penalty weight alpha of the chosen penalised projection")
+latex.report("excRmseChosen", float(pooled[CHOSEN]), digits=3, desc="Hold-out RMSE (logit qx, injected pseudo-events), chosen baseline")
+latex.report("excRmseChosenClean", float(pooled_clean[CHOSEN]), digits=3, desc="Hold-out RMSE without injection, chosen baseline")
+latex.report("excRmseInterp", float(pooled[BEST_INTERP]), digits=3, desc="Hold-out RMSE, best temporal interpolation")
+latex.report("excRmseProjection", float(pooled["projection"]), digits=3, desc="Hold-out RMSE, naive projection (injected)")
+latex.report("excRmseProjectionClean", float(pooled_clean["projection"]), digits=3, desc="Hold-out RMSE, naive projection, no injection")
+latex.report("excRmseCleanBest", float(pooled_clean[CLEAN_BEST]), digits=3, desc="Lowest hold-out RMSE without injection")
+latex.report("excRmseCleanBestInjected", float(pooled[CLEAN_BEST]), digits=3,
+             desc="Hold-out RMSE with injection of the candidate that is best without it")
+latex.report("excRmseNeural", float(pooled["neural"]), digits=3, desc="Hold-out RMSE, neural core")
+latex.report("excRmseCompletion", float(pooled["completion"]), digits=3, desc="Hold-out RMSE, chapter 04 completion model")
+latex.report("excRmseCompletionResp", float(by_type.loc["completion", 2]), digits=3,
+             desc="Hold-out RMSE, completion model, respiratory pseudo-events")
+latex.report("excRmseChosenOneSided", float(by_side.loc[CHOSEN, True]), digits=3,
+             desc="Hold-out RMSE, chosen baseline, pseudo-events with data on one side only")
+latex.report("excEzeroMaeChosen", float(e0_mae[CHOSEN]), digits=2, desc="Hold-out e0 MAE (years), chosen baseline")
+latex.report("excEzeroBiasChosen", float(e0_bias[CHOSEN]), digits=2, signed=True,
+             desc="Hold-out mean e0 error (years), chosen baseline, injected")
+latex.report("excEzeroBiasChosenClean", float(e0_bias_clean[CHOSEN]), digits=2, signed=True,
+             desc="Hold-out mean e0 error (years), chosen baseline, no injection")
+latex.report("excEzeroMaeProjection", float(e0_mae["projection"]), digits=2, desc="Hold-out e0 MAE (years), naive projection")
+latex.report("excDiff", cmp_["difference"], digits=4, signed=True, desc="Hold-out RMSE of the chosen baseline minus its rival's")
+latex.report("excDiffLow", cmp_["lower"], digits=4, signed=True, desc="Lower end of the 95% family-bootstrap interval of excDiff")
+latex.report("excDiffHigh", cmp_["upper"], digits=4, signed=True, desc="Upper end of the 95% family-bootstrap interval of excDiff")
+```
+
+```{python}
+#| label: tbl-s7-baseline-holdout
+#| code-summary: "Table: the baseline candidates on pseudo-events"
+def cand_label(name):
+    spec = SPECS[name]
+    if spec["kind"] == "linear":
+        return f"Linear interpolation ({'carry' if spec['end_rule'] == 'carry' else 'trend'} at ends)"
+    if spec["kind"] == "local":
+        return f"Local-linear in year, $\\pm${spec['window']:g} y"
+    if spec["kind"] == "penalized":
+        return f"Penalised projection, $\\alpha = {spec['alpha']:g}$"
+    return {"projection": "Na\\\"{\\i}ve projection", "neural": "Neural core",
+            "completion": "Completion model (\\cref{sec:preprocessing:imputation})"}[spec["kind"]]
+
+
+def short_label(name):
+    """cand_label without LaTeX, for axis labels."""
+    return (cand_label(name).replace("$\\pm$", "±").replace("$\\alpha = ", "α = ").replace("$", "")
+            .replace('Na\\"{\\i}ve', "Naïve").replace(" (\\cref{sec:preprocessing:imputation})", ""))
+
+
+def plain_label(name):
+    """A candidate's name for the book's prose."""
+    spec = SPECS[name]
+    if spec["kind"] == "linear":
+        return ("linear interpolation with the last core carried at a series end" if spec["end_rule"] == "carry"
+                else "linear interpolation with a trend extended at a series end")
+    if spec["kind"] == "local":
+        return f"local-linear interpolation over ±{spec['window']:g} years"
+    if spec["kind"] == "penalized":
+        return f"penalised projection with α = {spec['alpha']:g}"
+    return {"projection": "naïve projection", "neural": "neural core", "completion": "completion model"}[spec["kind"]]
+
+
+tab = pd.DataFrame({"Baseline": [cand_label(c) for c in SHOW],
+                    "Injected": pooled[SHOW].to_numpy(), "Clean": pooled_clean[SHOW].to_numpy(),
+                    "War": by_type.loc[SHOW, 1].to_numpy(), "Resp.": by_type.loc[SHOW, 2].to_numpy(),
+                    "Enteric": by_type.loc[SHOW, 3].to_numpy(), "One-sided": by_side.loc[SHOW, True].to_numpy(),
+                    r"$e_0$ MAE": e0_mae[SHOW].to_numpy()})
+# The table standard: the RMSE columns under one spanner, the baselines' names wrapped.
+tab_tex = tab.rename(columns={**{c: f"RMSE of $\\operatorname{{logit}}({{}}_1q_x)$: {c}" for c in tab.columns[1:-1]},
+                              "One-sided": "RMSE of $\\operatorname{logit}({}_1q_x)$: One-\nsided", r"$e_0$ MAE": "$e_0$\nMAE"})
+latex.save_table(
+    tab_tex, "tbl-s7-baseline-holdout",
+    "Baseline candidates for exceptional years, scored on pseudo-events: normal years next to the real events, "
+    "hidden from every candidate.  RMSE of $\\operatorname{logit}({}_1q_x)$ against the clean schedule after a real disruption of "
+    "the same type was added (Injected; by type and for spells with data on one side only) and without it "
+    "(Clean); mean absolute error of $e_0$ (years, injected).  The penalised projections pull towards "
+    f"{cand_label(PRIOR).lower()}; the lowest injected RMSE is chosen.",
+    formats={c: "{:.3f}" for c in tab_tex.columns[1:-1]} | {"$e_0$\nMAE": "{:.2f}"}, spanners=": ",
+    wrap={"Baseline": "4.2cm"},
+    escape_cells=False, group_rows=[len(INTERP), len(INTERP) + 1, len(INTERP) + 1 + len(pen_names)],
+    rank=[latex.Rank(list(tab_tex.columns[1:]), "min")], rank_note="among the baselines in each column")
+tab.round(3)
+```
+
+```{python}
+#| label: fig-s7-baseline-holdout
+#| fig-cap: "Baseline candidates on pseudo-events. Left: RMSE of logit(q_x) without (open) and with (filled) an injected real disruption; the naïve projection is accurate on clean years but absorbs a disruption. Right: the penalised projection as its weight α grows, against the interpolation it is pulled towards (dashed)."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.2), gridspec_kw={"width_ratios": [1.3, 1]})
+show_l = INTERP + ["projection", CHOSEN if CHOSEN not in INTERP else pen_names[0], "neural", "completion"]
+yy = np.arange(len(show_l))[::-1]
+ax1.scatter(pooled_clean[show_l], yy, facecolor="white", edgecolor=plotting.COLORS["model"], s=40, zorder=3,
+            label="clean")
+ax1.scatter(pooled[show_l], yy, color=plotting.COLORS["model"], s=40, zorder=3, label="injected")
+for y_, c_ in zip(yy, show_l, strict=True):
+    ax1.plot([pooled_clean[c_], pooled[c_]], [y_, y_], color=plotting.COLORS["grey"], lw=1)
+ax1.set_yticks(yy, [short_label(c) for c in show_l], fontsize=8)
+ax1.set_xscale("log")
+ax1.set_xlabel("RMSE of logit$(q_x)$ (log scale)")
+ax1.legend(fontsize=8, loc="upper right")
+al = np.array(PE["alphas"], dtype=float)
+ax2.plot(al, pooled[pen_names].to_numpy(), "o-", color=plotting.COLORS["model"], label="injected")
+ax2.plot(al, pooled_clean[pen_names].to_numpy(), "o--", mfc="white", color=plotting.COLORS["model"], label="clean")
+ax2.axhline(pooled[PRIOR], ls="--", color=plotting.COLORS["grey"], lw=1, label=cand_label(PRIOR).split(" (")[0])
+ax2.set_xscale("log")
+ax2.set_xlabel(r"penalty weight $\alpha$")
+ax2.set_ylabel("RMSE of logit$(q_x)$")
+ax2.legend(fontsize=8)
+plotting.save_figure(fig, "fig-s7-baseline-holdout")
+plt.show()
+```
+
+```{python}
+#| echo: false
+_diff_in = cmp_["lower"] < 0 < cmp_["upper"]
+_proj_jump = pooled["projection"] / pooled_clean["projection"]
+_proj_beats_interp = pooled_clean["projection"] < pooled_clean[INTERP].min()
+```
+
+On clean pseudo-events the projections, which read the year's own
+schedule, do well — the naïve projection has RMSE
+`{python} num("excRmseProjectionClean")`,
+`{python} f"ahead of every interpolation (best {pooled_clean[INTERP].min():.3f})" if _proj_beats_interp else f"against {pooled_clean[INTERP].min():.3f} for the best interpolation"`
+— because that schedule here *is* the baseline.  With a
+real disruption added its error grows `{python} f"{_proj_jump:.1f}"`-fold, to
+`{python} num("excRmseProjection")` — it absorbs part of
+the disruption, exactly the bias paper §6.1 describes — and its e₀ error
+reaches `{python} num("excEzeroMaeProjection")` years.
+A hold-out on clean years alone would have chosen the
+`{python} plain_label(CLEAN_BEST)` (`{python} num("excRmseCleanBest")`), which
+with a disruption scores `{python} num("excRmseCleanBestInjected")`.  The completion model
+is far off (`{python} num("excRmseCompletion")`, and
+`{python} num("excRmseCompletionResp")` for the pandemic
+years, in which no population is observed), and the neural core
+(`{python} num("excRmseNeural")`) cannot follow a
+population's own trend from smooth functions of calendar year; it is not
+used.  The chosen baseline is the
+**`{python} plain_label(CHOSEN)`**`{python} f" towards {plain_label(PRIOR)}" if CHOSEN_SPEC["kind"] == "penalized" else ""`,
+with RMSE `{python} num("excRmseChosen")` and e₀ MAE
+`{python} num("excEzeroMaeChosen")` years.  Its edge over
+`{python} plain_label(RIVAL)` (`{python} f"{pooled[RIVAL]:.3f}"`) is small:
+`{python} num("excDiff")`, 95 % family-bootstrap
+interval `{python} num("excDiffLow")` to
+`{python} num("excDiffHigh")`
+`{python} "(which includes zero)" if _diff_in else "(which excludes zero)"`, and
+it was picked as the best of `{python} len(SPECS) - 2` candidates, so its own
+score is slightly optimistic.  On e₀ it ranks lower: its mean absolute error
+(`{python} num("excEzeroMaeChosen")` years) is above that of
+`{python} ", ".join(f"{plain_label(c)} ({e0_mae[c]:.2f})" for c in INTERP if e0_mae[c] < e0_mae[CHOSEN]) or "no interpolation"`.
+It absorbs a little of a disruption: its mean e₀ error is
+`{python} num("excEzeroBiasChosen")` years with an
+injected disruption against `{python} num("excEzeroBiasChosenClean")`
+without — small next to the losses of several years that the events cause.
+Where a spell has data on one side only the error is larger
+(`{python} num("excRmseChosenOneSided")`): the baselines
+of COVID-19 at the end of a series are extrapolations.
+
+## Step 3 — baselines and residuals of the exceptional years
+
+The chosen candidate is applied to every exceptional country-year, using
+all observed years (and the completion model of chapter 04, fitted without
+the exceptional years).  The residual is the observed minus the baseline
+logit($q_x$) (paper §6.2).  A cell is left out when its observed
+$q_x$ was zero (floored) or when the deaths *expected* under the linear
+interpolation — HMD exposure × its death rate — are below
+`{python} f"{PE['min_expected_deaths']:g}"`; the second rule removes the
+upward bias of keeping only the small cells that happened to have deaths,
+without looking at the deaths themselves.
+
+```{python}
+#| label: c08-residuals
+#| code-summary: "Baselines and residuals of the exceptional country-years"
+low, lin_exc = ds.low_information(ds.exposures(de, pops, years, A, ci, ti), ci, ti, G=G, available=observed,
+                                  min_expected_deaths=PE["min_expected_deaths"], **COMMON)
+need = ds.with_prior(SPECS, CHOSEN)
+neural_exc = (ds.neural_core_cores(G, observed, tucker["U_country"], years, ci, ti, **PE["neural"])
+              if CHOSEN_SPEC["kind"] == "neural" else None)
+baseline = ds.baseline_estimates(ds.masked(y_exc, low, Q_MIN), ci, ti, need, G=G, available=observed,
+                                 completion=COMPLETION04, neural_cores=neural_exc, **COMMON)[CHOSEN]
+R = ds.residuals(y_exc, baseline, Q_MIN, low)
+flo = ds.floored(y_exc, Q_MIN)
+n_masked = int(np.isnan(R).sum())
+print(f"Floored cells: {int(flo.sum())} in {int(flo.any(axis=(1, 2)).sum())} country-years; "
+      f"left out in all (floored or < {PE['min_expected_deaths']:g} expected deaths): {n_masked:,} of {R.size:,} "
+      f"({100 * n_masked / R.size:.1f}%)")
+latex.report("excNFloored", int(flo.sum()), desc="Floored cells (q = 0) in exceptional country-years")
+latex.report("excNFlooredYears", int(flo.any(axis=(1, 2)).sum()), desc="Exceptional country-years with a floored cell")
+latex.report("excMinExpectedDeaths", PE["min_expected_deaths"], digits=0, desc="Expected deaths below which a cell is left out")
+latex.report("excPctMasked", 100 * n_masked / R.size, digits=1, desc="Percent of residual cells left out")
+```
+
+Why the second rule is needed: exceptional years are never pooled
+(chapter d5), so small populations have cells with no deaths or only one or
+two.  A cell with few expected deaths is left out if it happens to record
+none and kept if it happens to record some, so the cells kept are biased
+upward.  The table shows it for COVID-19, whose excess was at old ages, at
+ages `{python} f"{PFIG['small_cell_ages'][0]}–{PFIG['small_cell_ages'][1]}"`.
+
+```{python}
+#| label: c08-small-cells
+#| code-summary: "Childhood residuals of COVID-19 years by the number of deaths, with only floored cells left out and with the expected-deaths rule"
+a0, a1 = PFIG["small_cell_ages"]
+deaths = (de[(de["age"] >= a0) & (de["age"] <= a1)].groupby(["pop", "year"])["deaths"].sum())
+child_deaths = np.array([deaths.loc[(pops[c], int(years[t]))] for c, t in zip(ci, ti, strict=True)])
+covid = events == PFIG["quoted_events"]["Covid"]
+cuts = [0, *PFIG["small_cell_deaths"], np.inf]
+size_band = pd.cut(child_deaths, cuts, right=False)
+R_zero_only = ds.residuals(y_exc, baseline, Q_MIN)                 # floored cells only
+child = pd.DataFrame({
+    "deaths": size_band[covid],
+    "floored only": np.nanmean(R_zero_only[covid][:, :, a0:a1 + 1], axis=(1, 2)),
+    "expected-deaths rule": [np.nanmean(r) if np.isfinite(r).any() else np.nan
+                             for r in R[covid][:, :, a0:a1 + 1]],
+})
+child_tab = child.groupby("deaths", observed=True).agg(country_years=("floored only", "size"),
+                                                       floored_only=("floored only", "mean"),
+                                                       expected_rule=("expected-deaths rule", "mean"))
+print(child_tab.round(3).to_string())
+small_band, rest = child["deaths"] == child["deaths"].cat.categories[0], child["deaths"] != child["deaths"].cat.categories[0]
+latex.report("excChildSmallFloored", float(child.loc[small_band, "floored only"].mean()), digits=2, signed=True,
+             desc="Mean childhood residual, COVID-19, smallest death band, floored cells only left out")
+latex.report("excChildRestFloored", float(child.loc[rest, "floored only"].mean()), digits=2, signed=True,
+             desc="Mean childhood residual, COVID-19, other bands, floored cells only left out")
+latex.report("excChildSmallDeaths", PFIG["small_cell_deaths"][0], desc="Upper limit of the smallest death band")
+latex.report("excChildSmallRule", float(child.loc[small_band, "expected-deaths rule"].mean()), digits=2, signed=True,
+             desc="Mean childhood residual, COVID-19, smallest death band, with the expected-deaths rule")
+latex.report("excChildSmallLeftOut", 100 * float(np.isnan(R[covid][small_band.to_numpy()][:, :, a0:a1 + 1]).mean()),
+             digits=0, desc="Percent of childhood cells left out, COVID-19, smallest death band")
+_child_rest = ("None of them enters a profile." if np.isnan(latex.reported()["excChildSmallRule"]["value"])
+               else f"The cells kept average {num('excChildSmallRule')}.")
+```
+
+With only the floored cells left out, COVID-19 years with fewer than
+`{python} num("excChildSmallDeaths")` deaths at these ages show a childhood
+excess of `{python} num("excChildSmallFloored")` on the logit scale, against
+`{python} num("excChildRestFloored")` in the others.  The expected-deaths
+rule leaves out `{python} num("excChildSmallLeftOut")` % of those cells. `{python} _child_rest`
+
+```{python}
+#| label: c08-examples
+#| code-summary: "The example country-years of the figures (parameters), checked against the data"
+def find(pop, year):
+    """Row of an exceptional country-year; raises if it is not exceptional or has no data."""
+    hit = np.flatnonzero((pops[ci] == pop) & (years[ti] == year))
+    if hit.size != 1:
+        raise ValueError(f"{pop} {year} is not an exceptional country-year with data")
+    return int(hit[0])
+
+
+SEL = [find(p, y) for p, y in PFIG["selected"]]
+print([f"{cy(i)} ({TYPES[types[i]]}, {events[i]})" for i in SEL])
+```
+
+```{python}
+#| label: fig-s7-baseline-selected
+#| fig-cap: "Observed (solid) and baseline (dashed) logit(q_x) for selected exceptional country-years, female (red) and male (blue); the shading is the residual."
+def baseline_panels(scale):
+    fig, axes = plt.subplots(2, 3, figsize=(11, 6.4), sharex=True)
+    for ax, i in zip(axes.flat, SEL, strict=True):
+        for s in range(S):
+            obs_, base_ = y_exc[i, s], baseline[i, s]
+            if scale == "q":
+                obs_, base_ = 1 / (1 + np.exp(-obs_)), 1 / (1 + np.exp(-base_))
+            col = plotting.COLORS[["female", "male"][s]]
+            ax.plot(ages, obs_, color=col, lw=1)
+            ax.plot(ages, base_, color=col, lw=1.2, ls="--")
+            ax.fill_between(ages, base_, obs_, color=col, alpha=0.15, lw=0)
+        if scale == "q":
+            ax.set_yscale("log")
+        ax.set_title(f"{cy(i)} ({TYPES[types[i]]})", fontsize=9)
+    for ax in axes[1]:
+        ax.set_xlabel("Age")
+    for ax in axes[:, 0]:
+        ax.set_ylabel("$q_x$ (log scale)" if scale == "q" else "logit$(q_x)$")
+    handles = [Line2D([], [], color=plotting.COLORS["female"], label="female"),
+               Line2D([], [], color=plotting.COLORS["male"], label="male"),
+               Line2D([], [], color="k", label="observed"), Line2D([], [], color="k", ls="--", label="baseline")]
+    axes[0, 0].legend(handles=handles, fontsize=7)
+    return fig
+
+
+fig = baseline_panels("logit")
+plotting.save_figure(fig, "fig-s7-baseline-selected")
+plt.show()
+```
+
+```{python}
+#| label: fig-s7-baseline-natural
+#| fig-cap: "The same country-years as in the previous figure on the q_x scale (log axis): observed (solid) and baseline (dashed), female (red) and male (blue)."
+fig = baseline_panels("q")
+plotting.save_figure(fig, "fig-s7-baseline-natural")
+plt.show()
+```
+
+```{python}
+#| label: fig-s7-baseline-context
+#| fig-cap: "The baseline in its temporal context, males: observed logit(q_x) of the surrounding normal years (thin grey), the baseline (black dashed) and the observed exceptional schedule (red)."
+K_CTX = PFIG["context_years"]
+fig, axes = plt.subplots(2, 3, figsize=(11, 6.4), sharex=True)
+for ax, i in zip(axes.flat, SEL, strict=True):
+    c, t = ci[i], ti[i]
+    near = [j for j in range(max(0, t - K_CTX), min(len(years), t + K_CTX + 1)) if observed[c, j]]
+    for j in near:
+        ax.plot(ages, M[1, :, c, j], color=plotting.COLORS["grey"], lw=0.6)
+    ax.plot(ages, baseline[i, 1], color="k", ls="--", lw=1.2)
+    ax.plot(ages, y_exc[i, 1], color=plotting.COLORS["highlight"], lw=1)
+    ax.set_title(f"{cy(i)}: {len(near)} normal years within ±{K_CTX}", fontsize=9)
+for ax in axes[1]:
+    ax.set_xlabel("Age")
+for ax in axes[:, 0]:
+    ax.set_ylabel("logit$(q_x)$, males")
+plotting.save_figure(fig, "fig-s7-baseline-context")
+plt.show()
+```
+
+```{python}
+#| label: fig-s7-residual-heatmaps
+#| fig-cap: "Residuals (observed minus baseline logit(q_x)) of every exceptional country-year, by type and sex: one row per country-year, ordered by event and year; red is excess mortality, blue a deficit, white a cell left out. The colour scale is clipped at the 99th percentile of |r|."
+order = {d: np.flatnonzero(types == d)[np.lexsort((pops[ci][types == d], years[ti][types == d],
+                                                    groups[types == d]))] for d in PROFILE_TYPES}
+vmax = float(np.nanquantile(np.abs(R[np.isin(types, PROFILE_TYPES)]), 0.99))
+fig, axes = plt.subplots(2, len(PROFILE_TYPES), figsize=(11, 7), sharex=True)
+cmap = plt.get_cmap("RdBu_r").copy()
+cmap.set_bad("white")
+for j, d in enumerate(PROFILE_TYPES):
+    for s in range(S):
+        ax = axes[s, j]
+        im = ax.imshow(R[order[d], s], aspect="auto", cmap=cmap, vmin=-vmax, vmax=vmax, interpolation="nearest",
+                       extent=(-0.5, A - 0.5, len(order[d]) - 0.5, -0.5))
+        ax.grid(False)
+        ax.set_title(f"{TYPES[d].title()}, {SEXES[s].lower()} ({len(order[d])})", fontsize=9)
+        ax.set_yticks([])
+    axes[1, j].set_xlabel("Age")
+axes[0, 0].set_ylabel("country-years")
+axes[1, 0].set_ylabel("country-years")
+fig.colorbar(im, ax=axes, shrink=0.6, label="residual, logit scale")
+plotting.save_figure(fig, "fig-s7-residual-heatmaps")
+plt.show()
+```
+
+The heatmaps show what the profiles will average.  War residuals are
+concentrated in young men in some events and spread more widely in others;
+respiratory residuals differ from pandemic to pandemic, from the
+young-adult excess of 1918 to the old-age excess of COVID-19; enteric
+residuals are few and broad.
+
+## Step 4 — profiles and intensities
+
+The profile of a type is its mean residual scaled to unit length (paper
+§6.3), smoothed along age by a
+Savitzky–Golay filter (window `{python} f"{PP['sg_window']}"` ages, degree
+`{python} f"{PP['sg_poly']}"`) for each sex with the end ages kept, and
+rescaled.  The type "other"
+(`{python} f"{int(n_type['other'])}"` country-years of famine, measles and
+smallpox) is too heterogeneous for a profile; its years keep their
+residuals.  The intensity of a country-year is the least-squares
+coefficient of its residual on its type's profile (paper §6.3), over the
+cells not left out.
+
+```{python}
+#| label: c08-profiles
+#| code-summary: "Profiles, intensities, explained fractions and the null band"
+def smooth(delta):
+    return ds.sg_smooth(delta, window=PP["sg_window"], poly=PP["sg_poly"])
+
+
+raw, prof, n_empty = {}, {}, {}
+for d in PROFILE_TYPES:
+    raw[d], n_empty[d] = ds.profile(R[types == d])
+    prof[d] = smooth(raw[d])
+lam = np.full(n_exc, np.nan)
+fit = np.zeros_like(R)
+for d in PROFILE_TYPES:
+    m = types == d
+    lam[m] = ds.intensities(R[m], prof[d])
+    fit[m] = lam[m, None, None] * prof[d]
+expl_row = np.full(n_exc, np.nan)
+expl = {}
+for d in PROFILE_TYPES:
+    m = types == d
+    expl_row[m], expl[d] = ds.explained_fraction(R[m], fit[m])
+
+# The null band: intensities of the clean pseudo-events (true intensity 0) under the chosen baseline.
+r_null, t_null = ds.pseudo_residuals(holdout, M, G, observed, de, SPECS, CHOSEN, **HOLD)
+null_lam = pd.concat([pd.DataFrame({"type": d, "lam": ds.intensities(r_null[t_null == d], prof[d])})
+                      for d in PROFILE_TYPES if (t_null == d).any()], ignore_index=True)
+band = {d: ds.null_band(null_lam.loc[null_lam["type"] == d, "lam"].to_numpy(), PP["null_quantiles"])
+        for d in PROFILE_TYPES}
+
+
+def cos(a, b):
+    return float(np.sum(a * b) / np.linalg.norm(a) / np.linalg.norm(b))
+
+
+rows_ = []
+for d in PROFILE_TYPES:
+    m = types == d
+    rows_.append({"type": TYPES[d], "n": int(m.sum()), "cos raw/smooth": cos(raw[d], prof[d]),
+                  "cos F": cos(raw[d][0], prof[d][0]), "cos M": cos(raw[d][1], prof[d][1]),
+                  "peak F": int(ages[np.argmax(prof[d][0])]), "peak M": int(ages[np.argmax(prof[d][1])]),
+                  "median λ": float(np.median(lam[m])), "λ < 0": int((lam[m] < 0).sum()),
+                  "null band": f"{band[d][0]:+.2f} … {band[d][1]:+.2f}",
+                  "below band": int((lam[m] < band[d][0]).sum()), "above band": int((lam[m] > band[d][1]).sum()),
+                  "explained": expl[d], "empty cells": n_empty[d]})
+prof_tab = pd.DataFrame(rows_).set_index("type")
+print(prof_tab.round(3).to_string())
+print(f"\nType 'other': {[cy(i) for i in np.flatnonzero(types == 4)]}")
+
+WORD = {1: "War", 2: "Resp", 3: "Enteric"}
+for d in PROFILE_TYPES:
+    r_ = prof_tab.loc[TYPES[d]]
+    w = WORD[d]
+    latex.report(f"excCos{w}", r_["cos raw/smooth"], digits=3, desc=f"Cosine of raw and smoothed {TYPES[d]} profile")
+    latex.report(f"excCos{w}Female", r_["cos F"], digits=3, desc=f"Cosine of raw and smoothed {TYPES[d]} profile, females")
+    latex.report(f"excPeak{w}Female", r_["peak F"], desc=f"Age at the peak of the smoothed {TYPES[d]} profile, females")
+    latex.report(f"excPeak{w}Male", r_["peak M"], desc=f"Age at the peak of the smoothed {TYPES[d]} profile, males")
+    _pf, _pm = int(r_["peak F"]), int(r_["peak M"])
+    latex.report(f"excPeak{w}Sexes", f"{_pf}/{_pm}",
+                 text=f"{_pf} for both sexes" if _pf == _pm else f"{_pf} for women and {_pm} for men",
+                 desc=f"Ages at the peak of the smoothed {TYPES[d]} profile, as words")
+    latex.report(f"excLamMedian{w}", r_["median λ"], digits=2, desc=f"Median intensity, {TYPES[d]}")
+    latex.report(f"excNNeg{w}", r_["λ < 0"], desc=f"Negative intensities, {TYPES[d]}")
+    latex.report(f"excNBelow{w}", r_["below band"], desc=f"Intensities below the null band, {TYPES[d]}")
+    latex.report(f"excNAbove{w}", r_["above band"], desc=f"Intensities above the null band, {TYPES[d]}")
+    latex.report(f"excNullLow{w}", band[d][0], digits=2, signed=True, desc=f"Lower end of the null band of intensities, {TYPES[d]}")
+    latex.report(f"excNullHigh{w}", band[d][1], digits=2, signed=True, desc=f"Upper end of the null band of intensities, {TYPES[d]}")
+    latex.report(f"excExpl{w}", 100 * r_["explained"], digits=0,
+                 desc=f"Percent of the residual sum of squares explained by the {TYPES[d]} profile (in sample)")
+latex.report("excNNeg", int(prof_tab["λ < 0"].sum()), desc="Negative intensities, all profile types")
+latex.report("excNBelow", int(prof_tab["below band"].sum()), desc="Intensities below the null band, all profile types")
+latex.report("excCosMin", float(prof_tab["cos raw/smooth"].min()), digits=3, desc="Smallest raw/smooth profile cosine")
+latex.report("excSgWindow", PP["sg_window"], desc="Window (ages) of the Savitzky-Golay smoothing of the profiles")
+```
+
+```{python}
+#| label: fig-s7-disruption-profiles
+#| fig-cap: "Disruption profiles by type (unit vectors over both sexes and all ages): smoothed (bold) and raw (faint), female (red) and male (blue)."
+fig, axes = plt.subplots(1, len(PROFILE_TYPES), figsize=(11, 3.6), sharey=True)
+for ax, d in zip(axes, PROFILE_TYPES, strict=True):
+    for s in range(S):
+        col = plotting.COLORS[["female", "male"][s]]
+        ax.plot(ages, raw[d][s], color=col, lw=0.6, alpha=0.4)
+        ax.plot(ages, prof[d][s], color=col, lw=1.6, label=SEXES[s].lower())
+    ax.axhline(0, color="k", lw=0.5)
+    ax.set_title(f"{TYPES[d].title()} ({int((types == d).sum())} country-years)", fontsize=10)
+    ax.set_xlabel("Age")
+axes[0].set_ylabel(r"profile $\hat\delta_d$")
+axes[0].legend(fontsize=8)
+plotting.save_figure(fig, "fig-s7-disruption-profiles")
+plt.show()
+```
+
+```{python}
+#| label: fig-s7-intensity-dist
+#| fig-cap: "Intensities of the exceptional country-years by type. The shaded band is the central 95% of the intensities of pseudo-events (normal years, true intensity 0) under the same baseline: an intensity inside it is not distinguishable from no disruption."
+fig, axes = plt.subplots(1, len(PROFILE_TYPES), figsize=(11, 3.4))
+for ax, d in zip(axes, PROFILE_TYPES, strict=True):
+    v = lam[types == d]
+    ax.axvspan(*band[d], color=plotting.COLORS["grey"], alpha=0.3, lw=0, label="null band")
+    ax.hist(v, bins=30, color=plotting.COLORS[TYPES[d]], alpha=0.85)
+    ax.axvline(np.median(v), color="k", lw=1, ls="--", label=f"median {np.median(v):.2f}")
+    ax.set_title(TYPES[d].title(), fontsize=10)
+    ax.set_xlabel(r"intensity $\hat\lambda$")
+    ax.legend(fontsize=7)
+axes[0].set_ylabel("country-years")
+plotting.save_figure(fig, "fig-s7-intensity-dist")
+plt.show()
+```
+
+```{python}
+#| label: fig-s7-explained-fraction
+#| fig-cap: "Share of each exceptional country-year's residual sum of squares explained by its type's profile (uncentred, in sample). The dashed line is the pooled share of the type."
+fig, axes = plt.subplots(1, len(PROFILE_TYPES), figsize=(11, 3.4), sharey=True)
+for ax, d in zip(axes, PROFILE_TYPES, strict=True):
+    v = expl_row[types == d]
+    ax.hist(v, bins=np.linspace(0, 1, 41), color=plotting.COLORS[TYPES[d]], alpha=0.85)
+    ax.axvline(expl[d], color="k", ls="--", lw=1)
+    ax.set_title(f"{TYPES[d].title()}: pooled {100 * expl[d]:.0f}%", fontsize=10)
+    ax.set_xlabel("explained share")
+axes[0].set_ylabel("country-years")
+plotting.save_figure(fig, "fig-s7-explained-fraction")
+plt.show()
+```
+
+```{python}
+#| label: c08-events
+#| code-summary: "Intensities by historical event, and the war profile without the expeditionary wars"
+in_prof = np.isin(types, PROFILE_TYPES)
+ev_tab = (pd.DataFrame({"group": groups[in_prof], "type": types[in_prof], "lam": lam[in_prof],
+                        "above": [float(lam[i] > band[types[i]][1]) for i in np.flatnonzero(in_prof)]})
+          .groupby(["type", "group"]).agg(n=("lam", "size"), median_lam=("lam", "median"), share_above=("above", "mean")))
+print(ev_tab.rename(index=group_name, level="group").round(2).to_string())
+exp_ = np.isin(events, PFIG["expeditionary"])
+war_wo = smooth(ds.profile(R[(types == 1) & ~exp_])[0])
+lam_exp = lam[exp_]
+print(f"\nExpeditionary wars ({', '.join(PFIG['expeditionary'])}): {int(exp_.sum())} country-years, median intensity "
+      f"{np.median(lam_exp):.2f}; war profile without them: cosine {cos(war_wo, prof[1]):.4f} with the full one")
+c0, c1 = PFIG["child_ages"]
+flu = PFIG["quoted_events"]["Flu"]
+resp_child = {g: float(np.nanmean(R[(types == 2) & (groups == g)][:, 0, c0:c1 + 1]))
+              for g in np.unique(groups[types == 2])}
+print(f"Respiratory, women aged {c0}–{c1}: mean residual by event "
+      + ", ".join(f"{group_name(g)} {v:+.2f}" for g, v in resp_child.items()))
+latex.report("excChildFluFemale", resp_child[flu], digits=2, signed=True,
+             desc=f"Mean residual of women at the child ages, {EVENT_NAME[flu]}")
+latex.report("excChildOtherRespFemale", max(abs(v) for g, v in resp_child.items() if g != flu), digits=2,
+             desc="Largest absolute mean residual of women at the child ages, other respiratory events")
+latex.report("excNExpeditionary", int(exp_.sum()), desc="Country-years of the expeditionary wars (Boer, Korean)")
+latex.report("excLamExpeditionary", float(np.median(lam_exp)), digits=2, desc="Median intensity of the expeditionary wars")
+latex.report("excCosNoExpeditionary", cos(war_wo, prof[1]), digits=4,
+             desc="Cosine of the war profile without the expeditionary wars and the full war profile")
+# The weak influenza pandemics of the text: the respiratory entries of the dictionary other than the two
+# events quoted for their profiles (COVID-19 and the 1918 influenza).  Macro names from the entry's name,
+# e.g. "Russian influenza" → excLamMedianRussianFlu.
+weak = [r_ for r_ in dictionary.itertuples()
+        if r_.type == TYPES[2] and r_.id not in PFIG["quoted_events"].values()]
+in_weak = np.isin(events, [r_.id for r_ in weak])
+for r_ in weak:
+    flu_name = r_.event.title().replace(" Influenza", "Flu").replace(" ", "")
+    latex.report(f"excLamMedian{flu_name}", float(np.median(lam[events == r_.id])), digits=2,
+                 desc=f"Median intensity, {EVENT_NAME[r_.id]}")
+n_above_weak = int((lam[in_weak] > band[2][1]).sum())
+print(f"Weak influenza pandemics ({', '.join(EVENT_NAME[r_.id] for r_ in weak)}): "
+      f"{n_above_weak} of {int(in_weak.sum())} country-years above the null band")
+latex.report("excNWeakFlu", int(in_weak.sum()), desc="Country-years of the weak influenza pandemics")
+latex.report("excNAboveBandWeakFlu", n_above_weak,
+             desc="Country-years of the weak influenza pandemics above the respiratory null band")
+```
+
+```{python}
+#| echo: false
+_cos_ok = [TYPES[d] for d in PROFILE_TYPES if prof_tab.loc[TYPES[d], "cos raw/smooth"] > PFIG["paper_cosine"]]
+_cos_bad = [TYPES[d] for d in PROFILE_TYPES if prof_tab.loc[TYPES[d], "cos raw/smooth"] <= PFIG["paper_cosine"]]
+```
+
+The **war** profile is concentrated in young men, peaking at age
+`{python} num("excPeakWarMale")`, with a much smaller and flatter excess for
+women.  The **respiratory** profile is broad and irregular: it averages
+pandemics with opposite age patterns (Step 5).  Its female half keeps an
+excess at ages `{python} f"{PFIG['child_ages'][0]}–{PFIG['child_ages'][1]}"`
+(peak at `{python} num("excPeakRespFemale")`), but this one is genuine: it
+comes from the `{python} EVENT_NAME[PFIG["quoted_events"]["Flu"]]` (mean
+residual of girls `{python} num("excChildFluFemale")`), the other pandemics
+being within ±`{python} num("excChildOtherRespFemale")`.  The **enteric** profile is
+raised over childhood and adult ages, peaking at
+`{python} num("excPeakEntericFemale")` (women) and
+`{python} num("excPeakEntericMale")` (men), not concentrated in infants and
+young children as cholera would suggest.
+Smoothing changes the profiles little — cosines of raw and smoothed
+`{python} num("excCosWar")` (war), `{python} num("excCosResp")`
+(respiratory) and `{python} num("excCosEnteric")` (enteric) — but the
+cosine exceeds `{python} f"{PFIG['paper_cosine']:g}"` only for
+`{python} " and ".join(_cos_ok) or "none"`, not for `{python} " and ".join(_cos_bad) or "any type"`.
+
+The null bands are wide — an intensity must exceed
+`{python} num("excNullHighWar")` for a war,
+`{python} num("excNullHighResp")` for a respiratory and
+`{python} num("excNullHighEnteric")` for an enteric pandemic to stand out
+from the year-to-year noise of a baseline.  Of the
+`{python} num("excNNeg")` negative intensities only
+`{python} num("excNBelow")` fall below their band: almost all are
+country-years whose event left no detectable mark, not deficits.  That is
+common: `{python} num("excNAboveWar")` of
+`{python} num("excNWar")` war country-years and
+`{python} num("excNAboveResp")` of `{python} num("excNResp")` respiratory
+ones lie above the band.  By event (table above), the influenza pandemics
+of 1889–90, 1957–58 and 1968–69 barely register at annual resolution;
+1918 and the World Wars do.  The Boer and Korean Wars — expeditionary wars
+fought far from home — have a median intensity of
+`{python} num("excLamExpeditionary")` and no country-year above the band;
+leaving them out changes the war profile very little (cosine
+`{python} num("excCosNoExpeditionary")`).
+
+## Step 5 — one profile per type, per event, or per sub-cluster?
+
+Step 4 estimates a single profile per type.  The heatmaps suggest that
+events of one type differ, and Ward sub-clusters of the residuals are one
+way to capture it.  Three alternatives are compared, each
+estimated without the population family it is scored on
+(`mdmx.disruption.holdout_heterogeneity`): **(a)** one profile per type;
+**(b)** one profile per historical event — the dictionary entries grouped
+into wars and pandemics (World War I, World War II, 1918, COVID-19, the
+cholera pandemics, …) — where the event has at least
+`{python} f"{PH['min_event_n']}"` country-years in the training families,
+the type's profile otherwise; **(c)** Ward sub-clusters
+(PCA to at most `{python} f"{PH['max_pca']}"` components, the first
+`{python} f"{PH['n_use']}"` clustered, K from
+`{python} f"{min(PH['k_range'])}"`–`{python} f"{max(PH['k_range'])}"` by
+silhouette, sub-clusters of at least `{python} f"{PH['min_size']}"`), with a
+held-out country-year fitted by whichever sub-profile fits it best — a
+choice made with the held-out residual itself, which favours (c).  The
+score is the pooled explained share of the held-out residuals' sum of
+squares.
+
+```{python}
+#| label: c08-heterogeneity
+#| code-summary: "Held-out comparison of the three alternatives (cached; under a minute)"
+HSET = {"profile_types": PROFILE_TYPES, "min_event_n": PH["min_event_n"], "sg_window": PP["sg_window"],
+        "sg_poly": PP["sg_poly"], "k_range": PH["k_range"], "min_size": PH["min_size"],
+        "max_pca": PH["max_pca"], "n_use": PH["n_use"]}
+
+
+def _heterogeneity():
+    scores_, prof_ = ds.holdout_heterogeneity(R, types, groups, families, HSET)
+    labels_ = {str(d): ds.ward_subclusters(R[types == d], k_range=HSET["k_range"], min_size=HSET["min_size"],
+                                           max_pca=HSET["max_pca"], n_use=HSET["n_use"])[0] for d in PROFILE_TYPES}
+    return {"scores": scores_, "sub_labels": labels_,
+            "profiles": {"type": {str(k): v for k, v in prof_["type"].items()}, "group": prof_["group"],
+                         "sub": {str(k): v for k, v in prof_["sub"].items()}}}
+
+
+# The residuals are computed in this chapter, so their content (not just the input artefacts) keys the cache.
+het = artifacts.stage("disruption_heterogeneity", _heterogeneity, inputs=["disruption_holdout"],
+                      params={"settings": HSET, "data": artifacts.content_hash(
+                          {"R": R, "types": types, "groups": groups, "families": families})},
+                      code=[_heterogeneity, ds, clus.ward_clustering],
+                      desc="One profile per type, per event or per Ward sub-cluster, scored on held-out population families")
+hs = het["scores"]
+agg = hs.groupby(["sample", "type", "alternative"])[["sse", "sst"]].sum()
+agg_all = hs.groupby(["sample", "alternative"])[["sse", "sst"]].sum()
+share = (1 - agg["sse"] / agg["sst"]).unstack("alternative")
+share_all = (1 - agg_all["sse"] / agg_all["sst"]).unstack("alternative")
+K_SUB = {int(k): len(v) for k, v in het["profiles"]["sub"].items()}
+OWN = sorted(het["profiles"]["group"])
+# Each type's contribution to the pooled gain over one profile per type (points of the pooled share).
+sst_all = agg.loc["held-out"]["sst"].groupby("type").first().sum()
+sse_h = agg.loc["held-out"]["sse"].unstack("alternative")
+contrib = pd.DataFrame({alt: 100 * (sse_h["type"] - sse_h[alt]) / sst_all for alt in ("event", "subcluster")})
+print(share.round(3).to_string())
+print(share_all.round(3).to_string())
+print("\nContribution of each type to the held-out gain over type profiles (points):")
+print(contrib.rename(index=TYPES).round(2).to_string())
+print(f"\nSub-clusters (all data): {K_SUB}; events with their own profile (all data): "
+      f"{[group_name(g) for g in OWN]}")
+ALT = {"type": "Type", "event": "Event", "subcluster": "Sub"}
+for samp, tag in (("held-out", "Held"), ("in-sample", "In")):
+    for alt, aw in ALT.items():
+        latex.report(f"excExpl{tag}{aw}", 100 * share_all.loc[samp, alt], digits=0,
+                     desc=f"Percent of residual sum of squares explained ({samp}), {alt} profiles, all types")
+        for d in PROFILE_TYPES:
+            latex.report(f"excExpl{tag}{aw}{WORD[d]}", 100 * share.loc[(samp, d), alt], digits=0,
+                         desc=f"Percent explained ({samp}), {alt} profiles, {TYPES[d]}")
+latex.report("excMinEventN", PH["min_event_n"], desc="Country-years an event needs for a profile of its own")
+for d in PROFILE_TYPES:
+    latex.report(f"excKSub{WORD[d]}", K_SUB[d], desc=f"Number of Ward sub-clusters, {TYPES[d]} (all data)")
+_ks = [int(K_SUB[d]) for d in PROFILE_TYPES]
+latex.report("excKSubText", "/".join(map(str, _ks)),
+             text=(f"{latex.number_word(_ks[0]).lower()} sub-clusters in each type" if len(set(_ks)) == 1
+                   else ", ".join(map(str, _ks[:-1])) + f" and {_ks[-1]} sub-clusters for "
+                   + ", ".join(TYPES[d] for d in PROFILE_TYPES[:-1]) + f" and {TYPES[PROFILE_TYPES[-1]]}"),
+             desc="The numbers of Ward sub-clusters of the types, as words")
+# What Ward's sub-clusters separate: their events, their intensities, and how different their profiles are.
+sub_lab = {int(k): v for k, v in het["sub_labels"].items()}
+sub_rows = []
+for d in PROFILE_TYPES:
+    m = np.flatnonzero(types == d)
+    subs = het["profiles"]["sub"][str(d)]
+    for k in range(K_SUB[d]):
+        mk = m[sub_lab[d] == k]
+        top = pd.Series(groups[mk]).value_counts()
+        sub_rows.append({"type": TYPES[d], "sub-cluster": k + 1, "n": len(mk), "median λ": float(np.median(lam[mk])),
+                         "years": f"{years[ti[mk]].min()}–{years[ti[mk]].max()}",
+                         "main events": ", ".join(f"{group_name(g)} {c}" for g, c in top.head(3).items()),
+                         "cos with sub-cluster 1": cos(subs[k], subs[0])})
+sub_tab = pd.DataFrame(sub_rows)
+print(sub_tab.round(3).to_string(index=False))
+small = sub_tab.loc[sub_tab.groupby("type")["n"].idxmin()].set_index("type")
+large = sub_tab.loc[sub_tab.groupby("type")["n"].idxmax()].set_index("type")
+for d in PROFILE_TYPES:
+    t_ = TYPES[d]
+    latex.report(f"excSubLamSmall{WORD[d]}", float(small.loc[t_, "median λ"]), digits=2,
+                 desc=f"Median intensity of the smaller Ward sub-cluster, {t_}")
+    latex.report(f"excSubLamLarge{WORD[d]}", float(large.loc[t_, "median λ"]), digits=2,
+                 desc=f"Median intensity of the larger Ward sub-cluster, {t_}")
+    latex.report(f"excSubCos{WORD[d]}", float(cos(*het["profiles"]["sub"][str(d)][:2])) if K_SUB[d] > 1 else 1.0,
+                 digits=3, desc=f"Cosine of the first two Ward sub-cluster profiles, {t_}")
+latex.report("excGainEventResp", float(contrib.loc[2, "event"]), digits=1,
+             desc="Points of the held-out gain of per-event profiles contributed by respiratory pandemics")
+latex.report("excGainEventAll", float(contrib["event"].sum()), digits=1, desc="Held-out gain of per-event profiles (points)")
+latex.report("excGainSubResp", float(contrib.loc[2, "subcluster"]), digits=1,
+             desc="Points of the held-out gain of Ward sub-profiles contributed by respiratory pandemics")
+latex.report("excGainSubWar", float(contrib.loc[1, "subcluster"]), digits=1,
+             desc="Points of the held-out gain of Ward sub-profiles contributed by wars")
+latex.report("excGainSubAll", float(contrib["subcluster"].sum()), digits=1, desc="Held-out gain of Ward sub-profiles (points)")
+for w, g in PFIG["quoted_events"].items():
+    if g not in het["profiles"]["group"]:
+        raise ValueError(f"{EVENT_NAME[g]} has no profile of its own; lower min_event_n or check the data")
+    pg = het["profiles"]["group"][g]
+    for s, sx in enumerate(SEXES):
+        latex.report(f"excPeak{w}{sx}", int(ages[np.argmax(pg[s])]),
+                     desc=f"Age at the peak of the {EVENT_NAME[g]} profile, {sx.lower()}s")
+```
+
+```{python}
+#| label: tbl-s7-subclustering
+#| code-summary: "Table: explained share by alternative, held out and in sample"
+het_tab = pd.DataFrame({
+    "Type": [TYPES[d].title() for d in PROFILE_TYPES] + ["All"],
+    "Country-years": [int((types == d).sum()) for d in PROFILE_TYPES] + [int(np.isin(types, PROFILE_TYPES).sum())],
+    "Sub-clusters": [K_SUB[d] for d in PROFILE_TYPES] + [np.nan],
+    **{f"{lab} (held out)": [100 * share.loc[("held-out", d), alt] for d in PROFILE_TYPES]
+       + [100 * share_all.loc["held-out", alt]] for alt, lab in (("type", "Type"), ("event", "Event"),
+                                                               ("subcluster", "Sub-cluster"))},
+    **{f"{lab} (in sample)": [100 * share.loc[("in-sample", d), alt] for d in PROFILE_TYPES]
+       + [100 * share_all.loc["in-sample", alt]] for alt, lab in (("type", "Type"), ("event", "Event"),
+                                                                ("subcluster", "Sub-cluster"))},
+})
+het_tab["Sub-clusters"] = het_tab["Sub-clusters"].astype("Int64")
+het_tex = het_tab.rename(columns={
+    "Country-years": "Country-\nyears", "Sub-clusters": "Sub-\nclusters",
+    **{f"{lab} ({where})": f"{where.capitalize()} (\\%): {lab.replace('Sub-cluster', 'Sub-' + chr(10) + 'cluster')}"
+       for where in ("held out", "in sample") for lab in ("Type", "Event", "Sub-cluster")}})
+latex.save_table(
+    het_tex, "tbl-s7-subclustering",
+    "Share (\\%) of the residual sum of squares of exceptional country-years explained by one profile per type, "
+    "one per historical event (where it has enough country-years), or the best of the type's Ward sub-cluster "
+    "profiles; held out = profiles estimated without the country-year's population family.  Uncentred, pooled "
+    "over country-years.",
+    formats={c: "{:.0f}" for c in het_tex.columns[3:]} | {"Sub-\nclusters": lambda v: "" if pd.isna(v) else f"{v:.0f}"},
+    group_rows=[len(PROFILE_TYPES)], spanners=": ",
+    rank=[latex.Rank([c for c in het_tex.columns if c.startswith(f"{w} (\\%)")], "max", across="columns")
+          for w in ("Held out", "In sample")],
+    rank_note="of the three ways in each row, held out and in sample apart")
+het_tab.round(0).astype({c: "Int64" for c in het_tab.columns[3:]})
+```
+
+```{python}
+#| label: fig-s7-event-profiles
+#| fig-cap: "Profiles of single historical events with enough country-years (all data), by type: female (top) and male (bottom). The grey line is the type's profile."
+fig, axes = plt.subplots(2, len(PROFILE_TYPES), figsize=(11, 6), sharex=True, sharey="row")
+for j, d in enumerate(PROFILE_TYPES):
+    gs = [g for g in OWN if types[groups == g][0] == d]
+    for s in range(S):
+        ax = axes[s, j]
+        ax.plot(ages, prof[d][s], color=plotting.COLORS["grey"], lw=2.5, label="type")
+        for k, g in enumerate(gs):
+            ax.plot(ages, het["profiles"]["group"][g][s], color=plotting.CLUSTER_COLORS[k % 15], lw=1,
+                    label=f"{group_name(g)} ({int((groups == g).sum())})")
+        ax.axhline(0, color="k", lw=0.5)
+        ax.set_title(f"{TYPES[d].title()}, {SEXES[s].lower()}", fontsize=9)
+    axes[1, j].set_xlabel("Age")
+    axes[0, j].legend(fontsize=6)
+plotting.save_figure(fig, "fig-s7-event-profiles")
+plt.show()
+```
+
+```{python}
+#| label: fig-s7-disruption-subclusters
+#| fig-cap: "Ward sub-cluster profiles within each type (all data): female (top) and male (bottom); the grey line is the type's profile. The legend gives each sub-cluster's size and the range of its years."
+fig, axes = plt.subplots(2, len(PROFILE_TYPES), figsize=(11, 6), sharex=True, sharey="row")
+for j, d in enumerate(PROFILE_TYPES):
+    m = np.flatnonzero(types == d)
+    subs = het["profiles"]["sub"][str(d)]
+    for s in range(S):
+        ax = axes[s, j]
+        ax.plot(ages, prof[d][s], color=plotting.COLORS["grey"], lw=2.5, label="type")
+        for k in range(len(subs)):
+            yrs = years[ti[m[sub_lab[d] == k]]]
+            ax.plot(ages, subs[k][s], color=plotting.CLUSTER_COLORS[k], lw=1,
+                    label=f"{k + 1}: {len(yrs)}, {yrs.min()}–{yrs.max()}")
+        ax.axhline(0, color="k", lw=0.5)
+        ax.set_title(f"{TYPES[d].title()}, {SEXES[s].lower()}", fontsize=9)
+    axes[1, j].set_xlabel("Age")
+    axes[0, j].legend(fontsize=6)
+plotting.save_figure(fig, "fig-s7-disruption-subclusters")
+plt.show()
+```
+
+```{python}
+#| echo: false
+_held = share_all.loc["held-out"]
+_best_alt = str(_held.idxmax())
+_gain_event = 100 * (_held["event"] - _held["type"])
+_gain_sub = 100 * (_held["subcluster"] - _held["type"])
+_rs = sub_tab[(sub_tab["type"] == TYPES[2])].sort_values("n").iloc[0]
+_rs_rows = np.flatnonzero(types == 2)[sub_lab[2] == _rs["sub-cluster"] - 1]
+_rs_main = pd.Series(groups[_rs_rows]).value_counts()
+if len(_rs_main) == 1:
+    _ev_rows = np.flatnonzero((types == 2) & (groups == _rs_main.index[0]))
+    _rest = np.setdiff1d(_ev_rows, _rs_rows)
+    _resp_small_text = (f"{_rs['n']} of the {len(_ev_rows)} country-years of the {group_name(_rs_main.index[0])} "
+                        f"(median intensity {np.median(lam[_rs_rows]):.1f} against {np.median(lam[_rest]):.1f} "
+                        f"for the event's other country-years)")
+else:
+    _resp_small_text = f"{_rs['n']} country-years ({', '.join(f'{group_name(g)} {c}' for g, c in _rs_main.items())})"
+```
+
+Held out, one profile per type explains
+`{python} num("excExplHeldType")` % of the residuals' sum of squares,
+per-event profiles `{python} num("excExplHeldEvent")` % and the best Ward
+sub-profile `{python} num("excExplHeldSub")` %
+(`{python} f"{_gain_event:+.0f}"` and `{python} f"{_gain_sub:+.0f}"`
+percentage points).  Weighted by their share of the residuals,
+respiratory pandemics give `{python} num("excGainEventResp")` of the
+`{python} num("excGainEventAll")` points that per-event profiles gain, and
+`{python} num("excGainSubResp")` of the `{python} num("excGainSubAll")` that
+Ward's sub-profiles gain, wars `{python} num("excGainSubWar")`.  Per type
+(table): respiratory `{python} num("excExplHeldTypeResp")` →
+`{python} num("excExplHeldEventResp")` (event) and
+`{python} num("excExplHeldSubResp")` % (Ward); war
+`{python} num("excExplHeldTypeWar")`, `{python} num("excExplHeldEventWar")`,
+`{python} num("excExplHeldSubWar")` %; enteric
+`{python} num("excExplHeldTypeEnteric")`, `{python} num("excExplHeldEventEnteric")`,
+`{python} num("excExplHeldSubEnteric")` %.  The event profiles show why a
+single respiratory profile does badly: **COVID-19's profile rises with
+age** to peaks at `{python} num("excPeakCovidFemale")` (women) and
+`{python} num("excPeakCovidMale")` (men), while **the 1918 influenza's
+peaks at young adults** (`{python} num("excPeakFluFemale")` and
+`{python} num("excPeakFluMale")`).
+
+Ward's method picks K = `{python} K_SUB[1]`, `{python} K_SUB[2]` and
+`{python} K_SUB[3]` for war, respiratory and enteric pandemics, and in each
+type the smaller sub-cluster holds the most intense country-years (median
+intensity `{python} num("excSubLamSmallWar")`,
+`{python} num("excSubLamSmallResp")` and
+`{python} num("excSubLamSmallEnteric")` against
+`{python} num("excSubLamLargeWar")`, `{python} num("excSubLamLargeResp")`
+and `{python} num("excSubLamLargeEnteric")` in the larger; table above).  For
+wars the two sub-profiles are nearly parallel (cosine
+`{python} num("excSubCosWar")`): Ward separates the severity of a war, not
+the shape of its excess, and both sub-clusters mix World War I and II.  For
+respiratory pandemics the shapes differ (cosine `{python} num("excSubCosResp")`):
+the small sub-cluster is `{python} _resp_small_text` — part of an event,
+chosen by its size.  For enteric pandemics the cosine is
+`{python} num("excSubCosEnteric")`.  A held-out country-year is moreover
+assigned to whichever sub-profile fits it best, a choice made with its own
+residual, which flatters the sub-clusters.  In sample every richer model
+looks better than it does held out.
+
+::: {.callout-note}
+## The profiles used
+The paper uses **one profile per historical event** where the event has
+enough country-years (`event_profile` in the artefact) and the type's
+profile otherwise.  Ward sub-clustering is reported here, held out, but
+is not used: its clusters split severity rather than kind of event,
+select part of one event, and need a country-year's own residual to be
+assigned.
+:::
+
+## Step 6 — two disruptions at once
+
+A war and a pandemic in the same year can be represented by two terms that act
+additively on the log-odds, a property of the model shown in the companion only.  The dictionary labels such years war;
+here the war and respiratory profiles are fitted together with non-negative
+intensities (`mdmx.disruption.composite_fit`), each profile estimated
+without the country-year's population family, and compared with the war
+profile alone.
+
+```{python}
+#| label: c08-composite
+#| code-summary: "War country-years that are also in a respiratory pandemic entry (profiles held out, intensities fitted)"
+all_ev = event_labels.set_index(["pop", "year"])["all_events"]
+dict_type = dict(zip(dictionary["id"], dictionary["type"], strict=True))
+both = np.array([types[i] == 1 and any(dict_type[e] == TYPES[2] for e in all_ev[(pops[ci[i]], int(years[ti[i]]))].split())
+                 for i in range(n_exc)])
+idx_both = np.flatnonzero(both)
+comp = ds.composite_holdout(R, types, families, idx_both, pair=(1, 2), sg_window=PP["sg_window"], sg_poly=PP["sg_poly"])
+_, ex_war = ds.explained_fraction(R[idx_both], comp["fit_single"])
+_, ex_comp = ds.explained_fraction(R[idx_both], comp["fit_pair"])
+print(pd.DataFrame({"country-year": [cy(i) for i in idx_both], "λ war alone": comp["lam_single"],
+                    "λ war (both)": comp["lam_pair"][:, 0], "λ resp. (both)": comp["lam_pair"][:, 1]})
+      .round(2).to_string(index=False))
+print(f"Held-out explained share: war profile alone {ex_war:.3f}; war + respiratory {ex_comp:.3f}")
+latex.report("excNComposite", len(idx_both), desc="War country-years also in a respiratory pandemic entry")
+latex.report("excExplCompositeWar", 100 * ex_war, digits=0, desc="Percent explained (held out), war profile alone, war-and-pandemic years")
+latex.report("excExplCompositeBoth", 100 * ex_comp, digits=0, desc="Percent explained (held out), war + respiratory profiles")
+```
+
+```{python}
+#| echo: false
+_comp_gain = 100 * (ex_comp - ex_war)
+```
+
+Only `{python} f"{len(idx_both)}"` country-years carry both a war and a
+pandemic — 1918 in the belligerents with data — so the test is small.  Adding
+the respiratory profile raises the held-out explained share from
+`{python} num("excExplCompositeWar")` % to
+`{python} num("excExplCompositeBoth")` %
+(`{python} f"{_comp_gain:+.0f}"` points).  A second non-negative term can
+only fit better on the data it is fitted to; what matters is whether the
+gain is large and the intensities plausible (table above).  The composite
+equation is kept as a property of the model, and this test is consistent
+with it but weak.
+
+## Step 7 — the model's fit, and what a disruption does to e₀
+
+```{python}
+#| label: fig-s7-residual-examples
+#| fig-cap: "The disruption model for the two country-years with the largest intensity of each type, in the sex with the larger residual: observed (solid), baseline (dashed) and baseline + intensity × profile (dotted)."
+top = [i for d in PROFILE_TYPES for i in np.flatnonzero(types == d)[np.argsort(-lam[types == d])[:2]]]
+fig, axes = plt.subplots(2, len(PROFILE_TYPES), figsize=(11, 6.4), sharex=True)
+for ax, i in zip(axes.T.flat, top, strict=True):
+    s = int(np.argmax(np.nansum(R[i] ** 2, axis=1)))
+    col = plotting.COLORS[["female", "male"][s]]
+    ax.plot(ages, y_exc[i, s], color=col, lw=1, label="observed")
+    ax.plot(ages, baseline[i, s], color=col, ls="--", lw=1, label="baseline")
+    ax.plot(ages, baseline[i, s] + fit[i, s], color="k", ls=":", lw=1.3, label=r"baseline + $\hat\lambda\hat\delta$")
+    ax.set_title(f"{cy(i)}, {SEXES[s].lower()} ({TYPES[types[i]]}, λ = {lam[i]:.1f})", fontsize=8)
+for ax in axes[1]:
+    ax.set_xlabel("Age")
+for ax in axes[:, 0]:
+    ax.set_ylabel("logit$(q_x)$")
+axes[0, 0].legend(fontsize=7)
+plotting.save_figure(fig, "fig-s7-residual-examples")
+plt.show()
+```
+
+The residuals at ages a type should leave alone give a check of the baselines, in the
+companion only; the pseudo-events of Step 2 are the direct check, and the figure
+below adds their residuals (clean, under the same baseline) as the
+reference for "no disruption".
+
+```{python}
+#| label: fig-s7-residual-quality
+#| fig-cap: "Residuals at ages a type is expected to leave unchanged: war, females aged 60–79; enteric, both sexes aged 70 and over. Filled: exceptional country-years; outline: pseudo-events of the same type without a disruption (the reference). Means in the legend."
+qa, qb_ = PFIG["quiet_war_female"], PFIG["quiet_enteric"]
+quiet = {"war": (R[types == 1][:, 0, qa[0]:qa[1] + 1], r_null[t_null == 1][:, 0, qa[0]:qa[1] + 1],
+                 f"War: females {qa[0]}–{qa[1]}"),
+         "enteric": (R[types == 3][:, :, qb_[0]:qb_[1] + 1], r_null[t_null == 3][:, :, qb_[0]:qb_[1] + 1],
+                     f"Enteric: both sexes {qb_[0]}+")}
+fig, axes = plt.subplots(1, 2, figsize=(10, 3.6))
+for ax, (k, (real, ref, title)) in zip(axes, quiet.items(), strict=True):
+    a_, b_ = real[np.isfinite(real)].ravel(), ref[np.isfinite(ref)].ravel()
+    bins = np.linspace(-1, 1, 41)
+    ax.hist(np.clip(a_, -1, 1), bins=bins, density=True, color=plotting.COLORS[k], alpha=0.7,
+            label=f"exceptional, mean {a_.mean():+.3f}")
+    ax.hist(np.clip(b_, -1, 1), bins=bins, density=True, histtype="step", color="k",
+            label=f"pseudo-events, mean {b_.mean():+.3f}")
+    ax.axvline(0, color="k", lw=0.5)
+    ax.set_title(title, fontsize=10)
+    ax.set_xlabel("residual, logit scale (clipped at ±1)")
+    ax.legend(fontsize=7)
+    latex.report(f"excQuiet{k.title()}Mean", float(a_.mean()), digits=3, signed=True,
+                 desc=f"Mean residual at the quiet ages, {k} (exceptional country-years)")
+    latex.report(f"excQuiet{k.title()}Null", float(b_.mean()), digits=3, signed=True,
+                 desc=f"Mean residual at the quiet ages, {k} (pseudo-events)")
+war_rows = np.flatnonzero(types == 1)
+quiet_by_event = (pd.DataFrame({"group": groups[war_rows],
+                                "sum": np.nansum(R[war_rows, 0, qa[0]:qa[1] + 1], axis=1),
+                                "cells": np.isfinite(R[war_rows, 0, qa[0]:qa[1] + 1]).sum(axis=1)})
+                  .groupby("group").sum())
+quiet_by_event["mean"] = quiet_by_event["sum"] / quiet_by_event["cells"]
+quiet_by_event["share of excess"] = quiet_by_event["sum"] / quiet_by_event["sum"].sum()
+quiet_top = quiet_by_event.sort_values("sum", ascending=False).head(2)
+plotting.save_figure(fig, "fig-s7-residual-quality")
+plt.show()
+```
+
+Neither distribution shows the systematic negative bias of a naïve
+projection.  Enteric residuals at 70 and over average
+`{python} num("excQuietEntericMean")` (pseudo-events
+`{python} num("excQuietEntericNull")`).  War residuals of women aged
+60–79 average `{python} num("excQuietWarMean")` against
+`{python} num("excQuietWarNull")` for pseudo-events.  The largest
+contributions come from `{python} " and ".join(f"{group_name(g)} ({100 * r['share of excess']:.0f} %, mean {r['mean']:+.2f})" for g, r in quiet_top.iterrows())`;
+these ages are little affected rather than unaffected, and part of the
+excess may be baseline error over long spells.
+
+The complete model (paper §6.4, Eq. 17) is chapter 07's schedule of a
+regime at a target e₀ plus λ·δ_d.  Starting from the typical schedule at
+e₀ = `{python} f"{PFIG['impact_e0']:g}"` (calibrated exactly), the figure
+shows what each type's profile does to female and male e₀ as its intensity
+rises to the `{python} f"{100 * PFIG['impact_quantile']:.0f}"`th percentile
+of the observed positive intensities.
+
+```{python}
+#| label: fig-s7-disruption-impact
+#| fig-cap: "Life expectancy under a disruption of each type, applied to the typical schedule at e0 = 70 (chapter 07): female (solid) and male (dashed) e0 as the intensity rises from 0 to the 99th percentile of the type's positive intensities; dots mark the median positive intensity."
+z0 = tr.generate(traj, None, np.array([PFIG["impact_e0"]]), bracket=P.section("trajectories")["calibration_bracket"])[0]
+e0_0 = lifetable.e0_from_logit(z0)
+fig, ax = plt.subplots(figsize=(7, 4.2))
+for d in PROFILE_TYPES:
+    pos_ = lam[(types == d) & (lam > 0)]
+    grid_ = np.linspace(0, np.quantile(pos_, PFIG["impact_quantile"]), 60)
+    e0g = lifetable.e0_from_logit(ds.apply(z0[None], prof[d], grid_))
+    med = float(np.median(pos_))
+    e0m = lifetable.e0_from_logit(ds.apply(z0, prof[d], med))
+    for s, ls in ((0, "-"), (1, "--")):
+        ax.plot(grid_, e0g[:, s], color=plotting.COLORS[TYPES[d]], ls=ls, lw=1.4,
+                label=f"{TYPES[d]}, {SEXES[s].lower()}")
+        ax.plot(med, e0m[s], "o", color=plotting.COLORS[TYPES[d]], ms=4)
+        latex.report(f"excLoss{WORD[d]}{SEXES[s]}", float(e0_0[s] - e0m[s]), digits=1,
+                     desc=f"Loss of {SEXES[s].lower()} e0 (years) at the median positive {TYPES[d]} intensity, "
+                          f"typical schedule at e0 {PFIG['impact_e0']:g}")
+ax.set_xlabel(r"intensity $\lambda$")
+ax.set_ylabel("$e_0$ (years)")
+ax.legend(fontsize=7, ncol=2)
+latex.report("excImpactEzero", PFIG["impact_e0"], digits=0, desc="e0 of the typical schedule in the disruption-impact figure")
+latex.report("excImpactQuantilePct", 100 * PFIG["impact_quantile"], digits=0,
+             desc="Percentile of a type's positive intensities at which the disruption-impact curves end")
+plotting.save_figure(fig, "fig-s7-disruption-impact")
+plt.show()
+```
+
+At its median positive intensity a war costs men
+`{python} num("excLossWarMale")` years of e₀ and women
+`{python} num("excLossWarFemale")`; a respiratory
+pandemic `{python} num("excLossRespMale")` and
+`{python} num("excLossRespFemale")`; an enteric one
+`{python} num("excLossEntericMale")` and
+`{python} num("excLossEntericFemale")`.  Because the
+disruption adds to the logit, the same λ·δ can be applied to any baseline —
+the model's *baseline independence* — but how much e₀ it
+costs depends on the baseline: the same log-odds ratio removes more years
+where mortality at the affected ages is higher.
+
+## The artefact for later chapters
+
+```{python}
+#| label: c08-artefact
+#| code-summary: "Save the artefact `disruption`"
+disruption = {
+    "baseline_method": CHOSEN, "baseline_spec": CHOSEN_SPEC, "prior_spec": SPECS.get(PRIOR, {}),
+    "c_idx": ci, "t_idx": ti, "pops": pops, "years": years, "ages": ages,
+    "type": types, "event_id": events, "group": groups,
+    "y": y_exc, "baseline": baseline, "residual": R, "left_out": np.isnan(R),
+    "profile_types": np.array(PROFILE_TYPES), "profile_raw": np.stack([raw[d] for d in PROFILE_TYPES]),
+    "profile": np.stack([prof[d] for d in PROFILE_TYPES]),
+    "event_groups": np.array(OWN), "event_profile": np.stack([het["profiles"]["group"][g] for g in OWN]),
+    "intensity": lam, "null_band": np.array([band[d] for d in PROFILE_TYPES]), "explained": expl_row,
+    "profile_choice": "event",      # an event's own profile where it has one, else its type's
+    "min_expected_deaths": PE["min_expected_deaths"],
+}
+artifacts.save("disruption", disruption,
+               inputs=["disruption_holdout", "disruption_heterogeneity", "tensor", "tucker", "event_labels", "hmd_raw"],
+               params=PE, desc="Baselines, residuals, profiles and intensities of every exceptional country-year")
+```
+
+```{python}
+#| label: c08-end
+#| code-summary: "Write this chapter's numbers and close"
+latex.write_numbers()
+provenance.end_chapter();
+```

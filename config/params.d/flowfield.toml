@@ -1,0 +1,116 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# The flow-field forecaster — chapter 11-forecasting; paper §11
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Read with  FlowFieldSettings.from_params(P.section("flowfield"))  (module
+# mdmx.flowfield).  The space (n_pc, the age rank, the smoothing of the age
+# basis) is MDMx's, from [forecast] and [tucker].
+#
+# The form below (FR1-50: the speed on every year, the shape law on the last
+# 50 years, and beyond the frontier point the leading populations' pace,
+# rule FR1) was chosen on the development origins 1900–2000.  The choice rule
+# as first written picked another form; FR1-50 was chosen under a window cap
+# rescaled after the results were seen (docs/changes/12-evaluation.md records
+# both choices and why; the article gives the final form).  The flat all-years
+# form was scored at the origins 2005–2015 before the form was chosen.  The smoothing,
+# frontier-point and relaxation values were not varied in the choice of the
+# form.
+
+[flowfield]
+
+# ── The speed g(s₁) and the shape law f_k(s₁) (LOWESS) ──────────────────────
+# Span of the pooled LOWESS of the speed and of each f_k.
+speed_frac = 0.2
+# Each population's s₁ is smoothed over time before its annual change is
+# taken: a LOWESS with span max(smooth_frac_min, smooth_years / n) for n
+# observed years, so that every local fit spans at least smooth_years years.
+smooth_frac_min = 0.25
+smooth_years = 10
+# statsmodels' delta, as a share of the range of s₁: points this close are
+# interpolated instead of fitted.  An approximation that saves time; with 0
+# the e₀ forecasts move by at most 0.008 y (origins 1950, 1980, 2000).
+lowess_delta = 0.005
+
+# ── The frontier point s₁* ──────────────────────────────────────────────────
+# s₁* is the median s₁ of the population-years whose e₀ (average of the
+# sexes) is at or above this quantile: the top 10 %.
+frontier_quantile = 0.90
+# Beyond its frontier point each f_k runs along its least-squares slope over
+# this share of the range of s₁ before the point.
+tangent_share = 0.15
+
+# ── The relaxation α_k of the deviations from f_k ───────────────────────────
+# Pooled autocorrelation β(ℓ) of the deviations at calendar lags 1..relax_max_lag;
+# log β(ℓ) ≈ ℓ·log α_k is fitted through the origin on the lags with
+# β(ℓ) > relax_min_beta; α_k is at most relax_alpha_max.
+relax_max_lag = 20
+relax_min_beta = 0.05
+relax_alpha_max = 0.999
+
+# Populations with fewer observed years (up to the origin, in the window of
+# each part) are left out of the speed's points, the shape law and the
+# relaxation; they still count for the orientation of s₁, s₁* and the
+# frontier.
+min_years = 10
+
+# ── The pace beyond the frontier (rule FR1) ─────────────────────────────────
+# The leaders are the frontier_k populations with the highest e₀ in each
+# year; their mean oriented s₁ is chain-linked over the years, and its
+# least-squares slope over the last frontier_window years (up to the
+# origin) is the frontier's pace V.  Beyond s₁* the speed is
+# max(0, w·V + (1 − w)·g(s₁*)) with w = n / (n + frontier_n0), n the number
+# of distinct leaders over the window.  With fewer than frontier_min_years
+# linked years the speed stays at g(s₁*) (rule FR0).
+frontier_k = 3
+frontier_window = 50
+frontier_n0 = 3
+frontier_min_years = 10
+# "FR1" is the form.  The variants: "FR0" holds the speed at g(s₁*) beyond
+# s₁*; "FR2" moves s₁ so that the e₀ of the typical schedule (scores
+# [s₁, f₂(s₁), …]) rises by v_e = max(0, w·V_e + (1 − w)·g(s₁*)·e′(s₁*)) a
+# year, ds₁/dt = v_e / e′(s₁), holding s₁ where e′ stops being positive.
+frontier_rule = "FR1"
+# FR2 only: e′(s₁) is a central difference with this step, as a share of the
+# range of s₁ over the population-years up to the origin.
+frontier_e0_step = 0.001
+
+# ── Windows of the parts (years up to the origin; "all" = every year) ──────
+# The speed and its frontier point use every year; the shape law (f_k, α_k
+# and their own frontier point) the last 50 years, so that it describes the
+# current age pattern of improvement.
+speed_window = "all"
+shape_window = 50
+
+# ── Empirical intervals ─────────────────────────────────────────────────────
+# Quantiles of the flow field's own errors at the other origins of the same
+# era, by horizon and sex series; a cell needs at least this many errors.
+interval_min_points = 20
+
+# ── Ablation switches (each removes one part of the form) ──────────────────
+# The values below are the form; the ablation of chapter 12 changes one at a
+# time.  The speed without the frontier's pace is frontier_rule = "FR0".
+# false: the other scores s₂…s_p stay at their jump-off values while s₁
+# moves as in the form.
+shape_law = true
+# How a population's deviation from f_k evolves: "estimated" (decays at the
+# estimated α_k), "persist" (α_k = 1: the jump-off offset from f_k is kept)
+# or "vanish" (α_k = 0: the scores follow f_k from the first forecast year).
+# Must stay "estimated" with shape_law = false, where it has no effect.
+relax = "estimated"
+# false: no jump-off residual; the forecast schedules are the projection of
+# the forecast scores.
+anchor = true
+# λ of the Whittaker smoother of the jump-off residual: the same value as
+# [forecast] anchor_smoothing, where it is explained (one anchor for both
+# forecasters; evaluation.context checks that the two agree).
+anchor_smoothing = 1000.0
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Checks of the flow field (tools/flowfield_parity.py); not part of the
+# forecaster, so changing them changes no cached result.
+# ══════════════════════════════════════════════════════════════════════════════
+
+[flowfield_checks]
+# Seed of the noise that replaces the data after the origin in the
+# no-look-ahead check.
+lookahead_seed = 20261030

@@ -1,0 +1,109 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Parameters of book chapter 07-trajectories (paper §7, "Reconstruction at
+# arbitrary mortality levels").  Read with  P = params();  P.section("trajectories").
+#
+# A schedule of regime k at life expectancy x is the typical schedule at x
+# (chapter 06's e0-conditional mean core, with the LOWESS settings of
+# [clustering.features]) plus the regime's deviation, with the level
+# coordinate shifted so that its e0 is exactly x.
+# ══════════════════════════════════════════════════════════════════════════════
+
+[trajectories]
+
+# ── Candidate deviations (decided by the hold-out below; Sam, 2026-10-26) ────
+# The e0-dependent deviation is a LOWESS of a regime's level-free features
+# against e0; its span (share of the regime's members) is chosen from this
+# grid by the hold-out.  The constant deviation and the typical schedule
+# alone (no deviation) are the other candidates, and the neural candidate
+# below.
+lowess_fracs = [0.2, 0.3, 0.5, 0.8, 1.0]
+# Chapter 06's regimes are built without the level column, so a deviation on
+# their features alone gives every regime the typical overall sex
+# differential.  Each deviation candidate is therefore tried without (false)
+# and with (true) the sex contrast of the level column (Sam, 2026-10-26).
+sex_level_options = [false, true]
+# A regime's support is this central range of its members' e0; outside it a
+# deviation is held at its value at the boundary (trajectories.in_support
+# tells whether a target lies inside; the figures dash the curves outside).
+support_quantiles = [0.05, 0.95]
+
+# ── Hold-out over population families ────────────────────────────────────────
+# Whole population families (a population with its HMD parts) are dealt into
+# this many folds (svdcomp.assign_folds); every candidate is estimated on the
+# other folds and scored on the held-out one.
+n_folds = 10
+fold_seed = 20261026
+# The candidate with the lowest pooled held-out RMSE of logit(q_x) over the
+# non-noise regimes is used.  Its advantage over the others is reported with
+# a bootstrap over families of this many resamples.
+bootstrap_resamples = 1000
+bootstrap_seed = 20261027
+
+# ── Level calibration ─────────────────────────────────────────────────────────
+# Largest shift of the level coordinate G[0,0] tried when matching e0 (level
+# units; one unit is about one year of e0).
+calibration_bracket = 20.0
+
+# ── Inversion check (schedule → regime and e0) ────────────────────────────────
+# A random sample of this many observed country-years is inverted; the e0
+# search runs on a grid of `invert_step` years before a local refinement.
+invert_sample = 400
+invert_seed = 20261028
+invert_step = 1.0
+
+# ── Figures ───────────────────────────────────────────────────────────────────
+# Ages shown against e0 in fig-s6-trajectory-scatter.
+scatter_ages = [0, 5, 25, 45, 65, 85]
+# Target e0 values of fig-s6-example-schedules and fig-s6-cluster-vs-global.
+example_e0 = [45.0, 55.0, 65.0, 75.0, 80.0]
+compare_e0 = [60.0, 75.0]
+# e0 values at which fig-s6-age-rotation shows the slope of logit(q_x), and
+# the half-width (years of e0) of the central difference that gives the slope:
+# wide enough not to follow the small wiggles of the typical schedule's
+# LOWESS (span 0.10) from one e0 to the next.
+rotation_e0 = [45.0, 65.0, 80.0]
+rotation_step = 2.5
+# The rotation is summarised by the slope at the first of these ages relative
+# to the second, and by the share of e0 gains below `young_below` and from
+# `old_from` on.  The shape counts as unchanged if the slope ratio varies by
+# less than `same_shape_tolerance` across the three levels.
+slope_ratio_ages = [85, 0]
+# ... and by the mean slope over these adult ages (inclusive) relative to age 0.
+adult_ages = [50, 70]
+young_below = 15
+old_from = 65
+same_shape_tolerance = 0.1
+# Age groups (first age of each; the last runs to age 109) for the shares of
+# the gain in e0, with their labels.
+age_groups = [0, 1, 15, 50, 65, 80]
+age_group_labels = ["0", "1–14", "15–49", "50–64", "65–79", "80+"]
+# Step (years of e0) of the curves drawn along the trajectories, and the
+# range of the typical schedule's curves (these quantiles of the observed e0;
+# a regime's curves run over its support).
+curve_step = 0.5
+curve_quantiles = [0.01, 0.99]
+# Width (years of e0) of the bands of fig-s6-recon-accuracy.
+accuracy_band = 10.0
+# Check of the sex differential: the observed female-minus-male e0 gap by
+# band of e0 (from, to, width), without all country-years of these regions
+# ([clustering.regions]), whose female advantage is unusually large — so that
+# the shape of the gap is not just a matter of which populations are observed
+# at each level.  The gap counts as narrowing at the lowest mortality if it
+# falls by more than `sex_gap_narrowing` years from its peak.
+sex_gap_bands = [40.0, 85.0, 5.0]
+sex_gap_check_regions = ["Eastern Europe", "Central Europe"]
+sex_gap_narrowing = 0.5
+
+# ── The neural candidate (mdmx.nn) ────────────────────────────────────────────
+# One network for all regimes: inputs the regime (one-hot) and three
+# polynomial terms of e0, outputs the level-free features; early stopping on
+# whole families held out of the training folds.
+[trajectories.neural]
+hidden = [64, 64]
+lr = 0.001
+epochs = 2000
+batch_size = 256
+l2 = 0.0001
+val_frac = 0.2
+patience = 100
+seed = 20261026

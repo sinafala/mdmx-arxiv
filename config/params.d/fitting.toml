@@ -1,0 +1,59 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Parameters of book chapter 09-fitting (paper §9, "Life Table Fitting").
+# Read with  P = params();  P.section("fitting").
+#
+# The fitter takes one schedule and finds the regime k, the e0* and, if the
+# evidence is strong enough, a disruption h with intensity λ ≥ 0:
+#     y = z_k(e0*) + λ δ_h + ε      (chapter 07's generator, chapter 08's profiles)
+# ══════════════════════════════════════════════════════════════════════════════
+
+[fitting]
+
+# ── The fit (Sam, 2026-10-26: exact profile on a grid) ───────────────────────
+# Spacing (years) of the e0 grid on which every regime's calibrated schedule
+# is evaluated once; e0* is refined between grid points by a parabola.
+grid_step = 0.1
+
+# ── Hypotheses (Sam: decided by the hold-out below) ──────────────────────────
+# "type": one profile per disruption type (the paper); "event": one per
+# historical event with at least `min_event_n` training country-years
+# (chapter 08's `event_groups`), plus the type profiles for the rest.  The
+# set with the higher detection of detectable disruptions at the
+# false-positive budget is used; a tie goes to "type".
+hypothesis_sets = ["type", "event"]
+
+# ── Evaluation: folds over population families (Sam: refit per fold) ────────
+# Chapter 07's generator, chapter 08's profiles and the prior scales are
+# estimated from the other folds; every observed normal and every exceptional
+# schedule is fitted once, out of fold.
+n_folds = 10
+fold_seed = 20261031
+
+# ── Decision rule (Sam: 5 % of normal schedules) ─────────────────────────────
+# A schedule is called disrupted if its score (log Bayes factor of its best
+# disrupted against its best undisrupted fit) exceeds the threshold that
+# only this share of *other* families' normal schedules exceeds.
+fp_budget = 0.05
+operating_points = [0.01, 0.05, 0.10]
+
+# ── Cells (Sam: optional mask) ────────────────────────────────────────────────
+# Floored cells are always left out.  In the evaluation a schedule is fitted
+# twice: the second fit also leaves out cells whose deaths expected under the
+# first fit's best undisrupted schedule (× HMD exposure) are below a
+# threshold.  It is chapter 08's rule with chapter 08's threshold,
+# [exceptional] min_expected_deaths (one parameter for both, Sam 2026-11-03):
+# only the baseline differs, because a single schedule has no neighbouring
+# years to interpolate.
+
+# ── Identifiability (paper §9.2) ─────────────────────────────────────────────
+# The trajectory tangent is a central difference of this half-width (years),
+# evaluated every `identifiability_step` years over each regime's support.
+tangent_halfwidth = 0.5
+identifiability_step = 1.0
+
+# ── Figures ───────────────────────────────────────────────────────────────────
+# The false-positive budgets swept in fig-s8-tradeoff: from, to, number of points.
+tradeoff_budgets = [0.005, 0.30, 40]
+# Country-years shown in fig-s8-examples (out-of-fold fits; each must be an
+# observed or exceptional country-year).
+examples = [["FRATNP", 1915], ["FRATNP", 1918], ["ESP", 1918], ["ITA", 2020], ["SWE", 1834], ["SWE", 1950]]

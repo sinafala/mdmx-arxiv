@@ -1,0 +1,141 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Parameters of book chapter 08-exceptional (paper §8, "Exceptional
+# Mortality").  Read with  P = params();  P.section("exceptional").
+#
+# An exceptional country-year (chapter d4's event dictionary) is its baseline
+# — the schedule it would have had without the event — plus λ·δ_d, the
+# profile of its type scaled by an intensity.
+# ══════════════════════════════════════════════════════════════════════════════
+
+[exceptional]
+
+# ── Baseline candidates (paper §8.1; chosen by the hold-out below) ───────────
+# Temporal interpolation of the population's effective cores.  "linear"
+# joins the nearest available years on either side; at a series end it
+# either carries the last core ("carry") or extends a line through the
+# `trend_years` nearest years ("trend").  "local" is a local-linear
+# smoother in calendar year with a tricube window of ± each width below.
+end_rules = ["carry", "trend"]
+trend_years = 10
+local_windows = [5.0, 10.0, 20.0]
+# Penalized projection toward the best interpolation (paper Eq.
+# baseline_penalized): the penalty weights α tried; α = 0 is the naïve
+# projection (Eq. baseline_projection), always reported.
+alphas = [0.3, 1.0, 3.0, 10.0, 30.0, 100.0]
+
+# ── The hold-out: pseudo-events with injected disruptions (Sam, 2026-10-26) ──
+# Every event is shifted as a block to normal years `buffer` years beyond
+# its own span, on each side; those years are hidden from every candidate,
+# the residual of a real event of the same type (another population family)
+# is added to each, and the candidates are scored on how well they recover
+# the clean schedule.  The candidate with the lowest pooled RMSE of
+# logit(q_x) over the injected pseudo-events is used.
+buffer = 1
+injection_seed = 20261029
+bootstrap_resamples = 1000
+bootstrap_seed = 20261030
+
+# ── Cells with too little information (Sam, 2026-10-26) ─────────────────────
+# Exceptional years are never pooled, so a small population's cell can have
+# no death (floored) or one or two.  Leaving out only the zeros would keep
+# the cells that happened to have deaths and bias their residuals upward, so
+# every cell whose *expected* deaths — HMD exposure × the death rate of the
+# linear interpolation (end rule "carry"), which never reads the year — are
+# below this number is left out of the residuals, the profiles, the
+# intensities and the projections' fit.  The fitter of chapter 09 applies
+# the same rule with this threshold (one parameter for both, Sam
+# 2026-11-03), its baseline being the schedule's own first fit without
+# disruption.
+min_expected_deaths = 5.0
+
+# ── The neural core (paper Eqs. neural_core, year_features) ──────────────────
+# Inputs: the country loading of the completion model and nine features of
+# calendar year (frequencies of the Fourier terms below); outputs the core
+# entries.  Kept only if it wins the hold-out (decision D1).
+[exceptional.neural]
+hidden = [64, 64]
+lr = 0.001
+epochs = 2000
+batch_size = 256
+l2 = 0.0001
+val_frac = 0.2
+patience = 100
+seed = 20261029
+freqs = [1.0, 2.0, 5.0]
+
+# ── Profiles and intensities (paper §8.3–8.4) ─────────────────────────────────
+[exceptional.profiles]
+# Types with a profile (chapter d4 labels: 1 war, 2 respiratory,
+# 3 enteric).  "Other" (4) is too heterogeneous: its years keep their
+# residuals and intensities but do not shape a profile.
+profile_types = [1, 2, 3]
+# Savitzky–Golay smoothing of each sex half: window (ages) and degree.
+sg_window = 11
+sg_poly = 3
+# Intensities of pseudo-events without injection (true λ = 0): this central
+# range is the "no detectable disruption" band.
+null_quantiles = [0.025, 0.975]
+
+# ── Within-type heterogeneity (decided after the held-out comparison) ────────
+[exceptional.heterogeneity]
+# (b) Profiles by event: dictionary entries grouped into historical events
+# (an entry not listed is its own group); a group gets its own profile if it
+# has at least `min_event_n` country-years, otherwise its type's.
+min_event_n = 10
+# (c) Ward sub-clusters within a type, as in the paper: PCA to at most
+# `max_pca` components, the first `n_use` clustered, K from `k_range` by
+# silhouette, every sub-cluster with at least `min_size` country-years.
+k_range = [2, 3, 4, 5, 6, 7]
+min_size = 5
+max_pca = 20
+n_use = 10
+
+[exceptional.event_groups]
+"Napoleonic Wars" = ["W03", "W04", "W05"]
+"World War I" = ["W16", "W17", "W18"]
+"World War II" = ["W24", "W25", "W26", "W27"]
+"Second cholera pandemic" = ["E01", "E02", "E03", "E04", "E05", "E06"]
+"Third cholera pandemic" = ["E07", "E08", "E09", "E10", "E11", "E12", "E13", "E14"]
+"Fourth cholera pandemic" = ["E15", "E16", "E17", "E18", "E19"]
+"Fifth cholera pandemic" = ["E20", "E21", "E22", "E23", "E24"]
+"Sixth cholera pandemic" = ["E25", "E26", "E27"]
+
+# ── Figures and checks ────────────────────────────────────────────────────────
+[exceptional.figures]
+# Country-years shown in fig-s7-baseline-selected / -natural / -context and
+# fig-s7-residual-examples (each must be exceptional and have data).
+selected = [["FRATNP", 1915], ["GBRTENW", 1916], ["ESP", 1918], ["ESP", 2020],
+            ["FRATNP", 1832], ["BEL", 1866]]
+# Years either side shown in fig-s7-baseline-context.
+context_years = 5
+# Ages (first, last inclusive) where a type is expected to leave mortality
+# unchanged, for fig-s7-residual-quality: war, females aged 60–79 (paper
+# §8.7); enteric, both sexes from 70 on.
+quiet_war_female = [60, 79]
+quiet_enteric = [70, 109]
+# The disruption-impact figure: a typical schedule at this e0 (chapter 07's
+# generator, calibrated exactly), intensities from 0 to this quantile of the
+# type's positive intensities.
+impact_e0 = 70.0
+impact_quantile = 0.99
+# The completion model of chapter 04 in a year with no observed population:
+# the population and years shown (Step 1).
+completion_example = "SWE"
+completion_example_years = [2019, 2020, 2021, 2022, 2023]
+completion_example_year = 2020
+# Events whose own profiles are quoted in the text (macro names excPeak<name>…).
+quoted_events = { Covid = "R05", Flu = "R02" }
+# Ages at which the female respiratory profile's childhood excess is traced
+# to its events.
+child_ages = [5, 14]
+# The evidence for leaving out cells by expected deaths (Step 3): residuals
+# at these ages (both sexes) of COVID-19 years, by the number of deaths at
+# those ages (bins with these upper limits, and above the last).
+small_cell_ages = [1, 14]
+small_cell_deaths = [50, 200, 1000]
+# The cosine of raw and smoothed profiles is reported against this threshold (§8.5).
+paper_cosine = 0.99
+# Wars whose belligerents' home vital statistics barely register them
+# (expeditionary wars, docs/changes/data-and-tucker.md §4): the war profile
+# is re-estimated without them as a check.
+expeditionary = ["W13", "W28"]
