@@ -448,7 +448,7 @@ window.Quarto = {
 \mathbf{R} = \mathbf{S} \otimes \mathbf{A}_{c}
 \qquad\text{(paper Eq. 21)},
 \]</span></p>
-<p>where <span class="math inline">\(\mathbf{A}_{c}\)</span> keeps only the first <span class="math inline">\(c_{\text{age}}\)</span> columns of the age basis. A small neural network <span class="math inline">\(f_\theta\)</span> maps the logit of the input indicators to the <span class="math inline">\(2 c_{\text{age}}\)</span> core weights (paper Eq. 22), trained so that <span class="math inline">\(\mathbf{R} f_\theta(\cdot)\)</span> — the <em>whole schedule</em> — matches the observed schedule, with extra weight on ages 0–4. Finally, the predicted core weights are moved by (to first order) the smallest amount that makes the schedule reproduce its inputs <em>exactly</em>, as Log-Quad does (paper §8.2, Eq. 23). Two models are fitted (§8.2):</p>
+<p>where <span class="math inline">\(\mathbf{A}_{c}\)</span> keeps only the first <span class="math inline">\(c_{\text{age}}\)</span> columns of the age basis. A small neural network <span class="math inline">\(f_\theta\)</span> maps the logit of the input indicators to the <span class="math inline">\(2 c_{\text{age}}\)</span> core weights (paper Eq. 22), trained so that <span class="math inline">\(\mathbf{R} f_\theta(\cdot)\)</span> — the <em>whole schedule</em> — matches the observed schedule, with extra weight on ages 0–4. Finally, the predicted core weights are moved by (to first order) the smallest amount that makes the schedule reproduce its inputs <em>exactly</em>, as Log-Quad does (paper §8.3, Eq. 23). Two models are fitted (§8.2):</p>
 <ul>
 <li><strong>Model 1</strong> — inputs <span class="math inline">\(\operatorname{logit}({}_5q_0^F)\)</span> and <span class="math inline">\(\operatorname{logit}({}_5q_0^M)\)</span>;</li>
 <li><strong>Model 2</strong> — additionally <span class="math inline">\(\operatorname{logit}({}_{45}q_{15}^F)\)</span> and <span class="math inline">\(\operatorname{logit}({}_{45}q_{15}^M)\)</span>.</li>
@@ -1538,7 +1538,7 @@ Table&nbsp;13.1: Out-of-fold accuracy of MDMx Models 1 and 2 (nested cross-valid
 </div>
 </div>
 <p>The two <strong>diagnostic figures</strong> show the out-of-fold behaviour of each model (nested cross-validation, corrected predictions): the training curve of the final model (top left; validation loss below the training loss simply means the held-out families are, on average, easier to fit), the reproduction of the input ₅q₀ (exact by construction), the predicted against the observed <span class="math inline">\(e_0\)</span>, the error by single year of age, the single-year errors at ages 0–4, the <span class="math inline">\(e_0\)</span> error against the level of <span class="math inline">\(e_0\)</span>, and three example country-years at low, median and high child mortality.</p>
-<div id="0d18b443" class="cell" data-execution_count="15">
+<div id="9c6a5c9c" class="cell" data-execution_count="15">
 <details open="" class="code-fold">
 <summary>Plotting helper for the diagnostic figures</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1"></a><span class="kw">def</span> diagnostic_figure(model, Z_hat, title):</span>
@@ -2817,7 +2817,7 @@ Wilmoth, John R., Sarah Zureick, Vladimir Canudas-Romo, Mie Inoue, and Cheryl Sa
 <span id="cb51-81"><a href="#cb51-81"></a>observed schedule, with extra weight on ages 0–4.</span>
 <span id="cb51-82"><a href="#cb51-82"></a>Finally, the predicted core weights are moved by (to first order) the</span>
 <span id="cb51-83"><a href="#cb51-83"></a>smallest amount that makes the schedule reproduce its inputs *exactly*, as</span>
-<span id="cb51-84"><a href="#cb51-84"></a>Log-Quad does (paper §8.2, Eq. 23).  Two models are fitted (§8.2):</span>
+<span id="cb51-84"><a href="#cb51-84"></a>Log-Quad does (paper §8.3, Eq. 23).  Two models are fitted (§8.2):</span>
 <span id="cb51-85"><a href="#cb51-85"></a></span>
 <span id="cb51-86"><a href="#cb51-86"></a><span class="ss">* </span>**Model 1** — inputs $\operatorname{logit}({}_5q_0^F)$ and</span>
 <span id="cb51-87"><a href="#cb51-87"></a>  $\operatorname{logit}({}_5q_0^M)$;</span>

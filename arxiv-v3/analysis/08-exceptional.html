@@ -378,7 +378,7 @@ window.Quarto = {
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>Paper §6 (“Exceptional Mortality”): the baseline of an exceptional year and its choice on pseudo-events (§6.1), the disruption model, with the event types, the profiles and their estimation (§6.2), the complete model (§6.3), and the profiles, intensities and their effect, with the model’s limitations (§6.4). Produces the tables <code>tbl-s7-baseline-holdout</code> and <code>tbl-s7-subclustering</code> and the figures <code>fig-s7-disruption-profiles</code>, <code>fig-s7-event-profiles</code>, <code>fig-s7-disruption-impact</code>, <code>fig-s7-baseline-selected</code>, <code>fig-s7-baseline-natural</code>, <code>fig-s7-baseline-context</code>, <code>fig-s7-residual-heatmaps</code>, <code>fig-s7-baseline-holdout</code>, <code>fig-s7-intensity-dist</code>, <code>fig-s7-explained-fraction</code>, <code>fig-s7-residual-examples</code>, <code>fig-s7-residual-quality</code> and <code>fig-s7-disruption-subclusters</code>, all in the companion only, as are Ward’s sub-profiles, the baseline independence of a disruption and the composability of two disruptions. Also produces the in-text numbers with prefix <code>exc</code>, and the artefact <code>disruption</code> (baselines, residuals, profiles and intensities of every exceptional country-year) for chapter 09 and the app. Parameters: <code>config/params.d/exceptional.toml</code>. Code: <code>mdmx.disruption</code>.</p>
+<p>Paper §6 (“Exceptional Mortality”): the baseline of an exceptional year and its choice on pseudo-events (§6.1), the residuals and the cells they keep (§6.2), the disruption model, with the event types, the profiles and their estimation (§6.3), the complete model (§6.4), and the profiles, intensities and their effect, with the model’s limitations (§6.5). Produces the tables <code>tbl-s7-baseline-holdout</code> and <code>tbl-s7-subclustering</code> and the figures <code>fig-s7-disruption-profiles</code>, <code>fig-s7-event-profiles</code>, <code>fig-s7-disruption-impact</code>, <code>fig-s7-baseline-selected</code>, <code>fig-s7-baseline-natural</code>, <code>fig-s7-baseline-context</code>, <code>fig-s7-residual-heatmaps</code>, <code>fig-s7-baseline-holdout</code>, <code>fig-s7-intensity-dist</code>, <code>fig-s7-explained-fraction</code>, <code>fig-s7-residual-examples</code>, <code>fig-s7-residual-quality</code> and <code>fig-s7-disruption-subclusters</code>, all in the companion only, as are Ward’s sub-profiles, the baseline independence of a disruption and the composability of two disruptions. Also produces the in-text numbers with prefix <code>exc</code>, and the artefact <code>disruption</code> (baselines, residuals, profiles and intensities of every exceptional country-year) for chapter 09 and the app. Parameters: <code>config/params.d/exceptional.toml</code>. Code: <code>mdmx.disruption</code>.</p>
 </div>
 </div>
 <div id="c08-setup" class="cell" data-execution_count="1">
@@ -1017,7 +1017,7 @@ Figure&nbsp;11.1: Baseline candidates on pseudo-events. Left: RMSE of logit(q_x)
 </section>
 <section id="step-3-baselines-and-residuals-of-the-exceptional-years" class="level2" data-number="11.4">
 <h2 data-number="11.4" class="anchored" data-anchor-id="step-3-baselines-and-residuals-of-the-exceptional-years"><span class="header-section-number">11.4</span> Step 3 — baselines and residuals of the exceptional years</h2>
-<p>The chosen candidate is applied to every exceptional country-year, using all observed years (and the completion model of chapter 04, fitted without the exceptional years). The residual is the observed minus the baseline logit(<span class="math inline">\(q_x\)</span>) (paper §6.1). A cell is left out when its observed <span class="math inline">\(q_x\)</span> was zero (floored) or when the deaths <em>expected</em> under the linear interpolation — HMD exposure × its death rate — are below 5; the second rule removes the upward bias of keeping only the small cells that happened to have deaths, without looking at the deaths themselves.</p>
+<p>The chosen candidate is applied to every exceptional country-year, using all observed years (and the completion model of chapter 04, fitted without the exceptional years). The residual is the observed minus the baseline logit(<span class="math inline">\(q_x\)</span>) (paper §6.2). A cell is left out when its observed <span class="math inline">\(q_x\)</span> was zero (floored) or when the deaths <em>expected</em> under the linear interpolation — HMD exposure × its death rate — are below 5; the second rule removes the upward bias of keeping only the small cells that happened to have deaths, without looking at the deaths themselves.</p>
 <div id="c08-residuals" class="cell" data-execution_count="9">
 <details open="" class="code-fold">
 <summary>Baselines and residuals of the exceptional country-years</summary>
@@ -1256,7 +1256,7 @@ Figure&nbsp;11.5: Residuals (observed minus baseline logit(q_x)) of every except
 </section>
 <section id="step-4-profiles-and-intensities" class="level2" data-number="11.5">
 <h2 data-number="11.5" class="anchored" data-anchor-id="step-4-profiles-and-intensities"><span class="header-section-number">11.5</span> Step 4 — profiles and intensities</h2>
-<p>The profile of a type is its mean residual scaled to unit length (paper §6.2), smoothed along age by a Savitzky–Golay filter (window 11 ages, degree 3) for each sex with the end ages kept, and rescaled. The type “other” (6 country-years of famine, measles and smallpox) is too heterogeneous for a profile; its years keep their residuals. The intensity of a country-year is the least-squares coefficient of its residual on its type’s profile (paper §6.2), over the cells not left out.</p>
+<p>The profile of a type is its mean residual scaled to unit length (paper §6.3), smoothed along age by a Savitzky–Golay filter (window 11 ages, degree 3) for each sex with the end ages kept, and rescaled. The type “other” (6 country-years of famine, measles and smallpox) is too heterogeneous for a profile; its years keep their residuals. The intensity of a country-year is the least-squares coefficient of its residual on its type’s profile (paper §6.3), over the cells not left out.</p>
 <div id="c08-profiles" class="cell" data-execution_count="16">
 <details open="" class="code-fold">
 <summary>Profiles, intensities, explained fractions and the null band</summary>
@@ -1981,7 +1981,7 @@ Figure&nbsp;11.12: Residuals at ages a type is expected to leave unchanged: war,
 </div>
 </div>
 <p>Neither distribution shows the systematic negative bias of a naïve projection. Enteric residuals at 70 and over average +0.023 (pseudo-events +0.001). War residuals of women aged 60–79 average +0.041 against +0.003 for pseudo-events. The largest contributions come from Napoleonic Wars (28 %, mean +0.17) and World War II (26 %, mean +0.02); these ages are little affected rather than unaffected, and part of the excess may be baseline error over long spells.</p>
-<p>The complete model (paper §6.3, Eq. 17) is chapter 07’s schedule of a regime at a target e₀ plus λ·δ_d.&nbsp;Starting from the typical schedule at e₀ = 70 (calibrated exactly), the figure shows what each type’s profile does to female and male e₀ as its intensity rises to the 99th percentile of the observed positive intensities.</p>
+<p>The complete model (paper §6.4, Eq. 17) is chapter 07’s schedule of a regime at a target e₀ plus λ·δ_d.&nbsp;Starting from the typical schedule at e₀ = 70 (calibrated exactly), the figure shows what each type’s profile does to female and male e₀ as its intensity rises to the 99th percentile of the observed positive intensities.</p>
 <div id="cell-fig-s7-disruption-impact" class="cell" data-execution_count="31">
 <details open="" class="code-fold">
 <summary>Code</summary>
@@ -2056,7 +2056,7 @@ Figure&nbsp;11.13: Life expectancy under a disruption of each type, applied to t
 <pre><code>{'name': 'disruption',
  'desc': 'Baselines, residuals, profiles and intensities of every exceptional country-year',
  'chapter': '08-exceptional',
- 'created': '2026-11-14T00:00:18+00:00',
+ 'created': '2026-11-14T01:29:13+00:00',
  'content_hash': '4643cd4b4e02c03e475b5fbf78f3576076dd95ede09bf5cc61e8b795e19f07c7',
  'inputs': {'disruption_holdout': 'a86a1fce85b71fba97a6a6087034e02d6286a6d8ec1d76ffc6025fb1fce12d91',
   'disruption_heterogeneity': '81f08ba605a0c138a87d1b74edcbd79cc391590d134218e1e5b2184c3f8d9736',
@@ -2130,7 +2130,7 @@ Figure&nbsp;11.13: Life expectancy under a disruption of each type, applied to t
  'code': [],
  'code_hash': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
  'uv_lock_sha256': '980dad0562eef270b6f587e08e10e1f5409eda35b951eb3fcd8c10c6a6000e98',
- 'environment': {'git_commit': '15d09dee69f9d2194ef8387170e891ce1c1816fd',
+ 'environment': {'git_commit': '91d3c06f048e3affc2e17fed9f55451f80046486',
   'git_dirty': False,
   'git_error': None,
   'python': '3.14.2',
@@ -2636,9 +2636,9 @@ Figure&nbsp;11.13: Life expectancy under a disruption of each type, applied to t
 <span id="cb60-6"><a href="#cb60-6"></a>::: {.callout-note appearance="simple"}</span>
 <span id="cb60-7"><a href="#cb60-7"></a><span class="fu">## Paper correspondence</span></span>
 <span id="cb60-8"><a href="#cb60-8"></a>Paper §6 ("Exceptional Mortality"): the baseline of an exceptional year and its choice on</span>
-<span id="cb60-9"><a href="#cb60-9"></a>pseudo-events (§6.1), the disruption model, with the event types, the profiles and their</span>
-<span id="cb60-10"><a href="#cb60-10"></a>estimation (§6.2), the complete model (§6.3), and the profiles, intensities and their</span>
-<span id="cb60-11"><a href="#cb60-11"></a>effect, with the model's limitations (§6.4).  Produces the tables <span class="in">`tbl-s7-baseline-holdout`</span></span>
+<span id="cb60-9"><a href="#cb60-9"></a>pseudo-events (§6.1), the residuals and the cells they keep (§6.2), the disruption model,</span>
+<span id="cb60-10"><a href="#cb60-10"></a>with the event types, the profiles and their estimation (§6.3), the complete model (§6.4),</span>
+<span id="cb60-11"><a href="#cb60-11"></a>and the profiles, intensities and their effect, with the model's limitations (§6.5).  Produces the tables <span class="in">`tbl-s7-baseline-holdout`</span></span>
 <span id="cb60-12"><a href="#cb60-12"></a>and <span class="in">`tbl-s7-subclustering`</span> and the figures <span class="in">`fig-s7-disruption-profiles`</span>,</span>
 <span id="cb60-13"><a href="#cb60-13"></a><span class="in">`fig-s7-event-profiles`</span>, <span class="in">`fig-s7-disruption-impact`</span>, <span class="in">`fig-s7-baseline-selected`</span>,</span>
 <span id="cb60-14"><a href="#cb60-14"></a><span class="in">`fig-s7-baseline-natural`</span>, <span class="in">`fig-s7-baseline-context`</span>, <span class="in">`fig-s7-residual-heatmaps`</span>,</span>
@@ -3127,7 +3127,7 @@ Figure&nbsp;11.13: Life expectancy under a disruption of each type, applied to t
 <span id="cb60-513"><a href="#cb60-513"></a>The chosen candidate is applied to every exceptional country-year, using</span>
 <span id="cb60-514"><a href="#cb60-514"></a>all observed years (and the completion model of chapter 04, fitted without</span>
 <span id="cb60-515"><a href="#cb60-515"></a>the exceptional years).  The residual is the observed minus the baseline</span>
-<span id="cb60-516"><a href="#cb60-516"></a>logit($q_x$) (paper §6.1).  A cell is left out when its observed</span>
+<span id="cb60-516"><a href="#cb60-516"></a>logit($q_x$) (paper §6.2).  A cell is left out when its observed</span>
 <span id="cb60-517"><a href="#cb60-517"></a>$q_x$ was zero (floored) or when the deaths *expected* under the linear</span>
 <span id="cb60-518"><a href="#cb60-518"></a>interpolation — HMD exposure × its death rate — are below</span>
 <span id="cb60-519"><a href="#cb60-519"></a><span class="in">`{python} f"{PE['min_expected_deaths']:g}"`</span>; the second rule removes the</span>
@@ -3314,14 +3314,14 @@ Figure&nbsp;11.13: Life expectancy under a disruption of each type, applied to t
 <span id="cb60-714"><a href="#cb60-714"></a><span class="fu">## Step 4 — profiles and intensities</span></span>
 <span id="cb60-715"><a href="#cb60-715"></a></span>
 <span id="cb60-716"><a href="#cb60-716"></a>The profile of a type is its mean residual scaled to unit length (paper</span>
-<span id="cb60-717"><a href="#cb60-717"></a>§6.2), smoothed along age by a</span>
+<span id="cb60-717"><a href="#cb60-717"></a>§6.3), smoothed along age by a</span>
 <span id="cb60-718"><a href="#cb60-718"></a>Savitzky–Golay filter (window <span class="in">`{python} f"{PP['sg_window']}"`</span> ages, degree</span>
 <span id="cb60-719"><a href="#cb60-719"></a><span class="in">`{python} f"{PP['sg_poly']}"`</span>) for each sex with the end ages kept, and</span>
 <span id="cb60-720"><a href="#cb60-720"></a>rescaled.  The type "other"</span>
 <span id="cb60-721"><a href="#cb60-721"></a>(<span class="in">`{python} f"{int(n_type['other'])}"`</span> country-years of famine, measles and</span>
 <span id="cb60-722"><a href="#cb60-722"></a>smallpox) is too heterogeneous for a profile; its years keep their</span>
 <span id="cb60-723"><a href="#cb60-723"></a>residuals.  The intensity of a country-year is the least-squares</span>
-<span id="cb60-724"><a href="#cb60-724"></a>coefficient of its residual on its type's profile (paper §6.2), over the</span>
+<span id="cb60-724"><a href="#cb60-724"></a>coefficient of its residual on its type's profile (paper §6.3), over the</span>
 <span id="cb60-725"><a href="#cb60-725"></a>cells not left out.</span>
 <span id="cb60-726"><a href="#cb60-726"></a></span>
 <span id="cb60-729"><a href="#cb60-729"></a><span class="in">```{python}</span></span>
@@ -3923,7 +3923,7 @@ Figure&nbsp;11.13: Life expectancy under a disruption of each type, applied to t
 <span id="cb60-1353"><a href="#cb60-1353"></a>these ages are little affected rather than unaffected, and part of the</span>
 <span id="cb60-1354"><a href="#cb60-1354"></a>excess may be baseline error over long spells.</span>
 <span id="cb60-1355"><a href="#cb60-1355"></a></span>
-<span id="cb60-1356"><a href="#cb60-1356"></a>The complete model (paper §6.3, Eq. 17) is chapter 07's schedule of a</span>
+<span id="cb60-1356"><a href="#cb60-1356"></a>The complete model (paper §6.4, Eq. 17) is chapter 07's schedule of a</span>
 <span id="cb60-1357"><a href="#cb60-1357"></a>regime at a target e₀ plus λ·δ_d.  Starting from the typical schedule at</span>
 <span id="cb60-1358"><a href="#cb60-1358"></a>e₀ = <span class="in">`{python} f"{PFIG['impact_e0']:g}"`</span> (calibrated exactly), the figure</span>
 <span id="cb60-1359"><a href="#cb60-1359"></a>shows what each type's profile does to female and male e₀ as its intensity</span>
