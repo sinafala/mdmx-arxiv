@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.37">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>2&nbsp; Acquiring the data – MDMx: Multi-dimensional Mortality</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js" integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2" crossorigin="anonymous"></script><script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../data/d2-ingest.html" rel="next">
+<link href="../index.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-7f8f88aac4f3542376d5c11b86a4c14d.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-9ece03dab9959ef5c886c0d317450186.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
+<script>
+window.MathJax = { tex: { macros: {
+  ezero: "e_0", qx: "{}_1q_x",
+  M: "\\mathcal{M}", G: "\\mathcal{G}",
+  bS: "\\mathbf{S}", bA: "\\mathbf{A}", bC: "\\mathbf{C}", bT: "\\mathbf{T}",
+  R: "\\mathbb{R}", logit: "\\operatorname{logit}"
+} } };
+</script>
+
+
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../data/d1-acquire.html">Part I — Data pipeline</a></li><li class="breadcrumb-item"><a href="../data/d1-acquire.html"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Acquiring the data</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">MDMx: Multi-dimensional Mortality</a> 
+        <div class="sidebar-tools-main">
+    <a href="https://github.com/sinafala/mdmx-arxiv" title="Source Code" class="quarto-navigation-tool px-1" aria-label="Source Code"><i class="bi bi-github"></i></a>
+</div>
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Preface</span></span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part I — Data pipeline</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../data/d1-acquire.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Acquiring the data</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../data/d2-ingest.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Ingesting the life tables</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../data/d3-curate.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Curation</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../data/d4-events.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">5</span>&nbsp; <span class="chapter-title">Exceptional years</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../data/d5-pooling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">6</span>&nbsp; <span class="chapter-title">Adaptive temporal pooling</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../data/d6-tensor.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">7</span>&nbsp; <span class="chapter-title">The mortality tensor</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part II — Analysis (one chapter per paper section)</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../analysis/04-tucker.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">8</span>&nbsp; <span class="chapter-title">The Tucker decomposition</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../analysis/06-clustering.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">9</span>&nbsp; <span class="chapter-title">A typology of mortality age patterns</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../analysis/07-trajectories.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">10</span>&nbsp; <span class="chapter-title">Reconstruction at arbitrary mortality levels</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../analysis/08-exceptional.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">11</span>&nbsp; <span class="chapter-title">Exceptional mortality</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../analysis/09-fitting.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">12</span>&nbsp; <span class="chapter-title">Life-table fitting</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../analysis/10-svdcomp.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">13</span>&nbsp; <span class="chapter-title">Predicting schedules from summary indicators</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../analysis/11-forecasting.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">14</span>&nbsp; <span class="chapter-title">Two forecasters</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../analysis/12-evaluation.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">15</span>&nbsp; <span class="chapter-title">Forecast evaluation</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
+ <span class="menu-text">Appendices</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/A-environment.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">A</span>&nbsp; <span class="chapter-title">Computing environment</span></span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../appendices/B-provenance.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">B</span>&nbsp; <span class="chapter-title">Provenance of every result</span></span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#the-human-mortality-database-release" id="toc-the-human-mortality-database-release" class="nav-link active" data-scroll-target="#the-human-mortality-database-release"><span class="header-section-number">2.1</span> The Human Mortality Database release</a></li>
+  <li><a href="#the-manifest" id="toc-the-manifest" class="nav-link" data-scroll-target="#the-manifest"><span class="header-section-number">2.2</span> The manifest</a></li>
+  <li><a href="#verifying-the-release" id="toc-verifying-the-release" class="nav-link" data-scroll-target="#verifying-the-release"><span class="header-section-number">2.3</span> Verifying the release</a></li>
+  <li><a href="#the-populations" id="toc-the-populations" class="nav-link" data-scroll-target="#the-populations"><span class="header-section-number">2.4</span> The populations</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../data/d1-acquire.html">Part I — Data pipeline</a></li><li class="breadcrumb-item"><a href="../data/d1-acquire.html"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Acquiring the data</span></a></li></ol></nav>
+<div class="quarto-title">
+<div class="quarto-title-block"><div><h1 class="title"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Acquiring the data</span></h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li><li><hr class="dropdown-divider"></li><li><a id="quarto-view-source" class="dropdown-item" href="javascript:void(0)" role="button">View Source</a></li></ul></div></div>
+<p class="subtitle lead">Which HMD release, which files, and how we know they are the right ones</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<div class="callout callout-style-simple callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Paper correspondence
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Paper §2.1 (“The Human Mortality Database”) and the data and code availability statement of §12 (“Computational Environment”). This chapter produces no figure or table; it establishes the <strong>provenance anchor</strong> for everything that follows.</p>
+</div>
+</div>
+<section id="the-human-mortality-database-release" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="the-human-mortality-database-release"><span class="header-section-number">2.1</span> The Human Mortality Database release</h2>
+<p>All analyses use the period life tables of the <a href="https://www.mortality.org">Human Mortality Database</a> (HMD). The HMD is revised continually — new years are added and past estimates are sometimes corrected — so “the HMD” is not a fixed data set. To make the analysis reproducible we therefore pin one specific <strong>release</strong>: the bulk download (“all statistics” zip archive) dated <strong>29 October 2026</strong>.</p>
+<p>The HMD licenses its estimates (life tables, death rates, exposures) under CC BY 4.0, but asks users to obtain the data from its website rather than from third parties. This repository therefore does <strong>not</strong> contain the data. You download the zip yourself (a free registration is required) and save it, unopened and unrenamed apart from the name below, as</p>
+<pre><code>raw/hmd/hmd_statistics_20261029.zip</code></pre>
+<p>The file <code>raw/MANIFEST.json</code> — which <em>is</em> part of the repository — records the release, where it came from, and SHA-256 checksums of the zip and of the four files inside it that the analysis reads. A checksum is a 64-character fingerprint of a file’s exact bytes: if a single byte differs, the fingerprint differs. Verifying it proves that you are running the analysis on exactly the data the paper used.</p>
+<div id="d1-setup" class="cell" data-execution_count="1">
+<details open="" class="code-fold">
+<summary>Chapter setup: imports and provenance tracking</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1"></a><span class="co"># Every chapter starts the same way: import the project package, declare</span></span>
+<span id="cb2-2"><a href="#cb2-2"></a><span class="co"># which chapter is running (so every artefact, figure, table and number it</span></span>
+<span id="cb2-3"><a href="#cb2-3"></a><span class="co"># produces is attributed to it), and load the analysis parameters.</span></span>
+<span id="cb2-4"><a href="#cb2-4"></a><span class="im">import</span> json</span>
+<span id="cb2-5"><a href="#cb2-5"></a></span>
+<span id="cb2-6"><a href="#cb2-6"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb2-7"><a href="#cb2-7"></a></span>
+<span id="cb2-8"><a href="#cb2-8"></a><span class="im">from</span> mdmx <span class="im">import</span> artifacts, data, latex, paths, provenance</span>
+<span id="cb2-9"><a href="#cb2-9"></a><span class="im">from</span> mdmx.config <span class="im">import</span> params</span>
+<span id="cb2-10"><a href="#cb2-10"></a></span>
+<span id="cb2-11"><a href="#cb2-11"></a>provenance.start_chapter(<span class="st">"d1-acquire"</span>)</span>
+<span id="cb2-12"><a href="#cb2-12"></a>P <span class="op">=</span> params()</span>
+<span id="cb2-13"><a href="#cb2-13"></a><span class="bu">print</span>(<span class="ss">f"Project root : </span><span class="sc">{</span>paths<span class="sc">.</span>root()<span class="sc">.</span>name<span class="sc">}</span><span class="ss">/"</span>)          <span class="co"># the folder's name: the full path is the reader's own</span></span>
+<span id="cb2-14"><a href="#cb2-14"></a><span class="bu">print</span>(<span class="ss">f"HMD release  : </span><span class="sc">{</span>P<span class="sc">.</span>data<span class="sc">.</span>hmd_release<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Project root : mdmx-arxiv/
+HMD release  : 20261029</code></pre>
+</div>
+</div>
+</section>
+<section id="the-manifest" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="the-manifest"><span class="header-section-number">2.2</span> The manifest</h2>
+<div id="d1-manifest" class="cell" data-execution_count="2">
+<details open="" class="code-fold">
+<summary>Show what the manifest says about the release</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1"></a>manifest <span class="op">=</span> json.loads((paths.raw() <span class="op">/</span> <span class="st">"MANIFEST.json"</span>).read_text(encoding<span class="op">=</span><span class="st">"utf-8"</span>))</span>
+<span id="cb4-2"><a href="#cb4-2"></a>release <span class="op">=</span> manifest[<span class="st">"hmd"</span>][P.data.hmd_release]</span>
+<span id="cb4-3"><a href="#cb4-3"></a>released <span class="op">=</span> pd.Timestamp(P.data.hmd_release)</span>
+<span id="cb4-4"><a href="#cb4-4"></a>latex.report(<span class="st">"dataReleaseDate"</span>, <span class="ss">f"</span><span class="sc">{</span>released<span class="sc">.</span>day<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>released<span class="sc">:</span><span class="op">%</span>B <span class="op">%</span>Y<span class="sc">}</span><span class="ss">"</span>, desc<span class="op">=</span><span class="st">"Date of the HMD release used"</span>)</span>
+<span id="cb4-5"><a href="#cb4-5"></a>latex.report(<span class="st">"dataReleaseDoi"</span>, release[<span class="st">"doi"</span>], desc<span class="op">=</span><span class="st">"Version DOI of the HMD release used"</span>)</span>
+<span id="cb4-6"><a href="#cb4-6"></a><span class="cf">for</span> key <span class="kw">in</span> (<span class="st">"title"</span>, <span class="st">"source_url"</span>, <span class="st">"file"</span>, <span class="st">"zip_sha256"</span>, <span class="st">"zip_bytes"</span>,</span>
+<span id="cb4-7"><a href="#cb4-7"></a>            <span class="st">"last_modified_stamp"</span>, <span class="st">"downloaded"</span>, <span class="st">"license"</span>):</span>
+<span id="cb4-8"><a href="#cb4-8"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>key<span class="sc">:&gt;20s}</span><span class="ss"> : </span><span class="sc">{</span>release[key]<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb4-9"><a href="#cb4-9"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Files read from inside the zip, with their SHA-256 checksums:"</span>)</span>
+<span id="cb4-10"><a href="#cb4-10"></a><span class="cf">for</span> member, digest <span class="kw">in</span> release[<span class="st">"members"</span>].items():</span>
+<span id="cb4-11"><a href="#cb4-11"></a>    <span class="bu">print</span>(<span class="ss">f"  </span><span class="sc">{</span>member<span class="sc">:&lt;45s}</span><span class="ss"> </span><span class="sc">{</span>digest<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>               title : Human Mortality Database, bulk download 'all statistics' (period and cohort), release of 29 Oct 2026
+          source_url : https://www.mortality.org/Data/ZippedDataFiles
+                file : raw/hmd/hmd_statistics_20261029.zip
+          zip_sha256 : 9f6182fe1298dd599592cf2b955e4d432019155053b119361fa2868076e43ca3
+           zip_bytes : 194352455
+ last_modified_stamp : 29 Oct 2026; Methods Protocol: v6 (2017)
+          downloaded : 2026-11-03
+             license : HMD estimates (life tables, death rates, exposures): CC BY 4.0. Cite as instructed at https://www.mortality.org/Research/CitationGuidelines
+
+Files read from inside the zip, with their SHA-256 checksums:
+  lt_female/fltper_1x1/fltper_1x1.txt           7b1f9adf7750ae616df24c452d8bfe6c8dd417162c890b773dd60cdc70fc3f0d
+  lt_male/mltper_1x1/mltper_1x1.txt             8ec771dd115e88f62373fe4ee61f19a82a61fcc51d236158cb7fcfb4fd5d3b68
+  deaths/Deaths_1x1/Deaths_1x1.txt              bfb347d138c3aff2ffd3c990d06e11a1487c05abe80416fbdaa28a2f0f73ff73
+  exposures/Exposures_1x1/Exposures_1x1.txt     515f34682c612438863e3951652618729686364e1607bd81536fa114bf635e7f</code></pre>
+</div>
+</div>
+<p>Only four of the 176 files in the archive are used: the female and male 1×1 period life tables (single years of age by single calendar years), and the 1×1 death counts and exposures to risk, which the adaptive pooling step needs (chapter d5).</p>
+</section>
+<section id="verifying-the-release" class="level2" data-number="2.3">
+<h2 data-number="2.3" class="anchored" data-anchor-id="verifying-the-release"><span class="header-section-number">2.3</span> Verifying the release</h2>
+<p><code>mdmx.data.verify_release()</code> locates the release and recomputes every checksum. It accepts either the zip exactly as downloaded or — for convenience — a folder <code>raw/hmd/20261029/</code> holding just the four files with their paths as inside the zip. In both cases each of the four files must match the manifest, and if the zip is present its own checksum must match too. Any mismatch stops the pipeline with an error.</p>
+<div id="cell-d1-verify" class="cell" data-execution_count="3">
+<details open="" class="code-fold">
+<summary>Verify the checksums and register the release as the root artefact</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1"></a>report <span class="op">=</span> data.verify_release(P.data.hmd_release)</span>
+<span id="cb6-2"><a href="#cb6-2"></a><span class="bu">print</span>(<span class="ss">f"Release found at: </span><span class="sc">{</span>report[<span class="st">'source'</span>]<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb6-3"><a href="#cb6-3"></a><span class="cf">if</span> report[<span class="st">"zip_sha256"</span>]:</span>
+<span id="cb6-4"><a href="#cb6-4"></a>    <span class="bu">print</span>(<span class="ss">f"Zip checksum     : OK (</span><span class="sc">{</span>report[<span class="st">'zip_sha256'</span>][:<span class="dv">16</span>]<span class="sc">}</span><span class="ss">…)"</span>)</span>
+<span id="cb6-5"><a href="#cb6-5"></a><span class="cf">for</span> member, res <span class="kw">in</span> report[<span class="st">"members"</span>].items():</span>
+<span id="cb6-6"><a href="#cb6-6"></a>    <span class="bu">print</span>(<span class="ss">f"  </span><span class="sc">{</span>member<span class="sc">:&lt;45s}</span><span class="ss"> </span><span class="sc">{</span><span class="st">'OK'</span> <span class="cf">if</span> res[<span class="st">'ok'</span>] <span class="cf">else</span> <span class="st">'MISMATCH'</span><span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb6-7"><a href="#cb6-7"></a></span>
+<span id="cb6-8"><a href="#cb6-8"></a><span class="co"># Record the verified release as the root of the provenance graph.  Its</span></span>
+<span id="cb6-9"><a href="#cb6-9"></a><span class="co"># content is the release label and the checksums of the four member files —</span></span>
+<span id="cb6-10"><a href="#cb6-10"></a><span class="co"># deliberately NOT the file location or the zip's own checksum, so that the</span></span>
+<span id="cb6-11"><a href="#cb6-11"></a><span class="co"># cache is identical whether the data were read from the zip or from an</span></span>
+<span id="cb6-12"><a href="#cb6-12"></a><span class="co"># extracted folder, on any computer.  Every downstream artefact is thereby</span></span>
+<span id="cb6-13"><a href="#cb6-13"></a><span class="co"># tied to exactly these bytes.</span></span>
+<span id="cb6-14"><a href="#cb6-14"></a>artifacts.save(</span>
+<span id="cb6-15"><a href="#cb6-15"></a>    <span class="st">"hmd_release"</span>,</span>
+<span id="cb6-16"><a href="#cb6-16"></a>    {<span class="st">"release"</span>: P.data.hmd_release,</span>
+<span id="cb6-17"><a href="#cb6-17"></a>     <span class="st">"members"</span>: {m: r[<span class="st">"sha256"</span>] <span class="cf">for</span> m, r <span class="kw">in</span> report[<span class="st">"members"</span>].items()}},</span>
+<span id="cb6-18"><a href="#cb6-18"></a>    params<span class="op">=</span>{<span class="st">"release"</span>: P.data.hmd_release},</span>
+<span id="cb6-19"><a href="#cb6-19"></a>    desc<span class="op">=</span><span class="st">"Verified HMD bulk release: checksums of the four files used"</span>,</span>
+<span id="cb6-20"><a href="#cb6-20"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Release found at: raw/hmd/hmd_statistics_20261029.zip
+Zip checksum     : OK (9f6182fe1298dd59…)
+  lt_female/fltper_1x1/fltper_1x1.txt           OK
+  lt_male/mltper_1x1/mltper_1x1.txt             OK
+  deaths/Deaths_1x1/Deaths_1x1.txt              OK
+  exposures/Exposures_1x1/Exposures_1x1.txt     OK
+  [artefact] saved   hmd_release                      0.00 MB</code></pre>
+</div>
+<div id="d1-verify" class="cell-output cell-output-display" data-execution_count="3">
+<pre><code>{'name': 'hmd_release',
+ 'desc': 'Verified HMD bulk release: checksums of the four files used',
+ 'chapter': 'd1-acquire',
+ 'created': '2026-11-14T00:29:04+00:00',
+ 'content_hash': 'c65de581603089b2e51402a3b4c30aa59219ed9e83483712a9a41112d9c8bb61',
+ 'inputs': {},
+ 'params': {'release': '20261029'},
+ 'params_hash': '10b84d5b44b381e0288ec740cb6057e3e2cefcb2764335d9f50810f8322fb031',
+ 'code': [],
+ 'code_hash': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+ 'uv_lock_sha256': '980dad0562eef270b6f587e08e10e1f5409eda35b951eb3fcd8c10c6a6000e98',
+ 'environment': {'git_commit': '251397cbcd1c0b2c75f69b811f27f72e6fa49581',
+  'git_dirty': False,
+  'git_error': None,
+  'python': '3.14.2',
+  'platform': 'macOS-27.2.1',
+  'packages': {'mdmx': '3.0.0.dev0',
+   'numpy': '2.5.4',
+   'scipy': '1.18.1',
+   'pandas': '3.1.0',
+   'pyarrow': '26.0.0',
+   'duckdb': '2.0.0',
+   'scikit-learn': '1.9.1',
+   'statsmodels': '0.15.0',
+   'matplotlib': '3.11.2'},
+  'uv_lock_sha256': '980dad0562eef270b6f587e08e10e1f5409eda35b951eb3fcd8c10c6a6000e98'},
+ 'size_bytes': 531}</code></pre>
+</div>
+</div>
+</section>
+<section id="the-populations" class="level2" data-number="2.4">
+<h2 data-number="2.4" class="anchored" data-anchor-id="the-populations"><span class="header-section-number">2.4</span> The populations</h2>
+<p>The HMD covers 50 populations in this release. Several are not independent: the United Kingdom total (GBR_NP) contains England &amp; Wales, Scotland and Northern Ireland; Germany (DEUTNP) contains East and West Germany for the years they overlap; and New Zealand (NZL_NP) contains its Māori and non-Māori populations. The HMD also publishes <em>civilian-only</em> series for France and England &amp; Wales, which omit military deaths in war years. The register below records these relationships; it lives in <code>config/populations.csv</code>, so it can be read and edited without touching code.</p>
+<div id="cell-d1-populations" class="cell" data-execution_count="4">
+<details open="" class="code-fold">
+<summary>The population register</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1"></a>pops <span class="op">=</span> data.load_populations()</span>
+<span id="cb9-2"><a href="#cb9-2"></a>artifacts.save(<span class="st">"populations"</span>, pops, inputs<span class="op">=</span>[<span class="st">"hmd_release"</span>],</span>
+<span id="cb9-3"><a href="#cb9-3"></a>               desc<span class="op">=</span><span class="st">"Population register: HMD codes, names, aggregates, inclusion"</span>)</span>
+<span id="cb9-4"><a href="#cb9-4"></a>pd.set_option(<span class="st">"display.max_rows"</span>, <span class="dv">60</span>)</span>
+<span id="cb9-5"><a href="#cb9-5"></a>used <span class="op">=</span> pops[pops[<span class="st">"included"</span>] <span class="op">==</span> <span class="st">"yes"</span>]</span>
+<span id="cb9-6"><a href="#cb9-6"></a>latex.report(<span class="st">"dataNCountries"</span>, <span class="bu">int</span>((used[<span class="st">"aggregate_of"</span>] <span class="op">==</span> <span class="st">""</span>).<span class="bu">sum</span>()),</span>
+<span id="cb9-7"><a href="#cb9-7"></a>             desc<span class="op">=</span><span class="st">"Countries and territories: the populations used that are not part of another"</span>)</span>
+<span id="cb9-8"><a href="#cb9-8"></a>pops</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>  [artefact] saved   populations                      0.00 MB</code></pre>
+</div>
+<div id="d1-populations" class="cell-output cell-output-display" data-execution_count="4">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">code</th>
+<th data-quarto-table-cell-role="th">name</th>
+<th data-quarto-table-cell-role="th">aggregate_of</th>
+<th data-quarto-table-cell-role="th">included</th>
+<th data-quarto-table-cell-role="th">note</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">0</th>
+<td>AUS</td>
+<td>Australia</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">1</th>
+<td>AUT</td>
+<td>Austria</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">2</th>
+<td>BEL</td>
+<td>Belgium</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">3</th>
+<td>BGR</td>
+<td>Bulgaria</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">4</th>
+<td>BLR</td>
+<td>Belarus</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">5</th>
+<td>CAN</td>
+<td>Canada</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">6</th>
+<td>CHE</td>
+<td>Switzerland</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">7</th>
+<td>CHL</td>
+<td>Chile</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">8</th>
+<td>CZE</td>
+<td>Czechia</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">9</th>
+<td>DEUTNP</td>
+<td>Germany</td>
+<td></td>
+<td>yes</td>
+<td>Total population; overlaps DEUTE and DEUTW (19...</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">10</th>
+<td>DEUTE</td>
+<td>East Germany</td>
+<td>DEUTNP</td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">11</th>
+<td>DEUTW</td>
+<td>West Germany</td>
+<td>DEUTNP</td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">12</th>
+<td>DNK</td>
+<td>Denmark</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">13</th>
+<td>ESP</td>
+<td>Spain</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">14</th>
+<td>EST</td>
+<td>Estonia</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">15</th>
+<td>FIN</td>
+<td>Finland</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">16</th>
+<td>FRATNP</td>
+<td>France</td>
+<td></td>
+<td>yes</td>
+<td>Total population</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">17</th>
+<td>FRACNP</td>
+<td>France (civilian)</td>
+<td>FRATNP</td>
+<td>no</td>
+<td>Civilian-only series; omits military deaths in...</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">18</th>
+<td>GBR_NP</td>
+<td>United Kingdom</td>
+<td></td>
+<td>yes</td>
+<td>Total population; overlaps GBRTENW, GBR_SCO an...</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">19</th>
+<td>GBRTENW</td>
+<td>England &amp; Wales</td>
+<td>GBR_NP</td>
+<td>yes</td>
+<td>Total population</td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">20</th>
+<td>GBRCENW</td>
+<td>England &amp; Wales (civilian)</td>
+<td>GBRTENW</td>
+<td>no</td>
+<td>Civilian-only series; omits military deaths in...</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">21</th>
+<td>GBR_SCO</td>
+<td>Scotland</td>
+<td>GBR_NP</td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">22</th>
+<td>GBR_NIR</td>
+<td>Northern Ireland</td>
+<td>GBR_NP</td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">23</th>
+<td>GRC</td>
+<td>Greece</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">24</th>
+<td>HKG</td>
+<td>Hong Kong</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">25</th>
+<td>HRV</td>
+<td>Croatia</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">26</th>
+<td>HUN</td>
+<td>Hungary</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">27</th>
+<td>IRL</td>
+<td>Ireland</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">28</th>
+<td>ISL</td>
+<td>Iceland</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">29</th>
+<td>ISR</td>
+<td>Israel</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">30</th>
+<td>ITA</td>
+<td>Italy</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">31</th>
+<td>JPN</td>
+<td>Japan</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">32</th>
+<td>KOR</td>
+<td>Republic of Korea</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">33</th>
+<td>LTU</td>
+<td>Lithuania</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">34</th>
+<td>LUX</td>
+<td>Luxembourg</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">35</th>
+<td>LVA</td>
+<td>Latvia</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">36</th>
+<td>NLD</td>
+<td>Netherlands</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">37</th>
+<td>NOR</td>
+<td>Norway</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">38</th>
+<td>NZL_NP</td>
+<td>New Zealand</td>
+<td></td>
+<td>yes</td>
+<td>Total population; overlaps NZL_MA and NZL_NM</td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">39</th>
+<td>NZL_MA</td>
+<td>New Zealand (Māori)</td>
+<td>NZL_NP</td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">40</th>
+<td>NZL_NM</td>
+<td>New Zealand (non-Māori)</td>
+<td>NZL_NP</td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">41</th>
+<td>POL</td>
+<td>Poland</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">42</th>
+<td>PRT</td>
+<td>Portugal</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">43</th>
+<td>RUS</td>
+<td>Russia</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">44</th>
+<td>SVK</td>
+<td>Slovakia</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">45</th>
+<td>SVN</td>
+<td>Slovenia</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">46</th>
+<td>SWE</td>
+<td>Sweden</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">47</th>
+<td>TWN</td>
+<td>Taiwan</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="odd">
+<th data-quarto-table-cell-role="th">48</th>
+<td>UKR</td>
+<td>Ukraine</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+<tr class="even">
+<th data-quarto-table-cell-role="th">49</th>
+<td>USA</td>
+<td>United States</td>
+<td></td>
+<td>yes</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+<p>The two civilian series are excluded (<code>included = no</code>), leaving 48 populations. The overlapping aggregates are <em>kept</em>, as in the paper: each is a population in its own right. The consequences — some populations count twice in the decomposition, and their forecast errors are not independent — are discussed in the paper (§2.1, and §11.5, “Limitations”).</p>
+<div id="d1-end" class="cell" data-execution_count="5">
+<details open="" class="code-fold">
+<summary>Close the chapter</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1"></a>latex.write_numbers()</span>
+<span id="cb11-2"><a href="#cb11-2"></a>provenance.end_chapter()<span class="op">;</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>  [numbers]  saved   companion/results/numbers/d1-acquire.tex  (3 macros)</code></pre>
+</div>
+</div>
+
+
+<!-- -->
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+    const viewSource = window.document.getElementById('quarto-view-source') ||
+                       window.document.getElementById('quarto-code-tools-source');
+    if (viewSource) {
+      const sourceUrl = viewSource.getAttribute("data-quarto-source-url");
+      viewSource.addEventListener("click", function(e) {
+        if (sourceUrl) {
+          // rstudio viewer pane
+          if (/\bcapabilities=\b/.test(window.location)) {
+            window.open(sourceUrl);
+          } else {
+            window.location.href = sourceUrl;
+          }
+        } else {
+          const modal = new bootstrap.Modal(document.getElementById('quarto-embedded-source-code-modal'));
+          modal.show();
+        }
+        return false;
+      });
+    }
+    function toggleCodeHandler(show) {
+      return function(e) {
+        const detailsSrc = window.document.querySelectorAll(".cell > details > .sourceCode");
+        for (let i=0; i<detailsSrc.length; i++) {
+          const details = detailsSrc[i].parentElement;
+          if (show) {
+            details.open = true;
+          } else {
+            details.removeAttribute("open");
+          }
+        }
+        const cellCodeDivs = window.document.querySelectorAll(".cell > .sourceCode");
+        const fromCls = show ? "hidden" : "unhidden";
+        const toCls = show ? "unhidden" : "hidden";
+        for (let i=0; i<cellCodeDivs.length; i++) {
+          const codeDiv = cellCodeDivs[i];
+          if (codeDiv.classList.contains(fromCls)) {
+            codeDiv.classList.remove(fromCls);
+            codeDiv.classList.add(toCls);
+          } 
+        }
+        return false;
+      }
+    }
+    const hideAllCode = window.document.getElementById("quarto-hide-all-code");
+    if (hideAllCode) {
+      hideAllCode.addEventListener("click", toggleCodeHandler(false));
+    }
+    const showAllCode = window.document.getElementById("quarto-show-all-code");
+    if (showAllCode) {
+      showAllCode.addEventListener("click", toggleCodeHandler(true));
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../index.html" class="pagination-link" aria-label="Preface">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Preface</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../data/d2-ingest.html" class="pagination-link" aria-label="Ingesting the life tables">
+        <span class="nav-page-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Ingesting the life tables</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav><div class="modal fade" id="quarto-embedded-source-code-modal" tabindex="-1" aria-labelledby="quarto-embedded-source-code-modal-label" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="quarto-embedded-source-code-modal-label">Source Code</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13" data-shortcodes="false"><pre class="sourceCode numberSource markdown number-lines code-with-copy"><code class="sourceCode markdown"><span id="cb13-1"><a href="#cb13-1"></a><span class="co">---</span></span>
+<span id="cb13-2"><a href="#cb13-2"></a><span class="an">title:</span><span class="co"> "Acquiring the data"</span></span>
+<span id="cb13-3"><a href="#cb13-3"></a><span class="an">subtitle:</span><span class="co"> "Which HMD release, which files, and how we know they are the right ones"</span></span>
+<span id="cb13-4"><a href="#cb13-4"></a><span class="co">---</span></span>
+<span id="cb13-5"><a href="#cb13-5"></a></span>
+<span id="cb13-6"><a href="#cb13-6"></a>::: {.callout-note appearance="simple"}</span>
+<span id="cb13-7"><a href="#cb13-7"></a><span class="fu">## Paper correspondence</span></span>
+<span id="cb13-8"><a href="#cb13-8"></a>Paper §2.1 ("The Human Mortality Database") and the data and code availability</span>
+<span id="cb13-9"><a href="#cb13-9"></a>statement of §12 ("Computational Environment").  This chapter produces no figure or</span>
+<span id="cb13-10"><a href="#cb13-10"></a>table; it establishes the **provenance anchor** for everything that follows.</span>
+<span id="cb13-11"><a href="#cb13-11"></a>:::</span>
+<span id="cb13-12"><a href="#cb13-12"></a></span>
+<span id="cb13-13"><a href="#cb13-13"></a><span class="fu">## The Human Mortality Database release</span></span>
+<span id="cb13-14"><a href="#cb13-14"></a></span>
+<span id="cb13-15"><a href="#cb13-15"></a>All analyses use the period life tables of the</span>
+<span id="cb13-16"><a href="#cb13-16"></a><span class="co">[</span><span class="ot">Human Mortality Database</span><span class="co">](https://www.mortality.org)</span> (HMD).  The HMD is</span>
+<span id="cb13-17"><a href="#cb13-17"></a>revised continually — new years are added and past estimates are sometimes</span>
+<span id="cb13-18"><a href="#cb13-18"></a>corrected — so "the HMD" is not a fixed data set.  To make the analysis</span>
+<span id="cb13-19"><a href="#cb13-19"></a>reproducible we therefore pin one specific **release**: the bulk download</span>
+<span id="cb13-20"><a href="#cb13-20"></a>("all statistics" zip archive) dated **29 October 2026**.</span>
+<span id="cb13-21"><a href="#cb13-21"></a></span>
+<span id="cb13-22"><a href="#cb13-22"></a>The HMD licenses its estimates (life tables, death rates, exposures) under</span>
+<span id="cb13-23"><a href="#cb13-23"></a>CC BY 4.0, but asks users to obtain the data from its website rather than</span>
+<span id="cb13-24"><a href="#cb13-24"></a>from third parties.  This repository therefore does **not** contain the data.</span>
+<span id="cb13-25"><a href="#cb13-25"></a>You download the zip yourself (a free registration is required) and save it,</span>
+<span id="cb13-26"><a href="#cb13-26"></a>unopened and unrenamed apart from the name below, as</span>
+<span id="cb13-27"><a href="#cb13-27"></a></span>
+<span id="cb13-28"><a href="#cb13-28"></a><span class="in">```</span></span>
+<span id="cb13-29"><a href="#cb13-29"></a><span class="in">raw/hmd/hmd_statistics_20261029.zip</span></span>
+<span id="cb13-30"><a href="#cb13-30"></a><span class="in">```</span></span>
+<span id="cb13-31"><a href="#cb13-31"></a></span>
+<span id="cb13-32"><a href="#cb13-32"></a>The file <span class="in">`raw/MANIFEST.json`</span> — which *is* part of the repository — records</span>
+<span id="cb13-33"><a href="#cb13-33"></a>the release, where it came from, and SHA-256 checksums of the zip and of the</span>
+<span id="cb13-34"><a href="#cb13-34"></a>four files inside it that the analysis reads.  A checksum is a 64-character</span>
+<span id="cb13-35"><a href="#cb13-35"></a>fingerprint of a file's exact bytes: if a single byte differs, the</span>
+<span id="cb13-36"><a href="#cb13-36"></a>fingerprint differs.  Verifying it proves that you are running the analysis</span>
+<span id="cb13-37"><a href="#cb13-37"></a>on exactly the data the paper used.</span>
+<span id="cb13-38"><a href="#cb13-38"></a></span>
+<span id="cb13-41"><a href="#cb13-41"></a><span class="in">```{python}</span></span>
+<span id="cb13-42"><a href="#cb13-42"></a><span class="co">#| label: d1-setup</span></span>
+<span id="cb13-43"><a href="#cb13-43"></a><span class="co">#| code-summary: "Chapter setup: imports and provenance tracking"</span></span>
+<span id="cb13-44"><a href="#cb13-44"></a></span>
+<span id="cb13-45"><a href="#cb13-45"></a><span class="co"># Every chapter starts the same way: import the project package, declare</span></span>
+<span id="cb13-46"><a href="#cb13-46"></a><span class="co"># which chapter is running (so every artefact, figure, table and number it</span></span>
+<span id="cb13-47"><a href="#cb13-47"></a><span class="co"># produces is attributed to it), and load the analysis parameters.</span></span>
+<span id="cb13-48"><a href="#cb13-48"></a><span class="im">import</span> json</span>
+<span id="cb13-49"><a href="#cb13-49"></a></span>
+<span id="cb13-50"><a href="#cb13-50"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb13-51"><a href="#cb13-51"></a></span>
+<span id="cb13-52"><a href="#cb13-52"></a><span class="im">from</span> mdmx <span class="im">import</span> artifacts, data, latex, paths, provenance</span>
+<span id="cb13-53"><a href="#cb13-53"></a><span class="im">from</span> mdmx.config <span class="im">import</span> params</span>
+<span id="cb13-54"><a href="#cb13-54"></a></span>
+<span id="cb13-55"><a href="#cb13-55"></a>provenance.start_chapter(<span class="st">"d1-acquire"</span>)</span>
+<span id="cb13-56"><a href="#cb13-56"></a>P <span class="op">=</span> params()</span>
+<span id="cb13-57"><a href="#cb13-57"></a><span class="bu">print</span>(<span class="ss">f"Project root : </span><span class="sc">{</span>paths<span class="sc">.</span>root()<span class="sc">.</span>name<span class="sc">}</span><span class="ss">/"</span>)          <span class="co"># the folder's name: the full path is the reader's own</span></span>
+<span id="cb13-58"><a href="#cb13-58"></a><span class="bu">print</span>(<span class="ss">f"HMD release  : </span><span class="sc">{</span>P<span class="sc">.</span>data<span class="sc">.</span>hmd_release<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb13-59"><a href="#cb13-59"></a><span class="in">```</span></span>
+<span id="cb13-60"><a href="#cb13-60"></a></span>
+<span id="cb13-61"><a href="#cb13-61"></a><span class="fu">## The manifest</span></span>
+<span id="cb13-62"><a href="#cb13-62"></a></span>
+<span id="cb13-65"><a href="#cb13-65"></a><span class="in">```{python}</span></span>
+<span id="cb13-66"><a href="#cb13-66"></a><span class="co">#| label: d1-manifest</span></span>
+<span id="cb13-67"><a href="#cb13-67"></a><span class="co">#| code-summary: "Show what the manifest says about the release"</span></span>
+<span id="cb13-68"><a href="#cb13-68"></a></span>
+<span id="cb13-69"><a href="#cb13-69"></a>manifest <span class="op">=</span> json.loads((paths.raw() <span class="op">/</span> <span class="st">"MANIFEST.json"</span>).read_text(encoding<span class="op">=</span><span class="st">"utf-8"</span>))</span>
+<span id="cb13-70"><a href="#cb13-70"></a>release <span class="op">=</span> manifest[<span class="st">"hmd"</span>][P.data.hmd_release]</span>
+<span id="cb13-71"><a href="#cb13-71"></a>released <span class="op">=</span> pd.Timestamp(P.data.hmd_release)</span>
+<span id="cb13-72"><a href="#cb13-72"></a>latex.report(<span class="st">"dataReleaseDate"</span>, <span class="ss">f"</span><span class="sc">{</span>released<span class="sc">.</span>day<span class="sc">}</span><span class="ss"> </span><span class="sc">{</span>released<span class="sc">:</span><span class="op">%</span>B <span class="op">%</span>Y<span class="sc">}</span><span class="ss">"</span>, desc<span class="op">=</span><span class="st">"Date of the HMD release used"</span>)</span>
+<span id="cb13-73"><a href="#cb13-73"></a>latex.report(<span class="st">"dataReleaseDoi"</span>, release[<span class="st">"doi"</span>], desc<span class="op">=</span><span class="st">"Version DOI of the HMD release used"</span>)</span>
+<span id="cb13-74"><a href="#cb13-74"></a><span class="cf">for</span> key <span class="kw">in</span> (<span class="st">"title"</span>, <span class="st">"source_url"</span>, <span class="st">"file"</span>, <span class="st">"zip_sha256"</span>, <span class="st">"zip_bytes"</span>,</span>
+<span id="cb13-75"><a href="#cb13-75"></a>            <span class="st">"last_modified_stamp"</span>, <span class="st">"downloaded"</span>, <span class="st">"license"</span>):</span>
+<span id="cb13-76"><a href="#cb13-76"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>key<span class="sc">:&gt;20s}</span><span class="ss"> : </span><span class="sc">{</span>release[key]<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb13-77"><a href="#cb13-77"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Files read from inside the zip, with their SHA-256 checksums:"</span>)</span>
+<span id="cb13-78"><a href="#cb13-78"></a><span class="cf">for</span> member, digest <span class="kw">in</span> release[<span class="st">"members"</span>].items():</span>
+<span id="cb13-79"><a href="#cb13-79"></a>    <span class="bu">print</span>(<span class="ss">f"  </span><span class="sc">{</span>member<span class="sc">:&lt;45s}</span><span class="ss"> </span><span class="sc">{</span>digest<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb13-80"><a href="#cb13-80"></a><span class="in">```</span></span>
+<span id="cb13-81"><a href="#cb13-81"></a></span>
+<span id="cb13-82"><a href="#cb13-82"></a>Only four of the 176 files in the archive are used: the female and male</span>
+<span id="cb13-83"><a href="#cb13-83"></a>1×1 period life tables (single years of age by single calendar years), and</span>
+<span id="cb13-84"><a href="#cb13-84"></a>the 1×1 death counts and exposures to risk, which the adaptive pooling step</span>
+<span id="cb13-85"><a href="#cb13-85"></a>needs (chapter d5).</span>
+<span id="cb13-86"><a href="#cb13-86"></a></span>
+<span id="cb13-87"><a href="#cb13-87"></a><span class="fu">## Verifying the release</span></span>
+<span id="cb13-88"><a href="#cb13-88"></a></span>
+<span id="cb13-89"><a href="#cb13-89"></a><span class="in">`mdmx.data.verify_release()`</span> locates the release and recomputes every</span>
+<span id="cb13-90"><a href="#cb13-90"></a>checksum.  It accepts either the zip exactly as downloaded or — for</span>
+<span id="cb13-91"><a href="#cb13-91"></a>convenience — a folder <span class="in">`raw/hmd/20261029/`</span> holding just the four files with</span>
+<span id="cb13-92"><a href="#cb13-92"></a>their paths as inside the zip.  In both cases each of the four files must</span>
+<span id="cb13-93"><a href="#cb13-93"></a>match the manifest, and if the zip is present its own checksum must match</span>
+<span id="cb13-94"><a href="#cb13-94"></a>too.  Any mismatch stops the pipeline with an error.</span>
+<span id="cb13-95"><a href="#cb13-95"></a></span>
+<span id="cb13-98"><a href="#cb13-98"></a><span class="in">```{python}</span></span>
+<span id="cb13-99"><a href="#cb13-99"></a><span class="co">#| label: d1-verify</span></span>
+<span id="cb13-100"><a href="#cb13-100"></a><span class="co">#| code-summary: "Verify the checksums and register the release as the root artefact"</span></span>
+<span id="cb13-101"><a href="#cb13-101"></a></span>
+<span id="cb13-102"><a href="#cb13-102"></a>report <span class="op">=</span> data.verify_release(P.data.hmd_release)</span>
+<span id="cb13-103"><a href="#cb13-103"></a><span class="bu">print</span>(<span class="ss">f"Release found at: </span><span class="sc">{</span>report[<span class="st">'source'</span>]<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb13-104"><a href="#cb13-104"></a><span class="cf">if</span> report[<span class="st">"zip_sha256"</span>]:</span>
+<span id="cb13-105"><a href="#cb13-105"></a>    <span class="bu">print</span>(<span class="ss">f"Zip checksum     : OK (</span><span class="sc">{</span>report[<span class="st">'zip_sha256'</span>][:<span class="dv">16</span>]<span class="sc">}</span><span class="ss">…)"</span>)</span>
+<span id="cb13-106"><a href="#cb13-106"></a><span class="cf">for</span> member, res <span class="kw">in</span> report[<span class="st">"members"</span>].items():</span>
+<span id="cb13-107"><a href="#cb13-107"></a>    <span class="bu">print</span>(<span class="ss">f"  </span><span class="sc">{</span>member<span class="sc">:&lt;45s}</span><span class="ss"> </span><span class="sc">{</span><span class="st">'OK'</span> <span class="cf">if</span> res[<span class="st">'ok'</span>] <span class="cf">else</span> <span class="st">'MISMATCH'</span><span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb13-108"><a href="#cb13-108"></a></span>
+<span id="cb13-109"><a href="#cb13-109"></a><span class="co"># Record the verified release as the root of the provenance graph.  Its</span></span>
+<span id="cb13-110"><a href="#cb13-110"></a><span class="co"># content is the release label and the checksums of the four member files —</span></span>
+<span id="cb13-111"><a href="#cb13-111"></a><span class="co"># deliberately NOT the file location or the zip's own checksum, so that the</span></span>
+<span id="cb13-112"><a href="#cb13-112"></a><span class="co"># cache is identical whether the data were read from the zip or from an</span></span>
+<span id="cb13-113"><a href="#cb13-113"></a><span class="co"># extracted folder, on any computer.  Every downstream artefact is thereby</span></span>
+<span id="cb13-114"><a href="#cb13-114"></a><span class="co"># tied to exactly these bytes.</span></span>
+<span id="cb13-115"><a href="#cb13-115"></a>artifacts.save(</span>
+<span id="cb13-116"><a href="#cb13-116"></a>    <span class="st">"hmd_release"</span>,</span>
+<span id="cb13-117"><a href="#cb13-117"></a>    {<span class="st">"release"</span>: P.data.hmd_release,</span>
+<span id="cb13-118"><a href="#cb13-118"></a>     <span class="st">"members"</span>: {m: r[<span class="st">"sha256"</span>] <span class="cf">for</span> m, r <span class="kw">in</span> report[<span class="st">"members"</span>].items()}},</span>
+<span id="cb13-119"><a href="#cb13-119"></a>    params<span class="op">=</span>{<span class="st">"release"</span>: P.data.hmd_release},</span>
+<span id="cb13-120"><a href="#cb13-120"></a>    desc<span class="op">=</span><span class="st">"Verified HMD bulk release: checksums of the four files used"</span>,</span>
+<span id="cb13-121"><a href="#cb13-121"></a>)</span>
+<span id="cb13-122"><a href="#cb13-122"></a><span class="in">```</span></span>
+<span id="cb13-123"><a href="#cb13-123"></a></span>
+<span id="cb13-124"><a href="#cb13-124"></a><span class="fu">## The populations</span></span>
+<span id="cb13-125"><a href="#cb13-125"></a></span>
+<span id="cb13-126"><a href="#cb13-126"></a>The HMD covers 50 populations in this release.  Several are not</span>
+<span id="cb13-127"><a href="#cb13-127"></a>independent: the United Kingdom total (GBR_NP) contains England &amp; Wales,</span>
+<span id="cb13-128"><a href="#cb13-128"></a>Scotland and Northern Ireland; Germany (DEUTNP) contains East and West</span>
+<span id="cb13-129"><a href="#cb13-129"></a>Germany for the years they overlap; and New Zealand (NZL_NP) contains its</span>
+<span id="cb13-130"><a href="#cb13-130"></a>Māori and non-Māori populations.  The HMD also publishes *civilian-only*</span>
+<span id="cb13-131"><a href="#cb13-131"></a>series for France and England &amp; Wales, which omit military deaths in war</span>
+<span id="cb13-132"><a href="#cb13-132"></a>years.  The register below records these relationships; it lives in</span>
+<span id="cb13-133"><a href="#cb13-133"></a><span class="in">`config/populations.csv`</span>, so it can be read and edited without touching code.</span>
+<span id="cb13-134"><a href="#cb13-134"></a></span>
+<span id="cb13-137"><a href="#cb13-137"></a><span class="in">```{python}</span></span>
+<span id="cb13-138"><a href="#cb13-138"></a><span class="co">#| label: d1-populations</span></span>
+<span id="cb13-139"><a href="#cb13-139"></a><span class="co">#| code-summary: "The population register"</span></span>
+<span id="cb13-140"><a href="#cb13-140"></a></span>
+<span id="cb13-141"><a href="#cb13-141"></a>pops <span class="op">=</span> data.load_populations()</span>
+<span id="cb13-142"><a href="#cb13-142"></a>artifacts.save(<span class="st">"populations"</span>, pops, inputs<span class="op">=</span>[<span class="st">"hmd_release"</span>],</span>
+<span id="cb13-143"><a href="#cb13-143"></a>               desc<span class="op">=</span><span class="st">"Population register: HMD codes, names, aggregates, inclusion"</span>)</span>
+<span id="cb13-144"><a href="#cb13-144"></a>pd.set_option(<span class="st">"display.max_rows"</span>, <span class="dv">60</span>)</span>
+<span id="cb13-145"><a href="#cb13-145"></a>used <span class="op">=</span> pops[pops[<span class="st">"included"</span>] <span class="op">==</span> <span class="st">"yes"</span>]</span>
+<span id="cb13-146"><a href="#cb13-146"></a>latex.report(<span class="st">"dataNCountries"</span>, <span class="bu">int</span>((used[<span class="st">"aggregate_of"</span>] <span class="op">==</span> <span class="st">""</span>).<span class="bu">sum</span>()),</span>
+<span id="cb13-147"><a href="#cb13-147"></a>             desc<span class="op">=</span><span class="st">"Countries and territories: the populations used that are not part of another"</span>)</span>
+<span id="cb13-148"><a href="#cb13-148"></a>pops</span>
+<span id="cb13-149"><a href="#cb13-149"></a><span class="in">```</span></span>
+<span id="cb13-150"><a href="#cb13-150"></a></span>
+<span id="cb13-151"><a href="#cb13-151"></a>The two civilian series are excluded (<span class="in">`included = no`</span>), leaving</span>
+<span id="cb13-152"><a href="#cb13-152"></a><span class="in">`{python} len(used)`</span> populations.  The overlapping aggregates are *kept*, as in the paper: each is</span>
+<span id="cb13-153"><a href="#cb13-153"></a>a population in its own right.  The consequences — some populations count</span>
+<span id="cb13-154"><a href="#cb13-154"></a>twice in the decomposition, and their forecast errors are not independent —</span>
+<span id="cb13-155"><a href="#cb13-155"></a>are discussed in the paper (§2.1, and §11.5, "Limitations").</span>
+<span id="cb13-156"><a href="#cb13-156"></a></span>
+<span id="cb13-159"><a href="#cb13-159"></a><span class="in">```{python}</span></span>
+<span id="cb13-160"><a href="#cb13-160"></a><span class="co">#| label: d1-end</span></span>
+<span id="cb13-161"><a href="#cb13-161"></a><span class="co">#| code-summary: "Close the chapter"</span></span>
+<span id="cb13-162"><a href="#cb13-162"></a>latex.write_numbers()</span>
+<span id="cb13-163"><a href="#cb13-163"></a>provenance.end_chapter()<span class="op">;</span></span>
+<span id="cb13-164"><a href="#cb13-164"></a><span class="in">```</span></span>
+</code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
+</div></div></div></div></div>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
